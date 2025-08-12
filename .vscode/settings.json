@@ -1,0 +1,18 @@
+{
+  "cSpell.words": [
+    "clippy",
+    "cwasm",
+    "dont",
+    "ints",
+    "mcpu",
+    "nixfmt",
+    "nixos",
+    "nixpkgs",
+    "pkgs",
+    "pname",
+    "rustc",
+    "rustlib",
+    "stdenv",
+    "wasip"
+  ]
+}
