@@ -9,15 +9,17 @@
           src,
           isCpp,
           std,
+          includes,
         }:
         let
           compiler = if isCpp then "clang++" else "clang";
+          includeDirCmd = pkgs.lib.concatMapStringsSep " " (p: "-I${p}") includes;
         in
         pkgs.runCommandLocal name
           {
             nativeBuildInputs = [ hullPkgs.wasm-judge-clang ];
           }
-          "wasm-judge-${compiler} -std=${std} -O3 -o $out ${src} -Wl,--strip-debug -Wl,-z,stack-size=8388608";
+          "wasm-judge-${compiler} ${src} -o $out ${includeDirCmd} -O3 -std=${std} -Wl,--strip-debug -Wl,-z,stack-size=8388608";
 
       cStandards = [
         "89"
@@ -43,9 +45,13 @@
           name = "c.${std}";
           value = {
             compile =
-              { name, src }:
+              {
+                name,
+                src,
+                includes,
+              }:
               compileCFamily {
-                inherit name src;
+                inherit name src includes;
                 isCpp = false;
                 std = "c${std}";
               };
@@ -58,9 +64,13 @@
           name = "cpp.${std}";
           value = {
             compile =
-              { name, src }:
+              {
+                name,
+                src,
+                includes,
+              }:
               compileCFamily {
-                inherit name src;
+                inherit name src includes;
                 isCpp = true;
                 std = "c++${std}";
               };

@@ -5,7 +5,7 @@ use wasi_common::{
   pipe::{ReadPipe, WritePipe},
 };
 
-use crate::runner::{self, RunStatus};
+use crate::runner;
 
 const DEFAULT_TICK_LIMIT: u64 = 100_000_000_000;
 const DEFAULT_MEMORY_LIMIT: u64 = u32::MAX as u64;
@@ -37,6 +37,9 @@ pub struct RunWasmOpts {
 
   #[arg(long)]
   inherit_stderr: bool,
+
+  #[arg(trailing_var_arg = true)]
+  arguments: Vec<String>,
 }
 
 pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
@@ -54,24 +57,25 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
       cap_std::fs::File::from_std(std::fs::File::create(path)?),
     ))
   } else if run_wasm_opts.inherit_stdout {
-    Box::new(WritePipe::new(std::io::empty()))
+    Box::new(WritePipe::new(std::io::stdout()))
   } else {
-    Box::new(WritePipe::new(std::io::empty()))
+    Box::new(WritePipe::new(std::io::sink()))
   };
   let stderr: Box<dyn WasiFile> = if let Some(path) = &run_wasm_opts.stderr_path {
     Box::new(wasi_common::sync::file::File::from_cap_std(
       cap_std::fs::File::from_std(std::fs::File::create(path)?),
     ))
   } else if run_wasm_opts.inherit_stderr {
-    Box::new(WritePipe::new(std::io::empty()))
+    Box::new(WritePipe::new(std::io::stderr()))
   } else {
-    Box::new(WritePipe::new(std::io::empty()))
+    Box::new(WritePipe::new(std::io::sink()))
   };
 
   let wasm_bytes = std::fs::read(&run_wasm_opts.wasm_path)?;
 
   let result = runner::run(
     &wasm_bytes,
+    &run_wasm_opts.arguments,
     run_wasm_opts.tick_limit,
     run_wasm_opts.memory_limit,
     stdin,
@@ -82,9 +86,5 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
 
   println!("{}", serde_json::to_string(&result)?);
 
-  std::process::exit(if result.status == RunStatus::Accepted {
-    0
-  } else {
-    1
-  })
+  std::process::exit(result.exit_code);
 }

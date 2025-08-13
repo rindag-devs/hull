@@ -5,17 +5,26 @@
 {
   name = "a-plus-b";
 
+  includes = [ ./third_party/cplib/include ];
+
   checker = {
-    src = ./checker.17.cpp;
+    src = ./checker.20.cpp;
+  };
+
+  validator = {
+    src = ./validator.20.cpp;
   };
 
   generators = {
     rand = {
-      src = ./generator/rand.17.cpp;
+      src = ./generator/rand.20.cpp;
     };
   };
 
-  traits = [ "negative" ];
+  traits = [
+    "n_positive"
+    "m_positive"
+  ];
 
   testCases = [
     {
@@ -24,8 +33,11 @@
         "--n-min=1"
         "--n-max=10"
       ];
-      traits = [ "-negative" ];
-      hash = "sha256-WqQrWWENIjH7SFvXtoLaC5oLEnr531Nj8f5C+wVBX0Y=";
+      traits = {
+        n_positive = true;
+        m_positive = true;
+      };
+      inputHash = "sha256-/j0gXXAo0lQOif4l2t9YNKwp2c2eAx2lHburupE5+pA=";
       pretest = true;
       sample = true;
     }
@@ -34,10 +46,13 @@
       arguments = [
         "--n-min=1"
         "--n-max=10"
-        "--salt=1234"
+        "--same"
       ];
-      traits = [ "-negative" ];
-      hash = "sha256-WqQrWWENIjH7SFvXtoLaC5oLEnr531Nj8f5C+wVBX0Y=";
+      traits = {
+        n_positive = true;
+        m_positive = true;
+      };
+      inputHash = "sha256-9lzqriRt4CE1wTJv9RiL3RZsl0nAIckeScC5p5+ccmI=";
     }
     {
       generator = "rand";
@@ -45,17 +60,23 @@
         "--n-min=-10"
         "--n-max=-1"
       ];
-      traits = [ "+negative" ];
-      hash = "sha256-WqQrWWENIjH7SFvXtoLaC5oLEnr531Nj8f5C+wVBX0Y=";
+      traits = {
+        n_positive = false;
+        m_positive = false;
+      };
+      inputHash = "sha256-aiHMd589gYJJF04XMA9AdVeBYWVWM1MVs4Zsab+YVi8=";
     }
   ];
 
-  tickLimit = 1000 * 10000000;
-  memoryLimit = 32 * 1024 * 1024;
+  tickLimit = 100 * 10000000;
+  memoryLimit = 16 * 1024 * 1024;
 
   subtasks = [
     {
-      traits = [ "-negative" ];
+      traits = {
+        n_positive = true;
+        m_positive = true;
+      };
     }
     # fallback
     {
@@ -64,12 +85,12 @@
 
   solutions = {
     std = {
-      src = ./solution/std.17.cpp;
+      src = ./solution/std.20.cpp;
       mainCorrectSolution = true;
-      subtaskPredictions = [
-        "+0"
-        "+1"
-      ];
+      subtaskPredictions = {
+        "0" = true;
+        "1" = true;
+      };
     };
   };
 

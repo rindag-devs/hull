@@ -16,7 +16,6 @@ let
       }
     ) (x: (x._type or null) == typeStr);
 
-  plusMinusStr = lib.types.strMatching "[+-][^\n\r]+";
   validNameStr = lib.types.strMatching "[a-zA-Z_][a-zA-Z0-9_\\-]*";
 
   programOptions =
@@ -60,6 +59,7 @@ let
     pathInStore
     nonEmptyStr
     listOf
+    attrsOf
     str
     bool
     ints
@@ -67,7 +67,7 @@ let
     ;
 in
 {
-  inherit plusMinusStr validNameStr;
+  inherit validNameStr;
 
   judger = mkUniqueType "hullJudger";
 
@@ -79,7 +79,7 @@ in
 
   testCase =
     problem:
-    submodule (args: {
+    submodule (testCaseArgs: {
       options = {
         generator = lib.mkOption { type = nonEmptyStr; };
         generatorCwasm = lib.mkOption {
@@ -87,16 +87,18 @@ in
           readOnly = true;
           default =
             let
-              generatorName = args.config.generator;
+              generatorName = testCaseArgs.config.generator;
             in
             if builtins.hasAttr generatorName problem.generators then
-              problem.generators."${generatorName}".cwasm
+              problem.generators.${generatorName}.cwasm
             else
               throw "Generator `${generatorName}` not found";
         };
         arguments = lib.mkOption { type = listOf str; };
-        traits = lib.mkOption { type = listOf plusMinusStr; };
-        hash = lib.mkOption { type = str; };
+        traits = lib.mkOption {
+          type = attrsOf bool;
+          default = { };
+        };
         pretest = lib.mkOption {
           type = bool;
           default = false;
@@ -106,9 +108,28 @@ in
           default = false;
         };
         data = lib.mkOption {
+          type = submodule {
+            options = {
+              input = lib.mkOption {
+                type = pathInStore;
+                readOnly = true;
+                default = hull.generate.input problem testCaseArgs.config;
+              };
+              output = lib.mkOption {
+                type = pathInStore;
+                readOnly = true;
+                default = hull.generate.output problem testCaseArgs.config;
+              };
+            };
+          };
+          readOnly = true;
+          default = { };
+        };
+        inputHash = lib.mkOption { type = str; };
+        inputValidation = lib.mkOption {
           type = attrs;
           readOnly = true;
-          default = hull.generate.data problem args.config;
+          default = hull.validate problem testCaseArgs.config.data.input;
         };
       };
     });
@@ -118,8 +139,8 @@ in
     submodule {
       options = {
         traits = lib.mkOption {
-          type = listOf plusMinusStr;
-          default = [ ];
+          type = attrsOf bool;
+          default = { };
         };
         tickLimit = lib.mkOption {
           type = ints.unsigned;
@@ -141,13 +162,19 @@ in
           default = false;
         };
         subtaskPredictions = lib.mkOption {
-          type = listOf plusMinusStr;
-          default = [ ];
+          type = attrsOf bool;
+          default = { };
         };
       };
     });
 
   checker =
+    problem:
+    submodule (args: {
+      options = programOptions problem args;
+    });
+
+  validator =
     problem:
     submodule (args: {
       options = programOptions problem args;

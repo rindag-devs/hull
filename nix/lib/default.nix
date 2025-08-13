@@ -1,18 +1,19 @@
 { pkgs, hullPkgs }:
 
 let
-  problemModule = ./problemModule.nix;
+  problemModule = ./problemModule;
 
   hull = {
     compile = import ./compile.nix { inherit pkgs hullPkgs hull; };
+    generate = import ./generate.nix { inherit pkgs hullPkgs; };
     judger = import ./judger.nix { inherit pkgs; };
+    language = import ./language.nix { inherit pkgs hullPkgs; };
     target = import ./target.nix { inherit pkgs hull; };
     types = import ./types.nix {
       inherit hull;
       inherit (pkgs) lib;
     };
-    language = import ./language.nix { inherit pkgs hullPkgs; };
-    generate = import ./generate.nix { inherit pkgs hullPkgs; };
+    validate = import ./validate.nix { inherit pkgs hullPkgs; };
 
     inherit problemModule;
 
@@ -21,18 +22,25 @@ let
     # and evaluates it against our module system.
     evalProblem =
       problemAttrs:
-      pkgs.lib.evalModules {
-        # The list of modules to evaluate.
-        # We have our main problem module and the user's configuration.
-        modules = [
-          problemModule
-          problemAttrs
-        ];
+      let
+        problem = pkgs.lib.evalModules {
+          # The list of modules to evaluate.
+          # We have our main problem module and the user's configuration.
+          modules = [
+            problemModule
+            problemAttrs
+          ];
 
-        specialArgs = {
-          inherit hull;
+          specialArgs = {
+            inherit hull;
+          };
         };
-      };
+
+        problemAssertWarn =
+          pkgs.lib.asserts.checkAssertWarn problem.config.assertions problem.config.warnings
+            problem;
+      in
+      problemAssertWarn;
   };
 in
 hull
