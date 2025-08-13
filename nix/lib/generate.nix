@@ -9,14 +9,16 @@ let
     {
       generatorCwasm,
       arguments,
-      hash,
+      inputHash,
       ...
     }:
-    pkgs.runCommandLocal "hull-generated-input-${name}" {
-      nativeBuildInputs = [ hullPkgs.default ];
-      outputHash = hash;
-      outputHashAlgo = null;
-    } "hull run-wasm ${generatorCwasm} --stdout-path=$out --inherit-stderr";
+    pkgs.runCommandLocal "hull-generated-input-${name}"
+      {
+        nativeBuildInputs = [ hullPkgs.default ];
+        outputHash = inputHash;
+        outputHashAlgo = null;
+      }
+      "hull run-wasm ${generatorCwasm} --stdout-path=$out --inherit-stderr -- ${builtins.concatStringsSep " " arguments}";
 
   output =
     {
@@ -37,12 +39,7 @@ let
           --tick-limit=${builtins.toString tickLimit} \
           --memory-limit=${builtins.toString memoryLimit}
       '';
-
-  data = problem: testCase: {
-    input = input problem testCase;
-    output = output problem testCase;
-  };
 in
 {
-  inherit input output data;
+  inherit input output;
 }

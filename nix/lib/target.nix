@@ -22,6 +22,8 @@
             "cp ${testCase.data.input} $out/data/${builtins.toString index}.in"
             + "\n"
             + "cp ${testCase.data.output} $out/data/${builtins.toString index}.ans"
+            + "\n"
+            + "cp ${builtins.toFile "data.json" (builtins.toJSON testCase.inputValidation)} $out/data/${builtins.toString index}.json"
           ) testCases
         );
 

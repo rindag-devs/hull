@@ -6,10 +6,12 @@
 }:
 
 {
+  imports = [ ./assertions.nix ];
+
   options = {
     name = lib.mkOption { type = hull.types.validNameStr; };
 
-    include = lib.mkOption {
+    includes = lib.mkOption {
       type = lib.types.listOf lib.types.pathInStore;
       default = [ ];
     };
@@ -25,6 +27,8 @@
     };
 
     checker = lib.mkOption { type = hull.types.checker config; };
+
+    validator = lib.mkOption { type = hull.types.validator config; };
 
     traits = lib.mkOption {
       type = lib.types.listOf hull.types.validNameStr;

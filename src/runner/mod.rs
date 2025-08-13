@@ -7,9 +7,7 @@ use anyhow::Result;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use wasi_common::{
-  I32Exit, Table, WasiClocks, WasiCtx, WasiDir, WasiFile, WasiSystemClock,
-  pipe::{ReadPipe, WritePipe},
-  sync::sched::SyncSched,
+  I32Exit, Table, WasiClocks, WasiCtx, WasiDir, WasiFile, WasiSystemClock, sync::sched::SyncSched,
 };
 use wasmtime::{Config, Engine, Linker, Module, ResourceLimiter, Store, Trap};
 
@@ -128,6 +126,7 @@ pub fn compile(wasm: &[u8]) -> Result<Vec<u8>> {
 
 pub fn run(
   wasm: &[u8],
+  arguments: &[String],
   tick_limit: u64,
   memory_limit: u64,
   stdin: Box<dyn WasiFile>,
@@ -147,6 +146,7 @@ pub fn run(
 
   let mut store = match create_store(
     &engine,
+    arguments,
     memory_limit,
     tick_limit,
     stdin,
@@ -172,55 +172,6 @@ pub fn run(
     Ok(x) => x,
     Err(err) => return RunResult::new_runtime_error(err),
   }
-}
-
-pub fn run_fixed_stdio(
-  wasm: &[u8],
-  tick_limit: u64,
-  memory_limit: u64,
-  stdin_bytes: &[u8],
-  stdout_limit: u64,
-  stderr_limit: u64,
-  preopened_dir: Option<Box<dyn WasiDir>>,
-) -> Result<(RunResult, Vec<u8>, Vec<u8>)> {
-  let engine = create_engine(memory_limit)?;
-  let mut linker = setup_linker(&engine)?;
-
-  let stdin = Box::new(ReadPipe::from(stdin_bytes));
-  let stdout = Box::new(WritePipe::new(LimitedBuffer::new(
-    stdout_limit.try_into().unwrap(),
-  )));
-  let stderr = Box::new(WritePipe::new(LimitedBuffer::new(
-    stderr_limit.try_into().unwrap(),
-  )));
-
-  let mut store = create_store(
-    &engine,
-    memory_limit,
-    tick_limit,
-    stdin,
-    stdout.clone(),
-    stderr.clone(),
-    preopened_dir,
-  )?;
-
-  let main_module = create_main_module(&engine, wasm)?;
-
-  let start_func = setup_instance(&mut linker, &mut store, &main_module)?;
-
-  let run_result = execute_and_get_results(store, start_func, tick_limit)?;
-
-  let stdout_bytes = stdout
-    .try_into_inner()
-    .map_err(|_err| anyhow::Error::msg("sole remaining reference to stdout pipe"))?
-    .to_vec();
-
-  let stderr_bytes = stderr
-    .try_into_inner()
-    .map_err(|_err| anyhow::Error::msg("sole remaining reference to stderr pipe"))?
-    .to_vec();
-
-  Ok((run_result, stdout_bytes, stderr_bytes))
 }
 
 fn create_engine(memory_limit: u64) -> Result<Engine> {
@@ -256,6 +207,7 @@ fn setup_linker(engine: &Engine) -> Result<Linker<ApplicationState>> {
 
 fn create_store(
   engine: &Engine,
+  arguments: &[String],
   memory_limit: u64,
   tick_limit: u64,
   stdin: Box<dyn WasiFile>,
@@ -265,10 +217,17 @@ fn create_store(
 ) -> Result<Store<ApplicationState>> {
   let random = Box::new(rand::rngs::StdRng::seed_from_u64(0));
   let clocks = WasiClocks::new().with_system(&NULL_SYSTEM_CLOCK);
-  let wasi_ctx = WasiCtx::new(random, clocks, Box::new(SyncSched::new()), Table::new());
+  let mut wasi_ctx = WasiCtx::new(random, clocks, Box::new(SyncSched::new()), Table::new());
+
   wasi_ctx.set_stdin(stdin);
   wasi_ctx.set_stdout(stdout);
   wasi_ctx.set_stderr(stderr);
+
+  wasi_ctx.push_arg("arg0")?; // arg0
+  for arg in arguments {
+    wasi_ctx.push_arg(arg)?;
+  }
+
   if let Some(dir) = preopened_dir {
     wasi_ctx.push_preopened_dir(dir, "/")?;
   };
@@ -314,9 +273,10 @@ fn execute_and_get_results(
 
   let memory_limiter = store.data().memory_limiter.clone();
   let memory = memory_limiter.memory_max_used_bytes.try_into().unwrap();
-  let mut exit_code: i32 = 0;
+  let mut exit_code: i32 = -1;
 
   let status = if main_call_result.is_ok() {
+    exit_code = 0;
     RunStatus::Accepted
   } else if memory_limiter.memory_limit_exceeded {
     RunStatus::MemoryLimitExceeded

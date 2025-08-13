@@ -6,11 +6,11 @@
 
 {
   wasm =
-    { languages, ... }:
+    { languages, includes, ... }:
     { src, language }:
-    languages."${language}".compile {
+    languages.${language}.compile {
       name = "hull-wasm-${builtins.baseNameOf src}";
-      inherit src;
+      inherit src includes;
     };
 
   cwasm =
