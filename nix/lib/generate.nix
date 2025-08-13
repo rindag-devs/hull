@@ -5,14 +5,14 @@
 
 let
   input =
-    { name, generators, ... }:
+    { generators, ... }@problem:
     {
       generatorCwasm,
       arguments,
       inputHash,
       ...
-    }:
-    pkgs.runCommandLocal "hull-generated-input-${name}"
+    }@testCase:
+    pkgs.runCommandLocal "hull-generated-input-${problem.name}-${testCase.name}"
       {
         nativeBuildInputs = [ hullPkgs.default ];
         outputHash = inputHash;
@@ -28,8 +28,9 @@ let
       memoryLimit,
       ...
     }:
-    { data, ... }:
-    pkgs.runCommandLocal "hull-generated-output-${name}" { nativeBuildInputs = [ hullPkgs.default ]; }
+    { data, name, ... }:
+    pkgs.runCommandLocal "hull-generated-output-${name}-${builtins.toString name}"
+      { nativeBuildInputs = [ hullPkgs.default ]; }
       ''
         hull run-wasm \
           ${mainCorrectSolution.cwasm} \

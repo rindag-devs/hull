@@ -26,8 +26,8 @@
     "m_positive"
   ];
 
-  testCases = [
-    {
+  testCases = {
+    rand-1 = {
       generator = "rand";
       arguments = [
         "--n-min=1"
@@ -40,8 +40,8 @@
       inputHash = "sha256-/j0gXXAo0lQOif4l2t9YNKwp2c2eAx2lHburupE5+pA=";
       pretest = true;
       sample = true;
-    }
-    {
+    };
+    rand-2 = {
       generator = "rand";
       arguments = [
         "--n-min=1"
@@ -53,8 +53,8 @@
         m_positive = true;
       };
       inputHash = "sha256-9lzqriRt4CE1wTJv9RiL3RZsl0nAIckeScC5p5+ccmI=";
-    }
-    {
+    };
+    rand-3 = {
       generator = "rand";
       arguments = [
         "--n-min=-10"
@@ -65,8 +65,8 @@
         m_positive = false;
       };
       inputHash = "sha256-aiHMd589gYJJF04XMA9AdVeBYWVWM1MVs4Zsab+YVi8=";
-    }
-  ];
+    };
+  };
 
   tickLimit = 100 * 10000000;
   memoryLimit = 16 * 1024 * 1024;

@@ -1,10 +1,11 @@
 { pkgs, hullPkgs }:
 
-{ name, validator, ... }:
-input:
+{ validator, ... }@problem:
+{ data, ... }@testCase:
 let
+  input = data.input;
   output =
-    pkgs.runCommandLocal "hull-validate-${name}"
+    pkgs.runCommandLocal "hull-validate-${problem.name}-${testCase.name}"
       {
         nativeBuildInputs = [ hullPkgs.default ];
       }
