@@ -10,7 +10,7 @@
       example = [
         {
           assertion = false;
-          message = "you can't enable this for that reason";
+          message = "You can't enable this for that reason";
         }
       ];
       description = ''
@@ -38,18 +38,20 @@
       let
         # Helper to generate a descriptive name for a test case for use in error messages.
         getTestCaseName =
-          index: tc:
-          "Test Case #${toString index} (generator: ${tc.generator}, args: ${builtins.toJSON tc.arguments})";
+          tc:
+          "Test Case `${toString tc.name}` (generator: ${tc.generator}, args: ${builtins.toJSON tc.arguments})";
 
         # Assertion: All test cases must pass validation.
-        failingValidationCases = lib.filter (tc: tc.inputValidation.status != "valid") config.testCases;
+        failingValidationCases = builtins.filter (tc: tc.inputValidation.status != "valid") (
+          builtins.attrValues config.testCases
+        );
         validationAssertion = {
           assertion = failingValidationCases == [ ];
           message =
             let
               report = lib.concatStringsSep "\n" (
-                lib.imap0 (index: tc: ''
-                  - ${getTestCaseName index tc}:
+                lib.map (tc: ''
+                  - ${getTestCaseName tc}:
                       Validation failed. Validator output: ${builtins.toJSON tc.inputValidation}
                 '') failingValidationCases
               );
@@ -63,27 +65,27 @@
         };
 
         # Assertion: All traits returned by the validator must be declared in `problem.traits`.
-        casesWithUndeclaredTraits = lib.filter (
+        casesWithUndeclaredTraits = builtins.filter (
           tc:
           let
             validatedTraits = builtins.attrNames tc.inputValidation.traits;
-            undeclared = lib.filter (trait: !(lib.elem trait config.traits)) validatedTraits;
+            undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) validatedTraits;
           in
           undeclared != [ ]
-        ) config.testCases;
+        ) (builtins.attrValues config.testCases);
         undeclaredTraitsAssertion = {
           assertion = casesWithUndeclaredTraits == [ ];
           message =
             let
               report = lib.concatStringsSep "\n" (
-                lib.imap0 (
-                  index: tc:
+                lib.map (
+                  tc:
                   let
                     validatedTraits = builtins.attrNames tc.inputValidation.traits;
-                    undeclared = lib.filter (trait: !(lib.elem trait config.traits)) validatedTraits;
+                    undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) validatedTraits;
                   in
                   ''
-                    - ${getTestCaseName index tc}:
+                    - ${getTestCaseName tc}:
                         The validator returned traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
                         Declared traits are: ${builtins.toJSON config.traits}
                   ''
@@ -99,7 +101,7 @@
         };
 
         # Assertion: The user-defined `traits` in a test case must be a subset of the traits in validator's output.
-        casesWithMismatchedTraits = lib.filter (
+        casesWithMismatchedTraits = builtins.filter (
           tc:
           let
             unmatchedTraits = lib.filterAttrs (
@@ -107,14 +109,14 @@
             ) tc.traits;
           in
           unmatchedTraits != { }
-        ) config.testCases;
+        ) (builtins.attrValues config.testCases);
         mismatchedTraitsAssertion = {
           assertion = casesWithMismatchedTraits == [ ];
           message =
             let
               report = lib.concatStringsSep "\n" (
-                lib.imap0 (index: tc: ''
-                  - ${getTestCaseName index tc}:
+                lib.map (tc: ''
+                  - ${getTestCaseName tc}:
                       The traits you defined do not match the traits returned by the validator.
                       - Defined in test case: ${builtins.toJSON tc.traits}
                       - Returned by validator: ${builtins.toJSON tc.inputValidation.traits}

@@ -16,7 +16,7 @@ let
       }
     ) (x: (x._type or null) == typeStr);
 
-  validNameStr = lib.types.strMatching "[a-zA-Z_][a-zA-Z0-9_\\-]*";
+  nameStr = lib.types.strMatching "[a-zA-Z_][a-zA-Z0-9_\\-]*";
 
   programOptions =
     with lib.types;
@@ -41,8 +41,8 @@ let
         type = package;
         readOnly = true;
         description = "The pre-compiled CWASM artifact.";
-        default = hull.compile.cwasm {
-          name = builtins.baseNameOf args.config.src;
+        default = hull.compile.cwasm problem {
+          srcBaseName = builtins.baseNameOf args.config.src;
           wasm = args.config.wasm;
         };
       };
@@ -67,7 +67,7 @@ let
     ;
 in
 {
-  inherit validNameStr;
+  validNameStr = nameStr;
 
   judger = mkUniqueType "hullJudger";
 
@@ -79,60 +79,68 @@ in
 
   testCase =
     problem:
-    submodule (testCaseArgs: {
-      options = {
-        generator = lib.mkOption { type = nonEmptyStr; };
-        generatorCwasm = lib.mkOption {
-          type = pathInStore;
-          readOnly = true;
-          default =
-            let
-              generatorName = testCaseArgs.config.generator;
-            in
-            if builtins.hasAttr generatorName problem.generators then
-              problem.generators.${generatorName}.cwasm
-            else
-              throw "Generator `${generatorName}` not found";
-        };
-        arguments = lib.mkOption { type = listOf str; };
-        traits = lib.mkOption {
-          type = attrsOf bool;
-          default = { };
-        };
-        pretest = lib.mkOption {
-          type = bool;
-          default = false;
-        };
-        sample = lib.mkOption {
-          type = bool;
-          default = false;
-        };
-        data = lib.mkOption {
-          type = submodule {
-            options = {
-              input = lib.mkOption {
-                type = pathInStore;
-                readOnly = true;
-                default = hull.generate.input problem testCaseArgs.config;
-              };
-              output = lib.mkOption {
-                type = pathInStore;
-                readOnly = true;
-                default = hull.generate.output problem testCaseArgs.config;
+    submodule (
+      { name, config, ... }:
+      {
+        options = {
+          name = lib.mkOption {
+            type = nameStr;
+            readOnly = true;
+            default = name;
+          };
+          generator = lib.mkOption { type = nonEmptyStr; };
+          generatorCwasm = lib.mkOption {
+            type = pathInStore;
+            readOnly = true;
+            default =
+              let
+                generatorName = config.generator;
+              in
+              if builtins.hasAttr generatorName problem.generators then
+                problem.generators.${generatorName}.cwasm
+              else
+                throw "Generator `${generatorName}` not found";
+          };
+          arguments = lib.mkOption { type = listOf str; };
+          traits = lib.mkOption {
+            type = attrsOf bool;
+            default = { };
+          };
+          pretest = lib.mkOption {
+            type = bool;
+            default = false;
+          };
+          sample = lib.mkOption {
+            type = bool;
+            default = false;
+          };
+          data = lib.mkOption {
+            type = submodule {
+              options = {
+                input = lib.mkOption {
+                  type = pathInStore;
+                  readOnly = true;
+                  default = hull.generate.input problem config;
+                };
+                output = lib.mkOption {
+                  type = pathInStore;
+                  readOnly = true;
+                  default = hull.generate.output problem config;
+                };
               };
             };
+            readOnly = true;
+            default = { };
           };
-          readOnly = true;
-          default = { };
+          inputHash = lib.mkOption { type = str; };
+          inputValidation = lib.mkOption {
+            type = attrs;
+            readOnly = true;
+            default = hull.validate problem config;
+          };
         };
-        inputHash = lib.mkOption { type = str; };
-        inputValidation = lib.mkOption {
-          type = attrs;
-          readOnly = true;
-          default = hull.validate problem testCaseArgs.config.data.input;
-        };
-      };
-    });
+      }
+    );
 
   subtask =
     problem:

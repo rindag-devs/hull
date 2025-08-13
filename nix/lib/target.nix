@@ -17,14 +17,12 @@
       }:
       let
         copyDataCommand = pkgs.lib.concatLines (
-          pkgs.lib.imap0 (
-            index: testCase:
-            "cp ${testCase.data.input} $out/data/${builtins.toString index}.in"
-            + "\n"
-            + "cp ${testCase.data.output} $out/data/${builtins.toString index}.ans"
-            + "\n"
-            + "cp ${builtins.toFile "data.json" (builtins.toJSON testCase.inputValidation)} $out/data/${builtins.toString index}.json"
-          ) testCases
+          map (tc: ''
+            mkdir -p $out/data/${tc.name}
+            cp ${tc.data.input} $out/data/${tc.name}/input.txt
+            cp ${tc.data.output} $out/data/${tc.name}/output.txt
+            cp ${builtins.toFile "data.json" (builtins.toJSON tc.inputValidation)} $out/data/${tc.name}/input-validation.json
+          '') (builtins.attrValues testCases)
         );
 
         copyProgramCommand =
@@ -42,7 +40,6 @@
         copyCheckerCommand = copyProgramCommand "" "checker" checker;
       in
       pkgs.runCommandLocal "hull-default-out-${name}" { } ''
-        mkdir -p $out/data
         ${copyDataCommand}
 
         mkdir -p $out/solution

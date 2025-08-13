@@ -41,8 +41,8 @@
     };
 
     testCases = lib.mkOption {
-      type = lib.types.listOf (hull.types.testCase config);
-      default = [ ];
+      type = lib.types.attrsOf (hull.types.testCase config);
+      default = { };
     };
 
     tickLimit = lib.mkOption {
