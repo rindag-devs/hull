@@ -6,30 +6,20 @@
 let
   input =
     { generators, ... }@problem:
-    {
-      generatorCwasm,
-      arguments,
-      inputHash,
-      ...
-    }@testCase:
+    { generatorCwasm, arguments, ... }@testCase:
     pkgs.runCommandLocal "hull-generated-input-${problem.name}-${testCase.name}"
-      {
-        nativeBuildInputs = [ hullPkgs.default ];
-        outputHash = inputHash;
-        outputHashAlgo = null;
-      }
-      "hull run-wasm ${generatorCwasm} --stdout-path=$out --inherit-stderr -- ${builtins.concatStringsSep " " arguments}";
+      { nativeBuildInputs = [ hullPkgs.default ]; }
+      "hull run-wasm ${generatorCwasm} --stdout-path=$out --inherit-stderr -- ${pkgs.lib.escapeShellArgs arguments}";
 
   output =
+    { mainCorrectSolution, ... }@problem:
     {
-      name,
-      mainCorrectSolution,
+      data,
       tickLimit,
       memoryLimit,
       ...
-    }:
-    { data, name, ... }:
-    pkgs.runCommandLocal "hull-generated-output-${name}-${builtins.toString name}"
+    }@testCase:
+    pkgs.runCommandLocal "hull-generated-output-${problem.name}-${testCase.name}"
       { nativeBuildInputs = [ hullPkgs.default ]; }
       ''
         hull run-wasm \

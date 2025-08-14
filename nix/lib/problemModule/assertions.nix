@@ -36,10 +36,11 @@
   config = {
     assertions =
       let
-        # Helper to generate a descriptive name for a test case for use in error messages.
         getTestCaseName =
           tc:
           "Test Case `${toString tc.name}` (generator: ${tc.generator}, args: ${builtins.toJSON tc.arguments})";
+
+        getSubtaskName = st: "Subtask (traits: ${st.traits})";
 
         # Assertion: All test cases must pass validation.
         failingValidationCases = builtins.filter (tc: tc.inputValidation.status != "valid") (
@@ -64,16 +65,16 @@
             '';
         };
 
-        # Assertion: All traits returned by the validator must be declared in `problem.traits`.
+        # Assertion: All traits defined in `testCases.<name>.traits` must be declared in `problem.traits`.
         casesWithUndeclaredTraits = builtins.filter (
           tc:
           let
-            validatedTraits = builtins.attrNames tc.inputValidation.traits;
-            undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) validatedTraits;
+            definedTraits = builtins.attrNames tc.traits;
+            undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
           in
           undeclared != [ ]
         ) (builtins.attrValues config.testCases);
-        undeclaredTraitsAssertion = {
+        undeclaredTestCaseTraitsAssertion = {
           assertion = casesWithUndeclaredTraits == [ ];
           message =
             let
@@ -81,12 +82,12 @@
                 lib.map (
                   tc:
                   let
-                    validatedTraits = builtins.attrNames tc.inputValidation.traits;
-                    undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) validatedTraits;
+                    definedTraits = builtins.attrNames tc.traits;
+                    undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
                   in
                   ''
                     - ${getTestCaseName tc}:
-                        The validator returned traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
+                        The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
                         Declared traits are: ${builtins.toJSON config.traits}
                   ''
                 ) casesWithUndeclaredTraits
@@ -94,7 +95,7 @@
             in
             ''
               Problem `${config.name}` has test cases with undeclared traits.
-              All traits returned by the validator must be listed in the problem's `traits` option.
+              All traits defined must be listed in the problem's `traits` option.
               Details:
               ${report}
             '';
@@ -110,7 +111,7 @@
           in
           unmatchedTraits != { }
         ) (builtins.attrValues config.testCases);
-        mismatchedTraitsAssertion = {
+        mismatchedTestCaseTraitsAssertion = {
           assertion = casesWithMismatchedTraits == [ ];
           message =
             let
@@ -131,11 +132,48 @@
             '';
         };
 
+        # Assertion: All traits defined in `subtask[].traits` must be declared in `problem.traits`.
+        subtasksWithUndeclaredTraits = builtins.filter (
+          st:
+          let
+            definedTraits = builtins.attrNames st.traits;
+            undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
+          in
+          undeclared != [ ]
+        ) config.subtasks;
+        undeclaredSubtaskTraitsAssertion = {
+          assertion = subtasksWithUndeclaredTraits == [ ];
+          message =
+            let
+              report = lib.concatStringsSep "\n" (
+                lib.map (
+                  st:
+                  let
+                    definedTraits = builtins.attrNames st.traits;
+                    undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
+                  in
+                  ''
+                    - ${getSubtaskName st}:
+                        The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
+                        Declared traits are: ${builtins.toJSON config.traits}
+                  ''
+                ) subtasksWithUndeclaredTraits
+              );
+            in
+            ''
+              Problem `${config.name}` has subtasks with undeclared traits.
+              All traits defined must be listed in the problem's `traits` option.
+              Details:
+              ${report}
+            '';
+        };
+
       in
       [
         validationAssertion
-        undeclaredTraitsAssertion
-        mismatchedTraitsAssertion
+        undeclaredTestCaseTraitsAssertion
+        mismatchedTestCaseTraitsAssertion
+        undeclaredSubtaskTraitsAssertion
       ];
   };
 }

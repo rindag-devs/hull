@@ -10,13 +10,14 @@
       {
         name,
         testCases,
+        subtasks,
         solutions,
         generators,
         checker,
         ...
       }:
       let
-        copyDataCommand = pkgs.lib.concatLines (
+        dataCommand = pkgs.lib.concatLines (
           map (tc: ''
             mkdir -p $out/data/${tc.name}
             cp ${tc.data.input} $out/data/${tc.name}/input.txt
@@ -25,30 +26,49 @@
           '') (builtins.attrValues testCases)
         );
 
+        subtaskCommand = pkgs.lib.concatLines (
+          pkgs.lib.imap0 (
+            index: st:
+            let
+              linkSubtaskDataCommand = pkgs.lib.concatLines (
+                map (
+                  tc: "ln -sr $out/data/${tc.name} $out/subtask/${builtins.toString index}/${tc.name}"
+                ) st.testCases
+              );
+            in
+            ''
+              mkdir -p $out/subtask/${builtins.toString index}
+              ${linkSubtaskDataCommand}
+            ''
+          ) subtasks
+        );
+
         copyProgramCommand =
           path: programName: program:
           "cp ${program.src} $out/${path}/${builtins.toString programName}.${hull.language.toFileExtension program.language}";
 
-        copyProgramsCommand =
+        programsCommand =
           dirName: programs:
           pkgs.lib.concatMapAttrsStringSep "\n" (
             programName: program: copyProgramCommand dirName programName program
           ) programs;
 
-        copySolutionsCommand = copyProgramsCommand "solution" solutions;
-        copyGeneratorsCommand = copyProgramsCommand "generator" generators;
-        copyCheckerCommand = copyProgramCommand "" "checker" checker;
+        solutionsCommand = programsCommand "solution" solutions;
+        generatorsCommand = programsCommand "generator" generators;
+        checkerCommand = copyProgramCommand "" "checker" checker;
       in
       pkgs.runCommandLocal "hull-default-out-${name}" { } ''
-        ${copyDataCommand}
+        ${dataCommand}
+
+        ${subtaskCommand}
 
         mkdir -p $out/solution
-        ${copySolutionsCommand}
+        ${solutionsCommand}
 
         mkdir -p $out/generator
-        ${copyGeneratorsCommand}
+        ${generatorsCommand}
 
-        ${copyCheckerCommand}
+        ${checkerCommand}
       '';
   };
 }

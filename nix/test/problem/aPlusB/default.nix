@@ -37,7 +37,6 @@
         n_positive = true;
         m_positive = true;
       };
-      inputHash = "sha256-/j0gXXAo0lQOif4l2t9YNKwp2c2eAx2lHburupE5+pA=";
       pretest = true;
       sample = true;
     };
@@ -52,7 +51,6 @@
         n_positive = true;
         m_positive = true;
       };
-      inputHash = "sha256-9lzqriRt4CE1wTJv9RiL3RZsl0nAIckeScC5p5+ccmI=";
     };
     rand-3 = {
       generator = "rand";
@@ -64,7 +62,13 @@
         n_positive = false;
         m_positive = false;
       };
-      inputHash = "sha256-aiHMd589gYJJF04XMA9AdVeBYWVWM1MVs4Zsab+YVi8=";
+    };
+    hand-1 = {
+      inputFile = ./data/hand-1.in;
+      traits = {
+        n_positive = true;
+        m_positive = true;
+      };
     };
   };
 
@@ -79,8 +83,7 @@
       };
     }
     # fallback
-    {
-    }
+    { }
   ];
 
   solutions = {
