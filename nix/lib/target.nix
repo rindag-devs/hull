@@ -17,24 +17,20 @@
         ...
       }:
       let
-        dataCommand = pkgs.lib.concatLines (
-          map (tc: ''
-            mkdir -p $out/data/${tc.name}
-            cp ${tc.data.input} $out/data/${tc.name}/input
-            cp ${tc.data.output} $out/data/${tc.name}/output
-            echo ${pkgs.lib.escapeShellArg (builtins.toJSON tc.inputValidation)} > $out/data/${tc.name}/input-validation.json
-          '') (builtins.attrValues testCases)
-        );
+        dataCommand = pkgs.lib.concatMapStringsSep "\n" (tc: ''
+          mkdir -p $out/data/${tc.name}
+          cp ${tc.data.input} $out/data/${tc.name}/input
+          cp ${tc.data.output} $out/data/${tc.name}/output
+          echo ${pkgs.lib.escapeShellArg (builtins.toJSON tc.inputValidation)} > $out/data/${tc.name}/input-validation.json
+        '') (builtins.attrValues testCases);
 
         subtaskCommand = pkgs.lib.concatLines (
           pkgs.lib.imap0 (
             index: st:
             let
-              linkSubtaskDataCommand = pkgs.lib.concatLines (
-                map (
-                  tc: "ln -sr $out/data/${tc.name} $out/subtask/${builtins.toString index}/${tc.name}"
-                ) st.testCases
-              );
+              linkSubtaskDataCommand = pkgs.lib.concatMapStringsSep "\n" (
+                tc: "ln -sr $out/data/${tc.name} $out/subtask/${builtins.toString index}/${tc.name}"
+              ) st.testCases;
             in
             ''
               mkdir -p $out/subtask/${builtins.toString index}
@@ -59,31 +55,58 @@
         solutionsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
           solName:
           {
-            testCaseResults,
             src,
             language,
+            testCaseResults,
+            subtaskResults,
+            score,
             ...
           }:
           let
-            copyTestCaseResultsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
+            testCaseResultsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
               tcName:
-              { run, check }:
+              { run, check, ... }@result:
               let
                 dirPrefix = "$out/solution/${solName}/test-case-result/${tcName}";
+                reportJSON = builtins.toJSON (
+                  builtins.removeAttrs result [
+                    "run"
+                    "check"
+                  ]
+                );
               in
               ''
                 mkdir -p ${dirPrefix}
                 cp ${run.stdout} ${dirPrefix}/stdout
                 cp ${run.stderr} ${dirPrefix}/stderr
-                echo ${pkgs.lib.escapeShellArg (builtins.toJSON run.report)} > ${dirPrefix}/run-report.json
-                echo ${pkgs.lib.escapeShellArg (builtins.toJSON check)} > ${dirPrefix}/check-report.json
+                echo ${pkgs.lib.escapeShellArg reportJSON} > ${dirPrefix}/result.json
               ''
             ) testCaseResults;
+            subtaskResultsCommand = pkgs.lib.concatLines (
+              pkgs.lib.imap0 (
+                index:
+                { testCases, ... }@result:
+                let
+                  dirPrefix = "$out/solution/${solName}/subtask-result/${builtins.toString index}";
+                  reportJSON = builtins.toJSON (builtins.removeAttrs result [ "testCases" ]);
+                  linkTestCasesCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
+                    tcName: tc: "ln -sr $out/solution/${solName}/test-case-result/${tcName} ${dirPrefix}/${tcName}"
+                  ) testCases;
+                in
+                ''
+                  mkdir -p ${dirPrefix}
+                  echo ${pkgs.lib.escapeShellArg reportJSON} > ${dirPrefix}/result.json
+                  ${linkTestCasesCommand}
+                ''
+              ) subtaskResults
+            );
           in
           ''
             mkdir -p $out/solution/${solName}
             cp ${src} $out/solution/${solName}/src.${hull.language.toFileExtension language}
-            ${copyTestCaseResultsCommand}
+            ${testCaseResultsCommand}
+            ${subtaskResultsCommand}
+            echo ${builtins.toString score} > $out/solution/${solName}/score.txt
           ''
         ) solutions;
       in

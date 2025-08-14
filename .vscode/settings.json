@@ -3,6 +3,7 @@
     "clippy",
     "cwasm",
     "dont",
+    "foldl",
     "ints",
     "mcpu",
     "nixfmt",

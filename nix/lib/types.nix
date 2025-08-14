@@ -67,7 +67,7 @@ let
         description = "The result of the check.";
       };
       score = lib.mkOption {
-        type = lib.types.number;
+        type = lib.types.numbers.between 0 1;
         description = "The score awarded by the checker (typically between 0.0 and 1.0).";
       };
       message = lib.mkOption {
@@ -83,6 +83,31 @@ let
         type = lib.types.listOf lib.types.attrs;
         default = [ ];
         description = "Internal trace information from the checker's evaluator.";
+      };
+    };
+  };
+
+  testCaseResultSubmodule = lib.types.submodule {
+    options = {
+      run = lib.mkOption {
+        type = runResultSubmodule;
+        description = "The result of running the solution against a test case input.";
+      };
+      check = lib.mkOption {
+        type = lib.types.nullOr checkReportSubmodule;
+        description = "The result of checking the solution's output against the correct answer.";
+      };
+      status = lib.mkOption {
+        type = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct|runtime_error|time_limit_exceeded|memory_limit_exceeded";
+        description = "The status of judgement.";
+      };
+      score = lib.mkOption {
+        type = lib.types.numbers.between 0 1;
+        description = "The score of judgement, with a maximum score of 1.";
+      };
+      message = lib.mkOption {
+        type = lib.types.str;
+        description = "The message of judgement.";
       };
     };
   };
@@ -147,11 +172,19 @@ let
     ints
     attrs
     nullOr
+    numbers
     strMatching
     ;
 in
 {
-  validNameStr = nameStr;
+
+  inherit
+    nameStr
+    runReportSubmodule
+    runResultSubmodule
+    checkReportSubmodule
+    testCaseResultSubmodule
+    ;
 
   judger = mkUniqueType "hullJudger";
 
@@ -311,6 +344,10 @@ in
             default = { };
             description = "An attribute set of traits that a test case must have to belong to this subtask.";
           };
+          fullScore = lib.mkOption {
+            type = numbers.nonnegative;
+            description = "The full score of this subtask.";
+          };
           testCases = lib.mkOption {
             type = listOf attrs;
             readOnly = true;
@@ -327,8 +364,6 @@ in
         };
       }
     );
-
-  inherit runReportSubmodule runResultSubmodule checkReportSubmodule;
 
   solution =
     problem:
@@ -353,30 +388,83 @@ in
             description = "A prediction of which subtasks this solution should pass. The keys are subtask indices (as strings), values are booleans.";
           };
           testCaseResults = lib.mkOption {
-            type = attrsOf (submodule {
-              options = {
-                run = lib.mkOption {
-                  type = runResultSubmodule;
-                  description = "The result of running the solution against a test case input.";
-                };
-                check = lib.mkOption {
-                  type = nullOr (checkReportSubmodule);
-                  description = "The result of checking the solution's output against the correct answer.";
-                };
-              };
-            });
+            type = attrsOf testCaseResultSubmodule;
             readOnly = true;
             description = "The collected results of running and checking this solution against all test cases.";
             default = builtins.listToAttrs (
               map (tc: {
                 name = tc.name;
-                value = {
-                  run = hull.judge.run problem tc config;
-                  check = hull.judge.check problem tc config;
-                };
+                value =
+                  let
+                    run = hull.judge.run problem tc config;
+                    check = if run.report.status == "accepted" then hull.judge.check problem tc config else null;
+                    status = if check != null then check.status else run.status;
+                    score = if check != null then check.score else 0;
+                    message = if check != null then check.message else run.error_message;
+                  in
+                  {
+                    inherit
+                      run
+                      check
+                      status
+                      score
+                      message
+                      ;
+                  };
               }) (builtins.attrValues problem.testCases)
             );
             defaultText = "Computed by running and checking the solution against every test case in `problem.testCases`.";
+          };
+          subtaskResults = lib.mkOption {
+            type = listOf (submodule {
+              options = {
+                testCases = lib.mkOption {
+                  type = attrsOf testCaseResultSubmodule;
+                  description = "The results of test cases in this subtask.";
+                };
+                rawScore = lib.mkOption {
+                  type = numbers.between 0 1;
+                  description = "The lowest score of all test cases in this subtask, with a maximum score of 1.";
+                };
+                scaledScore = lib.mkOption {
+                  type = numbers.nonnegative;
+                  description =
+                    "The lowest score of all test cases in this subtask, "
+                    + "with a maximum score of `fullScore` defined in subtask options.";
+                };
+              };
+            });
+            readOnly = true;
+            description = "The collected results of this solution against all subtasks.";
+            default = map (
+              st:
+              let
+                testCases = builtins.listToAttrs (
+                  map (tc: {
+                    name = tc.name;
+                    value = config.testCaseResults.${tc.name};
+                  }) st.testCases
+                );
+                rawScore = builtins.foldl' lib.min 1 (map (tc: tc.score) (builtins.attrValues testCases));
+                scaledScore = rawScore * st.fullScore;
+              in
+              {
+                inherit testCases rawScore scaledScore;
+              }
+            ) problem.subtasks;
+            defaultText = "Computed by running and checking the solution against every test case in `problem.subtask.{name}.testCases";
+          };
+          score = lib.mkOption {
+            type = numbers.nonnegative;
+            readOnly = true;
+            description = "This final score of the entire problem for this solution.";
+            default = builtins.foldl' builtins.add 0 (
+              map (builtins.getAttr "scaledScore") config.subtaskResults
+            );
+            defaultText = lib.literalExpression ''
+              builtins.foldl' builtins.add 0 (
+                lib.mapAttrs (stName: st: st.score) config.subtaskResults
+              )'';
           };
         };
       }

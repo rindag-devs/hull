@@ -75,9 +75,10 @@
         n_positive = true;
         m_positive = true;
       };
+      fullScore = 0.5;
     }
     # fallback
-    { }
+    { fullScore = 0.5; }
   ];
 
   solutions = {
