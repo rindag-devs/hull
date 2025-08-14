@@ -10,7 +10,7 @@
 
   options = {
     name = lib.mkOption {
-      type = hull.types.validNameStr;
+      type = hull.types.nameStr;
       description = "The unique name of the problem, used in derivations and outputs.";
     };
 
@@ -45,7 +45,7 @@
     };
 
     traits = lib.mkOption {
-      type = lib.types.listOf hull.types.validNameStr;
+      type = lib.types.listOf hull.types.nameStr;
       default = [ ];
       description = "A list of all possible traits that can be used to categorize test cases and define subtasks.";
     };
