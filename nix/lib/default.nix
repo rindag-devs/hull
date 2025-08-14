@@ -4,11 +4,12 @@ let
   problemModule = ./problemModule;
 
   hull = {
-    compile = import ./compile.nix { inherit pkgs hullPkgs hull; };
-    generate = import ./generate.nix { inherit pkgs hullPkgs; };
+    compile = import ./compile.nix { inherit hull pkgs hullPkgs; };
+    generate = import ./generate.nix { inherit hull pkgs hullPkgs; };
+    judge = import ./judge.nix { inherit pkgs hullPkgs; };
     judger = import ./judger.nix { inherit pkgs; };
     language = import ./language.nix { inherit pkgs hullPkgs; };
-    target = import ./target.nix { inherit pkgs hull; };
+    target = import ./target.nix { inherit hull pkgs; };
     types = import ./types.nix {
       inherit hull;
       inherit (pkgs) lib;

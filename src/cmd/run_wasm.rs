@@ -5,39 +5,59 @@ use wasi_common::{
   pipe::{ReadPipe, WritePipe},
 };
 
-use crate::runner;
+use crate::runner::{self, judge_dir::JudgeDir};
 
 const DEFAULT_TICK_LIMIT: u64 = 100_000_000_000;
 const DEFAULT_MEMORY_LIMIT: u64 = u32::MAX as u64;
 
 #[derive(Parser)]
 pub struct RunWasmOpts {
+  /// Path to the WebAssembly file to execute.
   wasm_path: String,
 
+  /// Maximum number of ticks the WASM module can execute.
   #[arg(long, default_value_t = DEFAULT_TICK_LIMIT)]
   tick_limit: u64,
 
+  /// Memory limit for the WASM module in bytes.
   #[arg(long, default_value_t = DEFAULT_MEMORY_LIMIT)]
   memory_limit: u64,
 
-  #[arg(long)]
+  /// Path to a file to use as stdin.
+  #[arg(long, conflicts_with = "inherit_stdin")]
   stdin_path: Option<String>,
 
-  #[arg(long)]
+  /// Path to a file to use as stdout.
+  #[arg(long, conflicts_with = "inherit_stdout")]
   stdout_path: Option<String>,
 
-  #[arg(long)]
+  /// Path to a file to use as stderr.
+  #[arg(long, conflicts_with = "inherit_stderr")]
   stderr_path: Option<String>,
 
+  /// Inherit stdin from the host process.
   #[arg(long)]
   inherit_stdin: bool,
 
+  /// Inherit stdout from the host process.
   #[arg(long)]
   inherit_stdout: bool,
 
+  /// Inherit stderr from the host process.
   #[arg(long)]
   inherit_stderr: bool,
 
+  /// A file to be made available for reading inside the WASM sandbox's root directory.
+  /// Can be specified multiple times.
+  #[arg(long = "read-file")]
+  read_files: Vec<String>,
+
+  /// A file to be made available for writing inside the WASM sandbox's root directory.
+  /// Can be specified multiple times.
+  #[arg(long = "write-file")]
+  write_files: Vec<String>,
+
+  /// Arguments to pass to the WASM module.
   #[arg(trailing_var_arg = true)]
   arguments: Vec<String>,
 }
@@ -73,6 +93,8 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
 
   let wasm_bytes = std::fs::read(&run_wasm_opts.wasm_path)?;
 
+  let judge_dir = JudgeDir::new(&run_wasm_opts.read_files, &run_wasm_opts.write_files)?;
+
   let result = runner::run(
     &wasm_bytes,
     &run_wasm_opts.arguments,
@@ -81,7 +103,7 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
     stdin,
     stdout,
     stderr,
-    None,
+    Some(Box::new(judge_dir)),
   );
 
   println!("{}", serde_json::to_string(&result)?);

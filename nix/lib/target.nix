@@ -20,9 +20,9 @@
         dataCommand = pkgs.lib.concatLines (
           map (tc: ''
             mkdir -p $out/data/${tc.name}
-            cp ${tc.data.input} $out/data/${tc.name}/input.txt
-            cp ${tc.data.output} $out/data/${tc.name}/output.txt
-            cp ${builtins.toFile "data.json" (builtins.toJSON tc.inputValidation)} $out/data/${tc.name}/input-validation.json
+            cp ${tc.data.input} $out/data/${tc.name}/input
+            cp ${tc.data.output} $out/data/${tc.name}/output
+            echo ${pkgs.lib.escapeShellArg (builtins.toJSON tc.inputValidation)} > $out/data/${tc.name}/input-validation.json
           '') (builtins.attrValues testCases)
         );
 
@@ -53,11 +53,41 @@
             programName: program: copyProgramCommand dirName programName program
           ) programs;
 
-        solutionsCommand = programsCommand "solution" solutions;
         generatorsCommand = programsCommand "generator" generators;
         checkerCommand = copyProgramCommand "" "checker" checker;
+
+        solutionsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
+          solName:
+          {
+            testCaseResults,
+            src,
+            language,
+            ...
+          }:
+          let
+            copyTestCaseResultsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
+              tcName:
+              { run, check }:
+              let
+                dirPrefix = "$out/solution/${solName}/test-case-result/${tcName}";
+              in
+              ''
+                mkdir -p ${dirPrefix}
+                cp ${run.stdout} ${dirPrefix}/stdout
+                cp ${run.stderr} ${dirPrefix}/stderr
+                echo ${pkgs.lib.escapeShellArg (builtins.toJSON run.report)} > ${dirPrefix}/run-report.json
+                echo ${pkgs.lib.escapeShellArg (builtins.toJSON check)} > ${dirPrefix}/check-report.json
+              ''
+            ) testCaseResults;
+          in
+          ''
+            mkdir -p $out/solution/${solName}
+            cp ${src} $out/solution/${solName}/src.${hull.language.toFileExtension language}
+            ${copyTestCaseResultsCommand}
+          ''
+        ) solutions;
       in
-      pkgs.runCommandLocal "hull-default-out-${name}" { } ''
+      pkgs.runCommandLocal "hull-target-output-${name}-default" { } ''
         ${dataCommand}
 
         ${subtaskCommand}
