@@ -383,9 +383,12 @@ in
             description = "Whether this solution is the main correct one, used to generate answer files. Exactly one solution must have this set to `true`.";
           };
           subtaskPredictions = lib.mkOption {
-            type = attrsOf bool;
+            type = attrsOf (functionTo bool);
             default = { };
-            description = "A prediction of which subtasks this solution should pass. The keys are subtask indices (as strings), values are booleans.";
+            description = ''
+              A prediction for each subtask, expressed as a function that takes the raw score (0.0-1.0)
+              and returns true if the prediction is met.'';
+            example = lib.literalExpression ''{ "0" = score: score == 1; "1" = score: score >= 0.5; }'';
           };
           testCaseResults = lib.mkOption {
             type = attrsOf testCaseResultSubmodule;
@@ -398,9 +401,9 @@ in
                   let
                     run = hull.judge.run problem tc config;
                     check = if run.report.status == "accepted" then hull.judge.check problem tc config else null;
-                    status = if check != null then check.status else run.status;
-                    score = if check != null then check.score else 0;
-                    message = if check != null then check.message else run.error_message;
+                    status = if check != null then check.status else run.report.status;
+                    score = if check != null then check.score else 0.0;
+                    message = if check != null then check.message else run.report.error_message;
                   in
                   {
                     inherit
@@ -445,7 +448,7 @@ in
                     value = config.testCaseResults.${tc.name};
                   }) st.testCases
                 );
-                rawScore = builtins.foldl' lib.min 1 (map (tc: tc.score) (builtins.attrValues testCases));
+                rawScore = builtins.foldl' lib.min 1.0 (map (tc: tc.score) (builtins.attrValues testCases));
                 scaledScore = rawScore * st.fullScore;
               in
               {

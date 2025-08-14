@@ -4,6 +4,7 @@
     "cwasm",
     "dont",
     "foldl",
+    "ifilter",
     "ints",
     "mcpu",
     "nixfmt",
