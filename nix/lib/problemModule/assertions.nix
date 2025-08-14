@@ -40,7 +40,7 @@
           tc:
           "Test Case `${toString tc.name}` (generator: ${tc.generator}, args: ${builtins.toJSON tc.arguments})";
 
-        getSubtaskName = st: "Subtask (traits: ${st.traits})";
+        getSubtaskName = index: st: "Subtask #${toString index} (traits: ${builtins.toJSON st.traits})";
 
         # Assertion: All test cases must pass validation.
         failingValidationCases = builtins.filter (tc: tc.inputValidation.status != "valid") (
@@ -134,26 +134,28 @@
 
         # Assertion: All traits defined in `subtask[].traits` must be declared in `problem.traits`.
         subtasksWithUndeclaredTraits = builtins.filter (
-          st:
+          item:
           let
+            st = item.st;
             definedTraits = builtins.attrNames st.traits;
-            undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
+            undeclared = builtins.filter (trait: !(builtins.elem trait config.traits)) definedTraits;
           in
           undeclared != [ ]
-        ) config.subtasks;
+        ) (lib.imap0 (index: st: { inherit index st; }) config.subtasks);
         undeclaredSubtaskTraitsAssertion = {
           assertion = subtasksWithUndeclaredTraits == [ ];
           message =
             let
               report = lib.concatStringsSep "\n" (
-                lib.map (
-                  st:
+                map (
+                  item:
                   let
+                    st = item.st;
                     definedTraits = builtins.attrNames st.traits;
-                    undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
+                    undeclared = builtins.filter (trait: !(builtins.elem trait config.traits)) definedTraits;
                   in
                   ''
-                    - ${getSubtaskName st}:
+                    - ${getSubtaskName item.index st}:
                         The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
                         Declared traits are: ${builtins.toJSON config.traits}
                   ''
@@ -168,12 +170,98 @@
             '';
         };
 
+        # Assertion: Subtask predictions must match actual results.
+        solutionsWithMismatchedPredictions = lib.mapAttrs (
+          solName: sol:
+          let
+            predictions = sol.subtaskPredictions;
+            results = sol.subtaskResults;
+
+            predictionList = lib.attrsToList predictions;
+
+            mismatches = builtins.filter (
+              pred:
+              let
+                index = lib.toIntBase10 pred.name;
+                predictionFunc = pred.value;
+              in
+              if index < 0 || index >= (builtins.length results) then
+                true # Prediction for non-existent subtask is a mismatch.
+              else
+                let
+                  subtaskResult = builtins.elemAt results index;
+                  actualScore = subtaskResult.rawScore;
+                  predictionHolds = predictionFunc actualScore;
+                in
+                !predictionHolds
+            ) predictionList;
+          in
+          {
+            inherit (sol) subtaskResults;
+            inherit mismatches;
+          }
+        ) config.solutions;
+
+        failingSolutions = lib.filterAttrs (n: v: v.mismatches != [ ]) solutionsWithMismatchedPredictions;
+
+        subtaskPredictionAssertion = {
+          assertion = failingSolutions == { };
+          message =
+            let
+              report = lib.concatStringsSep "\n\n" (
+                lib.mapAttrsToList (
+                  solName:
+                  { subtaskResults, mismatches, ... }:
+                  let
+                    mismatchReports = lib.concatMapStringsSep "\n" (
+                      pred:
+                      let
+                        index = lib.toIntBase10 pred.name;
+                        subtask =
+                          if index >= 0 && index < (builtins.length config.subtasks) then
+                            builtins.elemAt config.subtasks index
+                          else
+                            null;
+                        subtaskResult =
+                          if index >= 0 && index < (builtins.length subtaskResults) then
+                            builtins.elemAt subtaskResults index
+                          else
+                            null;
+                        actualScore =
+                          if subtaskResult != null then toString subtaskResult.rawScore else "N/A (non-existent subtask)";
+                        subtaskIdentifier =
+                          if subtask != null then
+                            getSubtaskName index subtask
+                          else
+                            "Subtask #${toString index} (non-existent)";
+                      in
+                      ''
+                        - ${subtaskIdentifier}:
+                            Prediction failed with actual raw score: ${actualScore}
+                      ''
+                    ) mismatches;
+                  in
+                  ''
+                    Solution `${solName}` has mismatched subtask predictions:
+                    ${mismatchReports}
+                  ''
+                ) failingSolutions
+              );
+            in
+            ''
+              Problem `${config.name}` has solutions with incorrect subtask predictions.
+              Details:
+              ${report}
+            '';
+        };
+
       in
       [
         validationAssertion
         undeclaredTestCaseTraitsAssertion
         mismatchedTestCaseTraitsAssertion
         undeclaredSubtaskTraitsAssertion
+        subtaskPredictionAssertion
       ];
   };
 }

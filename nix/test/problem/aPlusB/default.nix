@@ -86,8 +86,8 @@
       src = ./solution/std.20.cpp;
       mainCorrectSolution = true;
       subtaskPredictions = {
-        "0" = true;
-        "1" = true;
+        "0" = s: s == 1;
+        "1" = s: s == 1;
       };
     };
   };
