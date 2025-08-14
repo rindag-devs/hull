@@ -1,4 +1,5 @@
 {
+  hull,
   pkgs,
   hullPkgs,
 }:
@@ -13,23 +14,16 @@ let
 
   output =
     { mainCorrectSolution, ... }@problem:
-    {
-      data,
-      tickLimit,
-      memoryLimit,
-      ...
-    }@testCase:
-    pkgs.runCommandLocal "hull-generated-output-${problem.name}-${testCase.name}"
-      { nativeBuildInputs = [ hullPkgs.default ]; }
-      ''
-        hull run-wasm \
-          ${mainCorrectSolution.cwasm} \
-          --stdin-path=${data.input} \
-          --stdout-path=$out \
-          --inherit-stderr \
-          --tick-limit=${builtins.toString tickLimit} \
-          --memory-limit=${builtins.toString memoryLimit}
-      '';
+    testCase:
+    let
+      runResult = hull.judge.run problem testCase mainCorrectSolution;
+    in
+    if runResult.report.status == "accepted" then
+      runResult.stdout
+    else
+      throw "Output generation for problem `${problem.name}`, "
+      + "test case `${testCase.name}` failed: "
+      + "main correct solution runs unaccepted, report: ${runResult.report}";
 in
 {
   inherit input output;

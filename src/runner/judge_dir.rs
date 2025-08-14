@@ -1,6 +1,11 @@
-use std::{any::Any, path::PathBuf};
+use std::{
+  any::Any,
+  collections::{HashMap, hash_map::DefaultHasher},
+  hash::{Hash, Hasher},
+  path::PathBuf,
+};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use wasi_common::{
   Error, ErrorExt, SystemTimeSpec, WasiDir,
   dir::{OpenResult as WasiOpenResult, ReaddirCursor, ReaddirEntity},
@@ -8,11 +13,21 @@ use wasi_common::{
   sync::file::File,
 };
 
+// A helper function to generate a deterministic inode from a path.
+// This ensures that readdir and get_path_filestat agree on the inode.
+// We add a constant to avoid collisions with special inodes (e.g., 1 for the directory).
+fn path_to_inode(path: &str) -> u64 {
+  let mut hasher = DefaultHasher::new();
+  path.hash(&mut hasher);
+  // Start file inodes from a higher number to avoid collision with dir inode.
+  hasher.finish().wrapping_add(100)
+}
+
 pub struct JudgeDir {
-  pub input_file_name: Option<String>,
-  pub output_file_name: Option<String>,
-  pub input_file: Option<cap_std::fs::File>,
-  pub output_file: Option<cap_std::fs::File>,
+  // Use HashMaps to store an arbitrary number of files.
+  // The key is the filename, and the value is the file handle.
+  read_only_files: HashMap<String, cap_std::fs::File>,
+  write_only_files: HashMap<String, cap_std::fs::File>,
 }
 
 #[wiggle::async_trait]
@@ -37,19 +52,16 @@ impl WasiDir for JudgeDir {
       return Err(Error::not_dir());
     }
 
-    // Check if the requested path is the designated input file.
-    if self.input_file_name.as_deref() == Some(path) {
-      // Ensure the input file exists.
-      let std_file = self.input_file.as_ref().ok_or_else(Error::not_found)?;
-
-      // The input file is strictly read-only.
+    // Check if the requested path is in the read-only files map.
+    if let Some(std_file) = self.read_only_files.get(path) {
+      // The file is strictly read-only.
       // Disallow any write, create, or truncate flags.
       if write
         || oflags.contains(OFlags::CREATE)
         || oflags.contains(OFlags::TRUNCATE)
         || oflags.contains(OFlags::EXCLUSIVE)
       {
-        return Err(Error::perm().context("input file is read-only"));
+        return Err(Error::perm().context(format!("file '{}' is read-only", path)));
       }
 
       // Clone the file handle to create a new file descriptor.
@@ -60,14 +72,11 @@ impl WasiDir for JudgeDir {
       let wasi_file = File::from_cap_std(cap_file);
       Ok(WasiOpenResult::File(Box::new(wasi_file)))
 
-    // Check if the requested path is the designated output file.
-    } else if self.output_file_name.as_deref() == Some(path) {
-      // Ensure the output file exists.
-      let std_file = self.output_file.as_ref().ok_or_else(Error::not_found)?;
-
-      // The output file is strictly write-only.
+    // Check if the requested path is in the write-only files map.
+    } else if let Some(std_file) = self.write_only_files.get(path) {
+      // The file is strictly write-only.
       if read {
-        return Err(Error::perm().context("output file is write-only"));
+        return Err(Error::perm().context(format!("file '{}' is write-only", path)));
       }
 
       // Clone the file handle to create a new file descriptor.
@@ -85,7 +94,7 @@ impl WasiDir for JudgeDir {
 
   // Creating subdirectories is not supported.
   async fn create_dir(&self, _path: &str) -> Result<(), Error> {
-    Err(Error::not_supported().context("create_dir is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("create_dir is not supported"))
   }
 
   // Lists the contents of the fake directory.
@@ -94,12 +103,7 @@ impl WasiDir for JudgeDir {
     cursor: ReaddirCursor,
   ) -> Result<Box<dyn Iterator<Item = Result<ReaddirEntity, Error>> + Send>, Error> {
     let mut entries = Vec::new();
-
-    // All directories must contain '.' and '..'.
-    // We use constant inode numbers for simplicity.
     const DIR_INODE: u64 = 1;
-    const INPUT_FILE_INODE: u64 = 2;
-    const OUTPUT_FILE_INODE: u64 = 3;
 
     // Add '.' (current directory)
     entries.push(Ok(ReaddirEntity {
@@ -117,22 +121,18 @@ impl WasiDir for JudgeDir {
       name: "..".to_string(),
     }));
 
-    // Add the input file if it exists.
-    if let Some(name) = &self.input_file_name {
-      entries.push(Ok(ReaddirEntity {
-        next: ReaddirCursor::from(entries.len() as u64 + 1),
-        filetype: FileType::RegularFile,
-        inode: INPUT_FILE_INODE,
-        name: name.clone(),
-      }));
-    }
+    // Combine all file names from both maps for listing.
+    let all_files = self
+      .read_only_files
+      .keys()
+      .chain(self.write_only_files.keys());
 
-    // Add the output file if it exists.
-    if let Some(name) = &self.output_file_name {
+    for name in all_files {
+      let next_cursor = ReaddirCursor::from(entries.len() as u64 + 1);
       entries.push(Ok(ReaddirEntity {
-        next: ReaddirCursor::from(entries.len() as u64 + 1),
+        next: next_cursor,
         filetype: FileType::RegularFile,
-        inode: OUTPUT_FILE_INODE,
+        inode: path_to_inode(name),
         name: name.clone(),
       }));
     }
@@ -146,22 +146,22 @@ impl WasiDir for JudgeDir {
 
   // Symlinks are not supported.
   async fn symlink(&self, _src_path: &str, _dest_path: &str) -> Result<(), Error> {
-    Err(Error::not_supported().context("symlink is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("symlink is not supported"))
   }
 
   // Removing directories is not supported.
   async fn remove_dir(&self, _path: &str) -> Result<(), Error> {
-    Err(Error::not_supported().context("remove_dir is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("remove_dir is not supported"))
   }
 
   // Unlinking files is not supported.
   async fn unlink_file(&self, _path: &str) -> Result<(), Error> {
-    Err(Error::not_supported().context("unlink_file is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("unlink_file is not supported"))
   }
 
   // Reading links is not supported as symlinks don't exist.
   async fn read_link(&self, _path: &str) -> Result<PathBuf, Error> {
-    Err(Error::not_supported().context("read_link is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("read_link is not supported"))
   }
 
   // Get metadata for the directory itself.
@@ -180,45 +180,33 @@ impl WasiDir for JudgeDir {
 
   // Get metadata for a path within the directory.
   async fn get_path_filestat(&self, path: &str, _follow_symlinks: bool) -> Result<Filestat, Error> {
-    if path == "." {
-      // For '.', return the directory's own stat.
-      self.get_filestat().await
-    } else if self.input_file_name.as_deref() == Some(path) {
-      // For the input file, get metadata from the underlying file handle.
-      let file = self.input_file.as_ref().ok_or(Error::not_found())?;
-      let meta = file
-        .metadata()
-        .map_err(|e| Error::io().context(e.to_string()))?;
-      Ok(Filestat {
-        device_id: 0,
-        inode: 2, // Constant inode for the input file.
-        filetype: FileType::RegularFile,
-        nlink: 1,
-        size: meta.len(),
-        atim: meta.accessed().ok().map(|x| x.into_std()),
-        mtim: meta.modified().ok().map(|x| x.into_std()),
-        ctim: meta.created().ok().map(|x| x.into_std()),
-      })
-    } else if self.output_file_name.as_deref() == Some(path) {
-      // For the output file, do the same.
-      let file = self.output_file.as_ref().ok_or(Error::not_found())?;
-      let meta = file
-        .metadata()
-        .map_err(|e| Error::io().context(e.to_string()))?;
-      Ok(Filestat {
-        device_id: 0,
-        inode: 3, // Constant inode for the output file.
-        filetype: FileType::RegularFile,
-        nlink: 1,
-        size: meta.len(),
-        atim: meta.accessed().ok().map(|x| x.into_std()),
-        mtim: meta.modified().ok().map(|x| x.into_std()),
-        ctim: meta.created().ok().map(|x| x.into_std()),
-      })
-    } else {
-      // Any other path does not exist.
-      Err(Error::not_found())
+    if path == "." || path == ".." {
+      // For '.' or '..', return the directory's own stat.
+      return self.get_filestat().await;
     }
+
+    // Look for the file in either map.
+    let file = self
+      .read_only_files
+      .get(path)
+      .or_else(|| self.write_only_files.get(path))
+      .ok_or_else(Error::not_found)?;
+
+    // Get metadata from the underlying file handle.
+    let meta = file
+      .metadata()
+      .map_err(|e| Error::io().context(e.to_string()))?;
+
+    Ok(Filestat {
+      device_id: 0,
+      inode: path_to_inode(path), // Use the same inode generation logic as readdir.
+      filetype: FileType::RegularFile,
+      nlink: 1,
+      size: meta.len(),
+      atim: meta.accessed().ok().map(|t| t.into_std()),
+      mtim: meta.modified().ok().map(|t| t.into_std()),
+      ctim: meta.created().ok().map(|t| t.into_std()),
+    })
   }
 
   // Renaming is not supported.
@@ -228,7 +216,7 @@ impl WasiDir for JudgeDir {
     _dest_dir: &dyn WasiDir,
     _dest_path: &str,
   ) -> Result<(), Error> {
-    Err(Error::not_supported().context("rename is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("rename is not supported"))
   }
 
   // Hard links are not supported.
@@ -238,7 +226,7 @@ impl WasiDir for JudgeDir {
     _target_dir: &dyn WasiDir,
     _target_path: &str,
   ) -> Result<(), Error> {
-    Err(Error::not_supported().context("hard_link is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("hard_link is not supported"))
   }
 
   // Setting file times is not supported.
@@ -249,28 +237,33 @@ impl WasiDir for JudgeDir {
     _mtime: Option<SystemTimeSpec>,
     _follow_symlinks: bool,
   ) -> Result<(), Error> {
-    Err(Error::not_supported().context("set_times is not supported in LemonFakeDir"))
+    Err(Error::not_supported().context("set_times is not supported"))
   }
 }
 
 impl JudgeDir {
-  pub fn new(input_file_name: Option<String>, output_file_name: Option<String>) -> Self {
-    let input_file = input_file_name.as_ref().and_then(|x| {
-      Some(cap_std::fs::File::from_std(
-        std::fs::File::open(&x).unwrap(),
-      ))
-    });
-    let output_file = output_file_name.as_ref().and_then(|x| {
-      Some(cap_std::fs::File::from_std(
-        std::fs::File::create(x).unwrap(),
-      ))
-    });
-
-    JudgeDir {
-      input_file_name,
-      output_file_name,
-      input_file,
-      output_file,
+  /// Creates a new JudgeDir with specified lists of read-only and write-only files.
+  ///
+  /// This function will attempt to open (for read-only) or create (for write-only)
+  /// all specified files. It returns an error if any file operation fails.
+  pub fn new(read_only_paths: &[String], write_only_paths: &[String]) -> Result<Self> {
+    let mut read_only_files = HashMap::new();
+    for path in read_only_paths {
+      let file = std::fs::File::open(path)
+        .with_context(|| format!("Failed to open read-only file: {}", path))?;
+      read_only_files.insert(path.clone(), cap_std::fs::File::from_std(file));
     }
+
+    let mut write_only_files = HashMap::new();
+    for path in write_only_paths {
+      let file = std::fs::File::create(path)
+        .with_context(|| format!("Failed to create write-only file: {}", path))?;
+      write_only_files.insert(path.clone(), cap_std::fs::File::from_std(file));
+    }
+
+    Ok(JudgeDir {
+      read_only_files,
+      write_only_files,
+    })
   }
 }

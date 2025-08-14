@@ -52,6 +52,60 @@ let
         default = "no";
       };
     };
+
+  runReportSubmodule = lib.types.submodule {
+    options = {
+      status = lib.mkOption {
+        type = lib.types.strMatching "internal_error|accepted|runtime_error|time_limit_exceeded|memory_limit_exceeded";
+      };
+      tick = lib.mkOption { type = lib.types.ints.unsigned; };
+      memory = lib.mkOption { type = lib.types.ints.unsigned; };
+      exit_code = lib.mkOption { type = lib.types.ints.s32; };
+      error_message = lib.mkOption { type = lib.types.str; };
+    };
+  };
+
+  runResultSubmodule = lib.types.submodule {
+    options = {
+      stdout = lib.mkOption { type = lib.types.pathInStore; };
+      stderr = lib.mkOption { type = lib.types.pathInStore; };
+      report = lib.mkOption { type = runReportSubmodule; };
+    };
+  };
+
+  checkReportSubmodule = lib.types.submodule {
+    options = {
+      status = lib.mkOption {
+        type = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct";
+      };
+      score = lib.mkOption { type = lib.types.number; };
+      message = lib.mkOption { type = lib.types.str; };
+      reader_trace_stacks = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        default = [ ];
+      };
+      evaluator_trace_stacks = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        default = [ ];
+      };
+    };
+  };
+
+  # Helper function to create a program type that can be coerced from a path.
+  # It takes a submodule type and wraps it with coercion logic.
+  mkCoercibleProgramType =
+    programSubmodule:
+    lib.types.coercedTo
+      # 1. The target type we want to end up with (the original submodule).
+      (lib.types.oneOf [
+        lib.types.attrs
+        lib.types.pathInStore
+      ])
+      # 2. The coercion function. If the input is a path, wrap it in { src = ... }.
+      #    Otherwise, assume it's already an attribute set and pass it through.
+      (val: if lib.isPath val then { src = val; } else val)
+      # 3. The type of values we accept as input.
+      programSubmodule;
 in
 let
   inherit (lib.types)
@@ -66,6 +120,7 @@ let
     ints
     attrs
     nullOr
+    strMatching
     ;
 in
 {
@@ -161,7 +216,26 @@ in
             default = { };
           };
           inputValidation = lib.mkOption {
-            type = attrs;
+            type = submodule {
+              options = {
+                status = lib.mkOption {
+                  type = strMatching "internal_error|valid|invalid";
+                };
+                message = lib.mkOption { type = str; };
+                reader_trace_stacks = lib.mkOption {
+                  type = listOf attrs;
+                  default = [ ];
+                };
+                reader_trace_tree = lib.mkOption {
+                  type = listOf attrs;
+                  default = [ ];
+                };
+                traits = lib.mkOption {
+                  type = attrsOf bool;
+                  default = { };
+                };
+              };
+            };
             readOnly = true;
             default = hull.validate problem config;
           };
@@ -194,38 +268,74 @@ in
       }
     );
 
+  inherit runReportSubmodule runResultSubmodule checkReportSubmodule;
+
   solution =
     problem:
-    submodule (args: {
-      options = programOptions problem args // {
-        mainCorrectSolution = lib.mkOption {
-          type = bool;
-          default = false;
-        };
-        subtaskPredictions = lib.mkOption {
-          type = attrsOf bool;
-          default = { };
-        };
-      };
-    });
+    mkCoercibleProgramType (
+      submodule (
+        { config, name, ... }@args:
+        {
+          options = programOptions problem args // {
+            name = lib.mkOption {
+              type = nameStr;
+              readOnly = true;
+              default = name;
+            };
+            mainCorrectSolution = lib.mkOption {
+              type = bool;
+              default = false;
+            };
+            subtaskPredictions = lib.mkOption {
+              type = attrsOf bool;
+              default = { };
+            };
+            testCaseResults = lib.mkOption {
+              type = attrsOf (submodule {
+                options = {
+                  run = lib.mkOption { type = runResultSubmodule; };
+                  check = lib.mkOption { type = nullOr (checkReportSubmodule); };
+                };
+              });
+              readOnly = true;
+              default = builtins.listToAttrs (
+                map (tc: {
+                  name = tc.name;
+                  value = {
+                    run = hull.judge.run problem tc config;
+                    check = hull.judge.check problem tc config;
+                  };
+                }) (builtins.attrValues problem.testCases)
+              );
+            };
+          };
+        }
+      )
+    );
 
   checker =
     problem:
-    submodule (args: {
-      options = programOptions problem args;
-    });
+    mkCoercibleProgramType (
+      submodule (args: {
+        options = programOptions problem args;
+      })
+    );
 
   validator =
     problem:
-    submodule (args: {
-      options = programOptions problem args;
-    });
+    mkCoercibleProgramType (
+      submodule (args: {
+        options = programOptions problem args;
+      })
+    );
 
   generator =
     problem:
-    submodule (args: {
-      options = programOptions problem args;
-    });
+    mkCoercibleProgramType (
+      submodule (args: {
+        options = programOptions problem args;
+      })
+    );
 
   target = mkUniqueType "hullTarget";
 }
