@@ -18,58 +18,45 @@ let
 
   nameStr = lib.types.strMatching "[a-zA-Z_][a-zA-Z0-9_\\-]*";
 
-  programOptions =
-    problem:
-    { config, ... }:
-    {
-      src = lib.mkOption {
-        type = lib.types.pathInStore;
-        description = "Path to the source file.";
-      };
-      language = lib.mkOption {
-        type = lib.types.nonEmptyStr;
-        description = "Language of program.";
-        readOnly = true;
-        default = hull.language.matchBaseName (baseNameOf config.src) problem.languages;
-      };
-      wasm = lib.mkOption {
-        type = lib.types.package;
-        readOnly = true;
-        description = "The compiled WASM artifact.";
-        default = hull.compile.wasm problem { inherit (config) src language; };
-      };
-      cwasm = lib.mkOption {
-        type = lib.types.package;
-        readOnly = true;
-        description = "The pre-compiled CWASM artifact.";
-        default = hull.compile.cwasm problem {
-          srcBaseName = builtins.baseNameOf config.src;
-          wasm = config.wasm;
-        };
-      };
-      participantVisibility = lib.mkOption {
-        type = lib.types.strMatching "no|src|wasm";
-        default = "no";
-      };
-    };
-
   runReportSubmodule = lib.types.submodule {
     options = {
       status = lib.mkOption {
         type = lib.types.strMatching "internal_error|accepted|runtime_error|time_limit_exceeded|memory_limit_exceeded";
+        description = "The execution status of the run.";
       };
-      tick = lib.mkOption { type = lib.types.ints.unsigned; };
-      memory = lib.mkOption { type = lib.types.ints.unsigned; };
-      exit_code = lib.mkOption { type = lib.types.ints.s32; };
-      error_message = lib.mkOption { type = lib.types.str; };
+      tick = lib.mkOption {
+        type = lib.types.ints.unsigned;
+        description = "The number of ticks consumed during execution.";
+      };
+      memory = lib.mkOption {
+        type = lib.types.ints.unsigned;
+        description = "The peak memory usage in bytes.";
+      };
+      exit_code = lib.mkOption {
+        type = lib.types.ints.s32;
+        description = "The exit code of the program.";
+      };
+      error_message = lib.mkOption {
+        type = lib.types.str;
+        description = "Any error message produced by the runtime.";
+      };
     };
   };
 
   runResultSubmodule = lib.types.submodule {
     options = {
-      stdout = lib.mkOption { type = lib.types.pathInStore; };
-      stderr = lib.mkOption { type = lib.types.pathInStore; };
-      report = lib.mkOption { type = runReportSubmodule; };
+      stdout = lib.mkOption {
+        type = lib.types.pathInStore;
+        description = "A store path to the program's standard output.";
+      };
+      stderr = lib.mkOption {
+        type = lib.types.pathInStore;
+        description = "A store path to the program's standard error.";
+      };
+      report = lib.mkOption {
+        type = runReportSubmodule;
+        description = "A structured report of the execution result.";
+      };
     };
   };
 
@@ -77,35 +64,75 @@ let
     options = {
       status = lib.mkOption {
         type = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct";
+        description = "The result of the check.";
       };
-      score = lib.mkOption { type = lib.types.number; };
-      message = lib.mkOption { type = lib.types.str; };
+      score = lib.mkOption {
+        type = lib.types.number;
+        description = "The score awarded by the checker (typically between 0.0 and 1.0).";
+      };
+      message = lib.mkOption {
+        type = lib.types.str;
+        description = "A message from the checker explaining the result.";
+      };
       reader_trace_stacks = lib.mkOption {
         type = lib.types.listOf lib.types.attrs;
         default = [ ];
+        description = "Internal trace information from the checker's input readers.";
       };
       evaluator_trace_stacks = lib.mkOption {
         type = lib.types.listOf lib.types.attrs;
         default = [ ];
+        description = "Internal trace information from the checker's evaluator.";
       };
     };
   };
 
-  # Helper function to create a program type that can be coerced from a path.
-  # It takes a submodule type and wraps it with coercion logic.
-  mkCoercibleProgramType =
-    programSubmodule:
-    lib.types.coercedTo
-      # 1. The target type we want to end up with (the original submodule).
-      (lib.types.oneOf [
-        lib.types.attrs
-        lib.types.pathInStore
-      ])
-      # 2. The coercion function. If the input is a path, wrap it in { src = ... }.
-      #    Otherwise, assume it's already an attribute set and pass it through.
-      (val: if lib.isPath val then { src = val; } else val)
-      # 3. The type of values we accept as input.
-      programSubmodule;
+  programOptions =
+    problem:
+    { config, ... }:
+    {
+      src = lib.mkOption {
+        type = lib.types.pathInStore;
+        description = "Path to the source file of the program.";
+      };
+      language = lib.mkOption {
+        type = lib.types.nonEmptyStr;
+        description = "The programming language of the source file. It is automatically detected from the file extension.";
+        readOnly = true;
+        default = hull.language.matchBaseName (baseNameOf config.src) problem.languages;
+        defaultText = lib.literalExpression "hull.language.matchBaseName (baseNameOf config.src) problem.languages";
+      };
+      wasm = lib.mkOption {
+        type = lib.types.package;
+        readOnly = true;
+        description = "The compiled WASM artifact of the program.";
+        default = hull.compile.wasm problem { inherit (config) src language; };
+        defaultText = lib.literalExpression "hull.compile.wasm problem { inherit (config) src language; }";
+      };
+      cwasm = lib.mkOption {
+        type = lib.types.package;
+        readOnly = true;
+        description = "The pre-compiled (AOT) CWASM artifact of the program.";
+        default = hull.compile.cwasm problem {
+          srcBaseName = builtins.baseNameOf config.src;
+          wasm = config.wasm;
+        };
+        defaultText = lib.literalExpression ''
+          hull.compile.cwasm problem {
+            srcBaseName = builtins.baseNameOf config.src;
+            wasm = config.wasm;
+          }'';
+      };
+      participantVisibility = lib.mkOption {
+        type = lib.types.strMatching "no|src|wasm";
+        default = "no";
+        description = ''
+          Controls the visibility of this program to participants.
+          - `no`: Not visible.
+          - `src`: Source code is visible.
+          - `wasm`: Compiled WASM is visible.'';
+      };
+    };
 in
 let
   inherit (lib.types)
@@ -130,7 +157,10 @@ in
 
   language = submodule {
     options = {
-      compile = lib.mkOption { type = functionTo pathInStore; };
+      compile = lib.mkOption {
+        type = functionTo pathInStore;
+        description = "The function used to compile a source file of this language.";
+      };
     };
   };
 
@@ -144,14 +174,17 @@ in
             type = nameStr;
             readOnly = true;
             default = name;
+            description = "The name of the test case, derived from its attribute name in the `testCases` set.";
           };
           generator = lib.mkOption {
             type = nullOr nonEmptyStr;
             default = null;
+            description = "The name of the generator (from the top-level `generators` set) to use for creating the input file. If set, `inputFile` should be null.";
           };
           generatorCwasm = lib.mkOption {
             type = nullOr pathInStore;
             readOnly = true;
+            description = "The store path to the compiled CWASM of the specified generator.";
             default =
               let
                 generatorName = config.generator;
@@ -162,34 +195,44 @@ in
                 problem.generators.${generatorName}.cwasm
               else
                 throw "In test case `${config.name}`, generator `${generatorName}` not found";
+            defaultText = "The `.cwasm` attribute of the corresponding generator in `problem.generators`.";
           };
           arguments = lib.mkOption {
             type = nullOr (listOf str);
             default = null;
+            description = "A list of string arguments to pass to the generator program.";
           };
           inputFile = lib.mkOption {
             type = nullOr pathInStore;
             default = null;
+            description = "A store path to a manually provided input file. If set, `generator` should be null.";
           };
           traits = lib.mkOption {
             type = attrsOf bool;
             default = { };
+            description = "An attribute set of traits that this test case possesses. Must match the traits output by the validator.";
           };
           tickLimit = lib.mkOption {
             type = ints.unsigned;
             default = problem.tickLimit;
+            defaultText = lib.literalExpression "problem.tickLimit";
+            description = "Execution time limit in ticks for this specific test case.";
           };
           memoryLimit = lib.mkOption {
             type = ints.unsigned;
             default = problem.memoryLimit;
+            defaultText = lib.literalExpression "problem.memoryLimit";
+            description = "Memory limit in bytes for this specific test case.";
           };
           pretest = lib.mkOption {
             type = bool;
             default = false;
+            description = "Whether this test case should be included in the pretest set.";
           };
           sample = lib.mkOption {
             type = bool;
             default = false;
+            description = "Whether this test case is a sample case (e.g., visible in the problem statement).";
           };
           data = lib.mkOption {
             type = submodule {
@@ -197,6 +240,7 @@ in
                 input = lib.mkOption {
                   type = pathInStore;
                   readOnly = true;
+                  description = "The store path to the input data file. It's either taken from `inputFile` or generated by `generator`.";
                   default =
                     if config.inputFile != null then
                       config.inputFile
@@ -204,40 +248,53 @@ in
                       hull.generate.input problem config
                     else
                       throw "In test case `${config.name}`, `generator` and `inputFile` are both null";
+                  defaultText = "Derived from `inputFile` or `generator`.";
                 };
                 output = lib.mkOption {
                   type = pathInStore;
                   readOnly = true;
+                  description = "The store path to the correct output data file, generated by running the `mainCorrectSolution`.";
                   default = hull.generate.output problem config;
+                  defaultText = lib.literalExpression "hull.generate.output problem config";
                 };
               };
             };
             readOnly = true;
             default = { };
+            description = "Read-only container for the test case's input and output data paths.";
           };
           inputValidation = lib.mkOption {
             type = submodule {
               options = {
                 status = lib.mkOption {
                   type = strMatching "internal_error|valid|invalid";
+                  description = "The status of the validation: `valid` or `invalid`.";
                 };
-                message = lib.mkOption { type = str; };
+                message = lib.mkOption {
+                  type = str;
+                  description = "A message from the validator.";
+                };
                 reader_trace_stacks = lib.mkOption {
                   type = listOf attrs;
                   default = [ ];
+                  description = "Internal trace information from the validator's input readers.";
                 };
                 reader_trace_tree = lib.mkOption {
                   type = listOf attrs;
                   default = [ ];
+                  description = "Internal trace tree from the validator.";
                 };
                 traits = lib.mkOption {
                   type = attrsOf bool;
                   default = { };
+                  description = "The set of traits automatically detected by the validator from the input data.";
                 };
               };
             };
             readOnly = true;
+            description = "The result of running the validator on the test case's input data.";
             default = hull.validate problem config;
+            defaultText = lib.literalExpression "hull.validate problem config";
           };
         };
       }
@@ -252,10 +309,12 @@ in
           traits = lib.mkOption {
             type = attrsOf bool;
             default = { };
+            description = "An attribute set of traits that a test case must have to belong to this subtask.";
           };
           testCases = lib.mkOption {
             type = listOf attrs;
             readOnly = true;
+            description = "A list of test cases that match the traits defined for this subtask.";
             default = builtins.filter (
               tc:
               builtins.all (
@@ -263,6 +322,7 @@ in
                 builtins.hasAttr name tc.inputValidation.traits && tc.inputValidation.traits.${name} == value
               ) (lib.attrsToList config.traits)
             ) (builtins.attrValues problem.testCases);
+            defaultText = "A filtered list of `problem.testCases` matching the subtask's traits.";
           };
         };
       }
@@ -272,70 +332,73 @@ in
 
   solution =
     problem:
-    mkCoercibleProgramType (
-      submodule (
-        { config, name, ... }@args:
-        {
-          options = programOptions problem args // {
-            name = lib.mkOption {
-              type = nameStr;
-              readOnly = true;
-              default = name;
-            };
-            mainCorrectSolution = lib.mkOption {
-              type = bool;
-              default = false;
-            };
-            subtaskPredictions = lib.mkOption {
-              type = attrsOf bool;
-              default = { };
-            };
-            testCaseResults = lib.mkOption {
-              type = attrsOf (submodule {
-                options = {
-                  run = lib.mkOption { type = runResultSubmodule; };
-                  check = lib.mkOption { type = nullOr (checkReportSubmodule); };
-                };
-              });
-              readOnly = true;
-              default = builtins.listToAttrs (
-                map (tc: {
-                  name = tc.name;
-                  value = {
-                    run = hull.judge.run problem tc config;
-                    check = hull.judge.check problem tc config;
-                  };
-                }) (builtins.attrValues problem.testCases)
-              );
-            };
+    submodule (
+      { config, name, ... }@args:
+      {
+        options = programOptions problem args // {
+          name = lib.mkOption {
+            type = nameStr;
+            readOnly = true;
+            default = name;
+            description = "The name of the solution, derived from its attribute name in the `solutions` set.";
           };
-        }
-      )
+          mainCorrectSolution = lib.mkOption {
+            type = bool;
+            default = false;
+            description = "Whether this solution is the main correct one, used to generate answer files. Exactly one solution must have this set to `true`.";
+          };
+          subtaskPredictions = lib.mkOption {
+            type = attrsOf bool;
+            default = { };
+            description = "A prediction of which subtasks this solution should pass. The keys are subtask indices (as strings), values are booleans.";
+          };
+          testCaseResults = lib.mkOption {
+            type = attrsOf (submodule {
+              options = {
+                run = lib.mkOption {
+                  type = runResultSubmodule;
+                  description = "The result of running the solution against a test case input.";
+                };
+                check = lib.mkOption {
+                  type = nullOr (checkReportSubmodule);
+                  description = "The result of checking the solution's output against the correct answer.";
+                };
+              };
+            });
+            readOnly = true;
+            description = "The collected results of running and checking this solution against all test cases.";
+            default = builtins.listToAttrs (
+              map (tc: {
+                name = tc.name;
+                value = {
+                  run = hull.judge.run problem tc config;
+                  check = hull.judge.check problem tc config;
+                };
+              }) (builtins.attrValues problem.testCases)
+            );
+            defaultText = "Computed by running and checking the solution against every test case in `problem.testCases`.";
+          };
+        };
+      }
     );
 
   checker =
     problem:
-    mkCoercibleProgramType (
-      submodule (args: {
-        options = programOptions problem args;
-      })
-    );
+    submodule (args: {
+      options = programOptions problem args;
+    });
 
   validator =
     problem:
-    mkCoercibleProgramType (
-      submodule (args: {
-        options = programOptions problem args;
-      })
-    );
+    submodule (args: {
+      options = programOptions problem args;
+    });
 
   generator =
     problem:
-    mkCoercibleProgramType (
-      submodule (args: {
-        options = programOptions problem args;
-      })
-    );
+    submodule (args: {
+      options = programOptions problem args;
+    });
 
   target = mkUniqueType "hullTarget";
 }
