@@ -19,35 +19,36 @@ let
   nameStr = lib.types.strMatching "[a-zA-Z_][a-zA-Z0-9_\\-]*";
 
   programOptions =
-    with lib.types;
-    problem: args: {
+    problem:
+    { config, ... }:
+    {
       src = lib.mkOption {
-        type = pathInStore;
+        type = lib.types.pathInStore;
         description = "Path to the source file.";
       };
       language = lib.mkOption {
-        type = nonEmptyStr;
+        type = lib.types.nonEmptyStr;
         description = "Language of program.";
         readOnly = true;
-        default = hull.language.matchBaseName (baseNameOf args.config.src) problem.languages;
+        default = hull.language.matchBaseName (baseNameOf config.src) problem.languages;
       };
       wasm = lib.mkOption {
-        type = package;
+        type = lib.types.package;
         readOnly = true;
         description = "The compiled WASM artifact.";
-        default = hull.compile.wasm problem { inherit (args.config) src language; };
+        default = hull.compile.wasm problem { inherit (config) src language; };
       };
       cwasm = lib.mkOption {
-        type = package;
+        type = lib.types.package;
         readOnly = true;
         description = "The pre-compiled CWASM artifact.";
         default = hull.compile.cwasm problem {
-          srcBaseName = builtins.baseNameOf args.config.src;
-          wasm = args.config.wasm;
+          srcBaseName = builtins.baseNameOf config.src;
+          wasm = config.wasm;
         };
       };
       participantVisibility = lib.mkOption {
-        type = strMatching "no|src|wasm";
+        type = lib.types.strMatching "no|src|wasm";
         default = "no";
       };
     };
@@ -64,6 +65,7 @@ let
     bool
     ints
     attrs
+    nullOr
     ;
 in
 {
@@ -88,23 +90,43 @@ in
             readOnly = true;
             default = name;
           };
-          generator = lib.mkOption { type = nonEmptyStr; };
+          generator = lib.mkOption {
+            type = nullOr nonEmptyStr;
+            default = null;
+          };
           generatorCwasm = lib.mkOption {
-            type = pathInStore;
+            type = nullOr pathInStore;
             readOnly = true;
             default =
               let
                 generatorName = config.generator;
               in
-              if builtins.hasAttr generatorName problem.generators then
+              if generatorName == null then
+                null
+              else if builtins.hasAttr generatorName problem.generators then
                 problem.generators.${generatorName}.cwasm
               else
-                throw "Generator `${generatorName}` not found";
+                throw "In test case `${config.name}`, generator `${generatorName}` not found";
           };
-          arguments = lib.mkOption { type = listOf str; };
+          arguments = lib.mkOption {
+            type = nullOr (listOf str);
+            default = null;
+          };
+          inputFile = lib.mkOption {
+            type = nullOr pathInStore;
+            default = null;
+          };
           traits = lib.mkOption {
             type = attrsOf bool;
             default = { };
+          };
+          tickLimit = lib.mkOption {
+            type = ints.unsigned;
+            default = problem.tickLimit;
+          };
+          memoryLimit = lib.mkOption {
+            type = ints.unsigned;
+            default = problem.memoryLimit;
           };
           pretest = lib.mkOption {
             type = bool;
@@ -120,7 +142,13 @@ in
                 input = lib.mkOption {
                   type = pathInStore;
                   readOnly = true;
-                  default = hull.generate.input problem config;
+                  default =
+                    if config.inputFile != null then
+                      config.inputFile
+                    else if config.generator != null then
+                      hull.generate.input problem config
+                    else
+                      throw "In test case `${config.name}`, `generator` and `inputFile` are both null";
                 };
                 output = lib.mkOption {
                   type = pathInStore;
@@ -132,7 +160,6 @@ in
             readOnly = true;
             default = { };
           };
-          inputHash = lib.mkOption { type = str; };
           inputValidation = lib.mkOption {
             type = attrs;
             readOnly = true;
@@ -144,22 +171,28 @@ in
 
   subtask =
     problem:
-    submodule {
-      options = {
-        traits = lib.mkOption {
-          type = attrsOf bool;
-          default = { };
+    submodule (
+      { config, ... }:
+      {
+        options = {
+          traits = lib.mkOption {
+            type = attrsOf bool;
+            default = { };
+          };
+          testCases = lib.mkOption {
+            type = listOf attrs;
+            readOnly = true;
+            default = builtins.filter (
+              tc:
+              builtins.all (
+                { name, value }:
+                builtins.hasAttr name tc.inputValidation.traits && tc.inputValidation.traits.${name} == value
+              ) (lib.attrsToList config.traits)
+            ) (builtins.attrValues problem.testCases);
+          };
         };
-        tickLimit = lib.mkOption {
-          type = ints.unsigned;
-          default = problem.tickLimit;
-        };
-        memoryLimit = lib.mkOption {
-          type = ints.unsigned;
-          default = problem.memoryLimit;
-        };
-      };
-    };
+      }
+    );
 
   solution =
     problem:
