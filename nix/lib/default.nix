@@ -5,6 +5,7 @@ let
 
   hull = {
     compile = import ./compile.nix { inherit hull pkgs hullPkgs; };
+    docs = import ./docs.nix { inherit hull pkgs; };
     generate = import ./generate.nix { inherit hull pkgs hullPkgs; };
     judge = import ./judge.nix { inherit pkgs hullPkgs; };
     judger = import ./judger.nix { inherit pkgs; };
@@ -32,9 +33,7 @@ let
             problemAttrs
           ];
 
-          specialArgs = {
-            inherit hull;
-          };
+          specialArgs = { inherit hull; };
         };
 
         problemAssertWarn =

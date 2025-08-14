@@ -70,6 +70,7 @@
 
           packages = import ./nix/pkgs { inherit pkgs; } // {
             default = craneLib.buildPackage { src = ./.; };
+            docs = hull.docs;
 
             test = {
               problem = {

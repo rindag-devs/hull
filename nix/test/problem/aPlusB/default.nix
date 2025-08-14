@@ -7,12 +7,12 @@
 
   includes = [ ./third_party/cplib/include ];
 
-  checker = ./checker.20.cpp;
+  checker.src = ./checker.20.cpp;
 
-  validator = ./validator.20.cpp;
+  validator.src = ./validator.20.cpp;
 
   generators = {
-    rand = ./generator/rand.20.cpp;
+    rand.src = ./generator/rand.20.cpp;
   };
 
   traits = [
