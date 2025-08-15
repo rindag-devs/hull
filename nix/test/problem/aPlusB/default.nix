@@ -81,16 +81,58 @@
     { fullScore = 0.5; }
   ];
 
-  solutions = {
-    std = {
-      src = ./solution/std.20.cpp;
-      mainCorrectSolution = true;
-      subtaskPredictions = {
-        "0" = s: s == 1;
-        "1" = s: s == 1;
+  solutions =
+    let
+      ac = { score, ... }: score == 1;
+      unac = { score, ... }: score == 0;
+      tle_or_ac =
+        { statuses, ... }: builtins.all (s: s == "accepted" || s == "time_limit_exceeded") statuses;
+    in
+    {
+      std = {
+        src = ./solution/std.20.cpp;
+        mainCorrectSolution = true;
+        subtaskPredictions = {
+          "0" = ac;
+          "1" = ac;
+        };
+      };
+      wa-unsigned = {
+        src = ./solution/wa-unsigned.20.cpp;
+        subtaskPredictions = {
+          "0" = ac;
+          "1" = unac;
+        };
+      };
+      tle = {
+        src = ./solution/tle.20.cpp;
+        subtaskPredictions = {
+          "0" = tle_or_ac;
+          "1" = tle_or_ac;
+        };
+      };
+      mle-dynamic = {
+        src = ./solution/mle-dynamic.20.cpp;
+        subtaskPredictions = {
+          "0" = unac;
+          "1" = unac;
+        };
+      };
+      mle-static = {
+        src = ./solution/mle-static.20.cpp;
+        subtaskPredictions = {
+          "0" = unac;
+          "1" = unac;
+        };
+      };
+      re = {
+        src = ./solution/re.20.cpp;
+        subtaskPredictions = {
+          "0" = unac;
+          "1" = unac;
+        };
       };
     };
-  };
 
   targets = {
     default = hull.target.default;

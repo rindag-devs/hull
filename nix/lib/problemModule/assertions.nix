@@ -191,7 +191,11 @@
                 let
                   subtaskResult = builtins.elemAt results index;
                   actualScore = subtaskResult.rawScore;
-                  predictionHolds = predictionFunc actualScore;
+                  actualStatuses = subtaskResult.statuses;
+                  predictionHolds = predictionFunc {
+                    score = actualScore;
+                    statuses = actualStatuses;
+                  };
                 in
                 !predictionHolds
             ) predictionList;
@@ -229,6 +233,7 @@
                             null;
                         actualScore =
                           if subtaskResult != null then toString subtaskResult.rawScore else "N/A (non-existent subtask)";
+                        actualStatuses = if subtaskResult != null then toString subtaskResult.statuses else [ ];
                         subtaskIdentifier =
                           if subtask != null then
                             getSubtaskName index subtask
@@ -237,7 +242,7 @@
                       in
                       ''
                         - ${subtaskIdentifier}:
-                            Prediction failed with actual raw score: ${actualScore}
+                            Prediction failed with actual (raw score: ${actualScore}, statuses: ${builtins.toJSON actualStatuses})
                       ''
                     ) mismatches;
                   in

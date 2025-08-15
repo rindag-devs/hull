@@ -13,13 +13,18 @@
         }:
         let
           compiler = if isCpp then "clang++" else "clang";
+          language = if isCpp then "c++" else "c";
           includeDirCmd = pkgs.lib.concatMapStringsSep " " (p: "-I${p}") includes;
         in
         pkgs.runCommandLocal name
           {
             nativeBuildInputs = [ hullPkgs.wasm-judge-clang ];
           }
-          "wasm-judge-${compiler} ${src} -o $out ${includeDirCmd} -O3 -std=${std} -Wl,--strip-debug -Wl,-z,stack-size=8388608";
+          ''
+            cp ${src} foo.code
+            wasm-judge-${compiler} -x${language} foo.code -o foo.wasm ${includeDirCmd} -O3 -std=${std} -Wl,--strip-debug -Wl,-z,stack-size=8388608
+            cp foo.wasm $out
+          '';
 
       cStandards = [
         "89"

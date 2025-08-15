@@ -1,21 +1,28 @@
 #include <cstdint>
 #include <tuple>
+#include <vector>
 
 #include "cplib.hpp"
 
-CPLIB_REGISTER_VALIDATOR(val);
+using cplib::var::i32;
+using cplib::var::Reader;
 
-void validator_main() {
-  using cplib::var::i32, cplib::var::space, cplib::var::eoln;
-
+struct Input {
   int32_t n, m;
-  val.traits({
-      {"n_positive", [&]() { return n > 0; }},
-      {"m_positive", [&]() { return m > 0; }},
-  });
 
-  std::tie(n, std::ignore, m, std::ignore) =
-      val.inf(i32("n", -1000, 1000), space, i32("m", -1000, 1000), eoln);
+  static auto read(Reader& in) -> Input {
+    int32_t n, m;
+    std::tie(n, std::ignore, m, std::ignore) =
+        in(i32("n", -1000, 1000), cplib::var::space, i32("m", -1000, 1000), cplib::var::eoln);
+    return {.n = n, .m = m};
+  }
+};
 
-  val.quit_valid();
+auto traits(const Input& input) -> std::vector<cplib::validator::Trait> {
+  return {
+      {"n_positive", [&]() { return input.n > 0; }},
+      {"m_positive", [&]() { return input.m > 0; }},
+  };
 }
+
+CPLIB_REGISTER_VALIDATOR(Input, traits);
