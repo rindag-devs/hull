@@ -9,7 +9,10 @@ let
       {
         nativeBuildInputs = [ hullPkgs.default ];
       }
-      "hull run-wasm ${validator.cwasm} --stdin-path=${input} --inherit-stdout --stderr-path=$out || true";
+      ''
+        cp ${validator.cwasm} cwasm
+        hull run-wasm cwasm --stdin-path=${input} --inherit-stdout --stderr-path=$out || true
+      '';
   result = builtins.fromJSON (builtins.readFile output);
 in
 result

@@ -18,10 +18,12 @@
         pkgs.runCommandLocal "hull-run-${problem.name}-${testCase.name}-${solution.name}"
           { nativeBuildInputs = [ hullPkgs.default ]; }
           ''
+            cp ${cwasm} cwasm
+            cp ${data.input} stdin
             mkdir $out
             hull run-wasm \
-              ${cwasm} \
-              --stdin-path=${data.input} \
+              cwasm \
+              --stdin-path=stdin \
               --stdout-path=$out/stdout \
               --stderr-path=$out/stderr \
               --tick-limit=${builtins.toString tickLimit} \
@@ -45,11 +47,12 @@
         pkgs.runCommandLocal "hull-check-${problem.name}-${testCase.name}-${solution.name}"
           { nativeBuildInputs = [ hullPkgs.default ]; }
           ''
+            cp ${checker.cwasm} cwasm
             cp ${data.input} input
             cp ${testCaseResults.${testCase.name}.run.stdout} output
             cp ${data.output} answer
             hull run-wasm \
-              ${checker.cwasm} \
+              cwasm \
               --inherit-stdout \
               --stderr-path=$out \
               --read-file input \

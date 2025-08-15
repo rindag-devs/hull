@@ -24,7 +24,13 @@
       ...
     }:
     { srcBaseName, wasm }:
-    pkgs.runCommandLocal "hull-cwasm-${name}-${srcBaseName}" {
-      nativeBuildInputs = [ hullPkgs.default ];
-    } "hull compile-cwasm ${wasm} $out";
+    pkgs.runCommandLocal "hull-cwasm-${name}-${srcBaseName}"
+      {
+        nativeBuildInputs = [ hullPkgs.default ];
+      }
+      ''
+        cp ${wasm} wasm
+        hull compile-cwasm wasm cwasm
+        cp cwasm $out
+      '';
 }

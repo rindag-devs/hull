@@ -87,6 +87,8 @@ let
     };
   };
 
+  testCaseResultStatusStr = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct|runtime_error|time_limit_exceeded|memory_limit_exceeded";
+
   testCaseResultSubmodule = lib.types.submodule {
     options = {
       run = lib.mkOption {
@@ -98,7 +100,7 @@ let
         description = "The result of checking the solution's output against the correct answer.";
       };
       status = lib.mkOption {
-        type = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct|runtime_error|time_limit_exceeded|memory_limit_exceeded";
+        type = testCaseResultStatusStr;
         description = "The status of judgement.";
       };
       score = lib.mkOption {
@@ -183,6 +185,7 @@ in
     runReportSubmodule
     runResultSubmodule
     checkReportSubmodule
+    testCaseResultStatusStr
     testCaseResultSubmodule
     ;
 
@@ -386,9 +389,13 @@ in
             type = attrsOf (functionTo bool);
             default = { };
             description = ''
-              A prediction for each subtask, expressed as a function that takes the raw score (0.0-1.0)
-              and returns true if the prediction is met.'';
-            example = lib.literalExpression ''{ "0" = score: score == 1; "1" = score: score >= 0.5; }'';
+              A prediction for each subtask, expressed as a function that takes an attributes set of raw score (0.0-1.0)
+              and statuses, and then returns true if the prediction is met.'';
+            example = lib.literalExpression ''
+              {
+                "0" = { score, ... }: score >= 0.5;
+                "1" = { statuses, ... }: builtins.all (s: s == "accepted" || s == "time_limit_exceeded") statuses;
+              }'';
           };
           testCaseResults = lib.mkOption {
             type = attrsOf testCaseResultSubmodule;
@@ -425,6 +432,10 @@ in
                   type = attrsOf testCaseResultSubmodule;
                   description = "The results of test cases in this subtask.";
                 };
+                statuses = lib.mkOption {
+                  type = listOf testCaseResultStatusStr;
+                  description = "The result status of all test cases in this subtask. Already sorted and deduplicated.";
+                };
                 rawScore = lib.mkOption {
                   type = numbers.between 0 1;
                   description = "The lowest score of all test cases in this subtask, with a maximum score of 1.";
@@ -448,11 +459,19 @@ in
                     value = config.testCaseResults.${tc.name};
                   }) st.testCases
                 );
+                statuses = lib.unique (
+                  builtins.sort builtins.lessThan (lib.map ({ status, ... }: status) (builtins.attrValues testCases))
+                );
                 rawScore = builtins.foldl' lib.min 1.0 (map (tc: tc.score) (builtins.attrValues testCases));
                 scaledScore = rawScore * st.fullScore;
               in
               {
-                inherit testCases rawScore scaledScore;
+                inherit
+                  testCases
+                  statuses
+                  rawScore
+                  scaledScore
+                  ;
               }
             ) problem.subtasks;
             defaultText = "Computed by running and checking the solution against every test case in `problem.subtask.{name}.testCases";
@@ -462,7 +481,7 @@ in
             readOnly = true;
             description = "This final score of the entire problem for this solution.";
             default = builtins.foldl' builtins.add 0 (
-              map (builtins.getAttr "scaledScore") config.subtaskResults
+              map ({ scaledScore, ... }: scaledScore) config.subtaskResults
             );
             defaultText = lib.literalExpression ''
               builtins.foldl' builtins.add 0 (
