@@ -14,6 +14,7 @@
 #let samples = "samples"
 #let tick_limit = "tick limit"
 #let memory_limit = "memory limit"
+#let score = "score"
 
 #let ticks(n) = {
   if n < 100000 {

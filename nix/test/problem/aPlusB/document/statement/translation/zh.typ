@@ -14,6 +14,7 @@
 #let samples = "样例"
 #let tick_limit = "时刻限制"
 #let memory_limit = "内存限制"
+#let score = "分数"
 
 #let ticks(n) = {
   if n < 100000 {

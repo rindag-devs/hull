@@ -61,6 +61,7 @@
               pkgs.cargo-watch
               pkgs.openssl
               pkgs.pkg-config
+              pkgs.nix-output-monitor
             ];
 
             env = {
@@ -77,14 +78,17 @@
           };
 
           packages = import ./nix/pkgs { inherit pkgs; } // {
-            default = craneLib.buildPackage { src = ./.; };
-            docs = hull.docs;
-
-            test = {
-              problem = {
-                aPlusB = (hull.evalProblem ./nix/test/problem/aPlusB).config.targetOutputs;
-              };
+            default = craneLib.buildPackage {
+              src = craneLib.cleanCargoSource ./.;
+              buildInputs = [
+                pkgs.nix-output-monitor
+              ];
             };
+            docs = hull.docs;
+          };
+
+          hullProblems = {
+            test.aPlusB = hull.evalProblem ./nix/test/problem/aPlusB;
           };
         }
       );
@@ -93,5 +97,6 @@
       hull = forEachSystem (system: self.perSystem.${system}.hull);
       packages = forEachSystem (system: self.perSystem.${system}.packages);
       formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
+      hullProblems = forEachSystem (system: self.perSystem.${system}.hullProblems);
     };
 }
