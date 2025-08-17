@@ -8,6 +8,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
+    typix = {
+      url = "github:loqusion/typix/0.3.2";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -16,6 +20,7 @@
       nixpkgs,
       fenix,
       crane,
+      typix,
     }:
     let
       supportedSystems = [
@@ -63,8 +68,11 @@
             };
           };
 
+          typixLib = typix.lib.${system};
+
           hull = import ./nix/lib {
             inherit pkgs;
+            inherit typixLib;
             hullPkgs = packages;
           };
 

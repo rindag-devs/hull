@@ -1,9 +1,17 @@
 {
   hull,
+  lib,
+  config,
+  pkgs,
   ...
 }:
 {
-  name = "a-plus-b";
+  imports = [
+    ./translation/en.nix
+    ./translation/zh.nix
+  ];
+
+  name = "aPlusB";
 
   includes = [ ./third_party/cplib/include ];
 
@@ -15,10 +23,10 @@
     rand.src = ./generator/rand.20.cpp;
   };
 
-  traits = [
-    "n_positive"
-    "m_positive"
-  ];
+  traits = {
+    a_positive = { };
+    b_positive = { };
+  };
 
   testCases = {
     rand-1 = {
@@ -28,11 +36,13 @@
         "--n-max=10"
       ];
       traits = {
-        n_positive = true;
-        m_positive = true;
+        a_positive = true;
+        b_positive = true;
       };
-      pretest = true;
-      sample = true;
+      groups = [
+        "sample"
+        "pretest"
+      ];
     };
     rand-2 = {
       generator = "rand";
@@ -42,8 +52,8 @@
         "--same"
       ];
       traits = {
-        n_positive = true;
-        m_positive = true;
+        a_positive = true;
+        b_positive = true;
       };
     };
     rand-3 = {
@@ -53,16 +63,20 @@
         "--n-max=-1"
       ];
       traits = {
-        n_positive = false;
-        m_positive = false;
+        a_positive = false;
+        b_positive = false;
       };
     };
     hand-1 = {
       inputFile = ./data/hand-1.in;
       traits = {
-        n_positive = true;
-        m_positive = true;
+        a_positive = true;
+        b_positive = true;
       };
+      groups = [
+        "sample"
+        "pretest"
+      ];
     };
   };
 
@@ -72,8 +86,8 @@
   subtasks = [
     {
       traits = {
-        n_positive = true;
-        m_positive = true;
+        a_positive = true;
+        b_positive = true;
       };
       fullScore = 0.5;
     }
@@ -133,6 +147,37 @@
         };
       };
     };
+
+  documents =
+    let
+      languages = [
+        "en"
+        "zh"
+      ];
+      mkStatement = language: {
+        "statement.${language}.pdf" = {
+          path = hull.document.mkTypstDocument config {
+            src = ./document/statement;
+            inputs = { inherit language; };
+            fontPaths = [
+              "${pkgs.libertinus}/share/fonts/opentype"
+              "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
+            ];
+            typstPackages = [
+              {
+                name = "titleize";
+                version = "0.1.1";
+                hash = "sha256-Z0okd0uGhUDpdLXWpS+GvKVk1LSs15CE7l0l7kZqWLo=";
+              }
+            ];
+          };
+          inherit language;
+          participantVisibility = true;
+        };
+      };
+      statements = lib.mergeAttrsList (map mkStatement languages);
+    in
+    statements;
 
   targets = {
     default = hull.target.default;

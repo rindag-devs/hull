@@ -70,7 +70,9 @@
           tc:
           let
             definedTraits = builtins.attrNames tc.traits;
-            undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
+            undeclared = builtins.filter (
+              trait: !(lib.elem trait (builtins.attrNames config.traits))
+            ) definedTraits;
           in
           undeclared != [ ]
         ) (builtins.attrValues config.testCases);
@@ -83,12 +85,14 @@
                   tc:
                   let
                     definedTraits = builtins.attrNames tc.traits;
-                    undeclared = builtins.filter (trait: !(lib.elem trait config.traits)) definedTraits;
+                    undeclared = builtins.filter (
+                      trait: !(lib.elem trait (builtins.attrNames config.traits))
+                    ) definedTraits;
                   in
                   ''
                     - ${getTestCaseName tc}:
                         The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
-                        Declared traits are: ${builtins.toJSON config.traits}
+                        Declared traits are: ${builtins.toJSON (builtins.attrNames config.traits)}
                   ''
                 ) casesWithUndeclaredTraits
               );
@@ -138,7 +142,9 @@
           let
             st = item.st;
             definedTraits = builtins.attrNames st.traits;
-            undeclared = builtins.filter (trait: !(builtins.elem trait config.traits)) definedTraits;
+            undeclared = builtins.filter (
+              trait: !(builtins.elem trait (builtins.attrNames config.traits))
+            ) definedTraits;
           in
           undeclared != [ ]
         ) (lib.imap0 (index: st: { inherit index st; }) config.subtasks);
@@ -152,12 +158,14 @@
                   let
                     st = item.st;
                     definedTraits = builtins.attrNames st.traits;
-                    undeclared = builtins.filter (trait: !(builtins.elem trait config.traits)) definedTraits;
+                    undeclared = builtins.filter (
+                      trait: !(builtins.elem trait (builtins.attrNames config.traits))
+                    ) definedTraits;
                   in
                   ''
                     - ${getSubtaskName item.index st}:
                         The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
-                        Declared traits are: ${builtins.toJSON config.traits}
+                        Declared traits are: ${builtins.toJSON (builtins.attrNames config.traits)}
                   ''
                 ) subtasksWithUndeclaredTraits
               );

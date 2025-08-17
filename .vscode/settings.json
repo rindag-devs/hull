@@ -16,6 +16,10 @@
     "rustc",
     "rustlib",
     "stdenv",
+    "titlecase",
+    "titleize",
+    "typix",
+    "Typst",
     "wasip"
   ]
 }

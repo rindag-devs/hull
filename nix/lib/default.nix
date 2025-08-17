@@ -1,4 +1,8 @@
-{ pkgs, hullPkgs }:
+{
+  pkgs,
+  hullPkgs,
+  typixLib,
+}:
 
 let
   problemModule = ./problemModule;
@@ -6,6 +10,7 @@ let
   hull = {
     compile = import ./compile.nix { inherit hull pkgs hullPkgs; };
     docs = import ./docs.nix { inherit hull pkgs; };
+    document = import ./document.nix { inherit pkgs typixLib; };
     generate = import ./generate.nix { inherit hull pkgs hullPkgs; };
     judge = import ./judge.nix { inherit pkgs hullPkgs; };
     judger = import ./judger.nix { inherit pkgs; };
@@ -33,7 +38,7 @@ let
             problemAttrs
           ];
 
-          specialArgs = { inherit hull; };
+          specialArgs = { inherit pkgs hull; };
         };
 
         problemAssertWarn =

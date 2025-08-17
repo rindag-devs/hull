@@ -14,6 +14,7 @@
         solutions,
         generators,
         checker,
+        documents,
         ...
       }:
       let
@@ -109,6 +110,9 @@
             echo ${builtins.toString score} > $out/solution/${solName}/score.txt
           ''
         ) solutions;
+        documentsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (documentName: document: ''
+          cp ${document.path} $out/documents/${documentName}
+        '') documents;
       in
       pkgs.runCommandLocal "hull-target-output-${name}-default" { } ''
         ${dataCommand}
@@ -122,6 +126,9 @@
         ${generatorsCommand}
 
         ${checkerCommand}
+
+        mkdir -p $out/documents
+        ${documentsCommand}
       '';
   };
 }
