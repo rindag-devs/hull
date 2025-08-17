@@ -20,6 +20,7 @@ async fn main() -> Result<()> {
   let opts = Opts::parse();
 
   match &opts.command {
+    cli::Command::Build(build_opts) => cmd::build::run(build_opts),
     cli::Command::CompileCwasm(compile_cwasm_opts) => cmd::compile_cwasm::run(compile_cwasm_opts),
     cli::Command::RunWasm(run_wasm_opts) => cmd::run_wasm::run(run_wasm_opts),
   }

@@ -70,10 +70,9 @@
 == #titlecase(translation.subtasks)
 
 #[
-  #table(columns: (0.5fr, 1fr) + (1fr,) * hull.traits.len(), [\#], [Score], ..hull
-      .traits
-      .keys()
-      .map(x => x.clusters().join(sym.zws)), ..hull
+  #table(columns: (0.5fr, 1fr) + (1fr,) * hull.traits.len(), [\#], [#titlecase(
+        translation.score,
+      )], ..hull.traits.keys().map(x => x.clusters().join(sym.zws)), ..hull
       .subtasks
       .enumerate(start: 1)
       .map(((id, st)) => {
@@ -84,11 +83,11 @@
               .keys()
               .map(trait => {
                 if not st.traits.keys().contains(trait) {
-                  [?]
+                  table.cell(fill: yellow.lighten(60%))[?]
                 } else if st.traits.at(trait) {
-                  [$sqrt("")$]
+                  table.cell(fill: green.lighten(60%))[#sym.checkmark]
                 } else {
-                  [$times$]
+                  table.cell(fill: red.lighten(60%))[$times$]
                 }
               })
         )
