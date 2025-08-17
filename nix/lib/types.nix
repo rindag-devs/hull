@@ -200,6 +200,19 @@ in
     };
   };
 
+  trait = submodule {
+    options = {
+      description = lib.mkOption {
+        type = attrsOf str;
+        description = "The description of this trait for each display language.";
+        example = {
+          en = "$a$ is a positive integer.";
+          zh = "$a$ 为正整数";
+        };
+      };
+    };
+  };
+
   testCase =
     problem:
     submodule (
@@ -260,15 +273,14 @@ in
             defaultText = lib.literalExpression "problem.memoryLimit";
             description = "Memory limit in bytes for this specific test case.";
           };
-          pretest = lib.mkOption {
-            type = bool;
-            default = false;
-            description = "Whether this test case should be included in the pretest set.";
-          };
-          sample = lib.mkOption {
-            type = bool;
-            default = false;
-            description = "Whether this test case is a sample case (e.g., visible in the problem statement).";
+          groups = lib.mkOption {
+            type = listOf nameStr;
+            default = [ ];
+            description = "The groups to which this test case belongs.";
+            example = [
+              "sample"
+              "pretest"
+            ];
           };
           data = lib.mkOption {
             type = submodule {
@@ -509,6 +521,25 @@ in
     submodule (args: {
       options = programOptions problem args;
     });
+
+  document = submodule {
+    options = {
+      path = lib.mkOption {
+        type = pathInStore;
+        description = "The path of this document.";
+      };
+      language = lib.mkOption {
+        type = str;
+        description = "The display language of this document.";
+        example = "en";
+      };
+      participantVisibility = lib.mkOption {
+        type = bool;
+        default = false;
+        description = "The visibility of this document to participants.";
+      };
+    };
+  };
 
   target = mkUniqueType "hullTarget";
 }

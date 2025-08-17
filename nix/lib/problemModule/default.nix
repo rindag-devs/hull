@@ -12,6 +12,16 @@
     name = lib.mkOption {
       type = hull.types.nameStr;
       description = "The unique name of the problem, used in derivations and outputs.";
+      example = "exampleProblem";
+    };
+
+    displayName = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      description = "Display problem title for each language.";
+      example = {
+        en = "example problem";
+        zh = "示例题目";
+      };
     };
 
     includes = lib.mkOption {
@@ -45,9 +55,9 @@
     };
 
     traits = lib.mkOption {
-      type = lib.types.listOf hull.types.nameStr;
-      default = [ ];
-      description = "A list of all possible traits that can be used to categorize test cases and define subtasks.";
+      type = lib.types.attrsOf hull.types.trait;
+      default = { };
+      description = "An attribute set of all possible traits that can be used to categorize test cases and define subtasks.";
     };
 
     generators = lib.mkOption {
@@ -102,6 +112,12 @@
         else
           throw "Expected exact 1 solution with `mainCorrectSolution = true`, found ${builtins.toString count}";
       defaultText = "The solution in `config.solutions` for which `mainCorrectSolution` is set to `true`.";
+    };
+
+    documents = lib.mkOption {
+      type = lib.types.attrsOf hull.types.document;
+      default = { };
+      description = "An attribute set of documents for the problem.";
     };
 
     targets = lib.mkOption {

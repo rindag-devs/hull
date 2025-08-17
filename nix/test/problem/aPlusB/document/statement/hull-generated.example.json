@@ -1,0 +1,32 @@
+{
+  "tick-limit": 0,
+  "memory-limit": 0,
+  "name": {
+    "en": "problem name",
+    "zh": "题目名称"
+  },
+  "samples": [
+    {
+      "input": "input context",
+      "output": "output context"
+    }
+  ],
+  "traits": {
+    "trait_0": {
+      "en": "Example trait.",
+      "zh": "示例特征．"
+    },
+    "trait_1": {
+      "en": "Example trait.",
+      "zh": "示例特征．"
+    },
+    "trait_2": {
+      "en": "Example trait.",
+      "zh": "示例特征．"
+    }
+  },
+  "subtasks": [
+    { "traits": { "trait_0": true, "trait_1": false }, "full-score": 0.5 },
+    { "traits": {}, "full-score": 0.5 }
+  ]
+}
