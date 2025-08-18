@@ -10,6 +10,8 @@
       memoryLimit,
       testCases,
       subtasks,
+      fullScore,
+      solutions,
       ...
     }:
     {
@@ -24,20 +26,77 @@
       generatedJsonName = "hull-typst-json-${name}.json";
       generatedJson = builtins.toFile generatedJsonName (
         builtins.toJSON {
-          name = displayName;
+          inherit name traits;
+          display-name = displayName;
           tick-limit = tickLimit;
           memory-limit = memoryLimit;
+          full-score = fullScore;
+          test-cases = pkgs.lib.mapAttrs (
+            _:
+            {
+              generator,
+              arguments,
+              tickLimit,
+              memoryLimit,
+              groups,
+              inputValidation,
+              ...
+            }:
+            {
+              inherit generator arguments groups;
+              tick-limit = tickLimit;
+              memory-limit = memoryLimit;
+              actual-traits = inputValidation.traits;
+            }
+          ) testCases;
           samples = pkgs.lib.mapAttrsToList (
             _: { data, ... }: pkgs.lib.mapAttrs (_: file: builtins.readFile file) data
           ) (pkgs.lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
-          traits = pkgs.lib.mapAttrs (_: { description, ... }: description) traits;
           subtasks = map (
-            { traits, fullScore, ... }:
+            {
+              traits,
+              fullScore,
+              testCases,
+              ...
+            }:
             {
               inherit traits;
               full-score = fullScore;
+              test-cases = map ({ name, ... }: name) testCases;
             }
           ) subtasks;
+          solutions = pkgs.lib.mapAttrs (
+            solName:
+            {
+              mainCorrectSolution,
+              testCaseResults,
+              subtaskResults,
+              ...
+            }:
+            {
+              main-correct-solution = mainCorrectSolution;
+              test-case-results = pkgs.lib.mapAttrs (
+                _:
+                { score, status, ... }:
+                {
+                  inherit score status;
+                }
+              ) testCaseResults;
+              subtask-results = map (
+                {
+                  rawScore,
+                  scaledScore,
+                  statuses,
+                  ...
+                }:
+                {
+                  inherit statuses;
+                  raw-score = rawScore;
+                  scaled-score = scaledScore;
+                }
+              ) subtaskResults;
+            }
+          ) solutions;
         }
       );
       inputList = pkgs.lib.mapAttrsToList (

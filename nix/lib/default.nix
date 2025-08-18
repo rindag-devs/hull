@@ -8,6 +8,7 @@ let
   problemModule = ./problemModule;
 
   hull = {
+    overview = import ./overview { inherit hull pkgs; };
     compile = import ./compile.nix { inherit hull pkgs hullPkgs; };
     docs = import ./docs.nix { inherit hull pkgs; };
     document = import ./document.nix { inherit pkgs typixLib; };
