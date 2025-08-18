@@ -35,7 +35,7 @@
   let TiB = GiB * 1024
 
   if n <= KiB {
-    $#n$ + " Bytes"
+    $#n$ + " 字节"
   } else if n <= MiB {
     $#format-size(n / KiB)$ + " KiB"
   } else if n <= GiB {

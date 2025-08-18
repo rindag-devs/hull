@@ -1,0 +1,257 @@
+{
+  "display-name": {
+    "en": "example problem",
+    "zh": "示例题目"
+  },
+  "full-score": 100.0,
+  "memory-limit": 536870912,
+  "name": "example-problem",
+  "samples": [
+    {
+      "input": "4 4 5 1 4\n1 2 1 2 2\n1 3 4 5 1\n2 4 2 3 1\n3 4 3 5 2\n",
+      "output": "5\n"
+    },
+    {
+      "input": "10 19 5 6 1\n2 1 1 3 592\n6 8 3 5 488\n10 9 4 4 548\n10 4 1 4 442\n6 5 1 3 422\n9 7 1 4 529\n5 8 1 1 559\n5 9 1 5 560\n5 8 2 3 434\n5 9 3 3 592\n4 7 2 2 594\n7 9 5 5 595\n4 1 4 4 501\n3 9 1 2 410\n10 6 2 4 509\n6 10 4 5 455\n2 4 2 5 444\n4 3 4 5 541\n8 7 1 1 463\n",
+      "output": "2295\n"
+    }
+  ],
+  "solutions": {
+    "ac-dag-only": {
+      "main-correct-solution": false,
+      "subtask-results": [
+        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 20.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 15.0, "statuses": ["accepted"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["accepted", "time_limit_exceeded"]}
+      ],
+      "test-case-results": {
+        "sample-1": {"score": 1.0, "status": "accepted"},
+        "sample-2": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-1": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-2": {"score": 1.0, "status": "accepted"},
+        "subtask2-unique-path-1": {"score": 1.0, "status": "accepted"},
+        "subtask3-dag-multi-path-1": {"score": 1.0, "status": "accepted"},
+        "subtask4-large-dag-1": {"score": 1.0, "status": "accepted"},
+        "subtask4-large-dag-2": {"score": 1.0, "status": "accepted"},
+        "subtask5-cycle-1": {"score": 0.0, "status": "time_limit_exceeded"},
+        "subtask5-cycle-max-k-1": {"score": 0.0, "status": "time_limit_exceeded"},
+        "subtask5-general-1": {"score": 1.0, "status": "accepted"}
+      }
+    },
+    "mle-large-state": {
+      "main-correct-solution": false,
+      "subtask-results": [
+        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["accepted", "memory_limit_exceeded"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["memory_limit_exceeded"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["memory_limit_exceeded"]}
+      ],
+      "test-case-results": {
+        "sample-1": {"score": 1.0, "status": "accepted"},
+        "sample-2": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-1": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-2": {"score": 1.0, "status": "accepted"},
+        "subtask2-unique-path-1": {"score": 1.0, "status": "accepted"},
+        "subtask3-dag-multi-path-1": {"score": 0.0, "status": "memory_limit_exceeded"},
+        "subtask4-large-dag-1": {"score": 0.0, "status": "memory_limit_exceeded"},
+        "subtask4-large-dag-2": {"score": 0.0, "status": "memory_limit_exceeded"},
+        "subtask5-cycle-1": {"score": 0.0, "status": "memory_limit_exceeded"},
+        "subtask5-cycle-max-k-1": {"score": 0.0, "status": "memory_limit_exceeded"},
+        "subtask5-general-1": {"score": 0.0, "status": "memory_limit_exceeded"}
+      }
+    },
+    "re-null-pointer": {
+      "main-correct-solution": false,
+      "subtask-results": [
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["accepted", "runtime_error"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["runtime_error"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["runtime_error"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["runtime_error"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["runtime_error"]}
+      ],
+      "test-case-results": {
+        "sample-1": {"score": 1.0, "status": "accepted"},
+        "sample-2": {"score": 0.0, "status": "runtime_error"},
+        "subtask1-small-1": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-2": {"score": 0.0, "status": "runtime_error"},
+        "subtask2-unique-path-1": {"score": 0.0, "status": "runtime_error"},
+        "subtask3-dag-multi-path-1": {"score": 0.0, "status": "runtime_error"},
+        "subtask4-large-dag-1": {"score": 0.0, "status": "runtime_error"},
+        "subtask4-large-dag-2": {"score": 0.0, "status": "runtime_error"},
+        "subtask5-cycle-1": {"score": 0.0, "status": "runtime_error"},
+        "subtask5-cycle-max-k-1": {"score": 0.0, "status": "runtime_error"},
+        "subtask5-general-1": {"score": 0.0, "status": "runtime_error"}
+      }
+    },
+    "std": {
+      "main-correct-solution": true,
+      "subtask-results": [
+        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 20.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 15.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 50.0, "statuses": ["accepted"]}
+      ],
+      "test-case-results": {
+        "sample-1": {"score": 1.0, "status": "accepted"},
+        "sample-2": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-1": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-2": {"score": 1.0, "status": "accepted"},
+        "subtask2-unique-path-1": {"score": 1.0, "status": "accepted"},
+        "subtask3-dag-multi-path-1": {"score": 1.0, "status": "accepted"},
+        "subtask4-large-dag-1": {"score": 1.0, "status": "accepted"},
+        "subtask4-large-dag-2": {"score": 1.0, "status": "accepted"},
+        "subtask5-cycle-1": {"score": 1.0, "status": "accepted"},
+        "subtask5-cycle-max-k-1": {"score": 1.0, "status": "accepted"},
+        "subtask5-general-1": {"score": 1.0, "status": "accepted"}
+      }
+    },
+    "tle-bruteforce-dfs": {
+      "main-correct-solution": false,
+      "subtask-results": [
+        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["time_limit_exceeded"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["time_limit_exceeded"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["time_limit_exceeded"]}
+      ],
+      "test-case-results": {
+        "sample-1": {"score": 1.0, "status": "accepted"},
+        "sample-2": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-1": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-2": {"score": 1.0, "status": "accepted"},
+        "subtask2-unique-path-1": {"score": 1.0, "status": "accepted"},
+        "subtask3-dag-multi-path-1": {"score": 0.0, "status": "time_limit_exceeded"},
+        "subtask4-large-dag-1": {"score": 0.0, "status": "time_limit_exceeded"},
+        "subtask4-large-dag-2": {"score": 0.0, "status": "time_limit_exceeded"},
+        "subtask5-cycle-1": {"score": 0.0, "status": "time_limit_exceeded"},
+        "subtask5-cycle-max-k-1": {"score": 0.0, "status": "time_limit_exceeded"},
+        "subtask5-general-1": {"score": 0.0, "status": "time_limit_exceeded"}
+      }
+    },
+    "wa-dijkstra": {
+      "main-correct-solution": false,
+      "subtask-results": [
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["accepted", "wrong_answer"]},
+        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["wrong_answer"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["wrong_answer"]},
+        {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["wrong_answer"]}
+      ],
+      "test-case-results": {
+        "sample-1": {"score": 0.0, "status": "wrong_answer"},
+        "sample-2": {"score": 0.0, "status": "wrong_answer"},
+        "subtask1-small-1": {"score": 1.0, "status": "accepted"},
+        "subtask1-small-2": {"score": 0.0, "status": "wrong_answer"},
+        "subtask2-unique-path-1": {"score": 1.0, "status": "accepted"},
+        "subtask3-dag-multi-path-1": {"score": 0.0, "status": "wrong_answer"},
+        "subtask4-large-dag-1": {"score": 0.0, "status": "wrong_answer"},
+        "subtask4-large-dag-2": {"score": 0.0, "status": "wrong_answer"},
+        "subtask5-cycle-1": {"score": 0.0, "status": "wrong_answer"},
+        "subtask5-cycle-max-k-1": {"score": 0.0, "status": "wrong_answer"},
+        "subtask5-general-1": {"score": 0.0, "status": "wrong_answer"}
+      }
+    }
+  },
+  "subtasks": [
+    {
+      "full-score": 10.0,
+      "test-cases": ["sample-1", "subtask1-small-1", "subtask1-small-2"],
+      "traits": {"n_le_10": true, "m_le_30": true, "k_le_5": true}
+    },
+    {
+      "full-score": 5.0,
+      "test-cases": ["subtask2-unique-path-1"],
+      "traits": {"n_le_30": true, "m_le_30": true, "k_le_12": true, "is_dag": true, "unique_path": true}
+    },
+    {
+      "full-score": 20.0,
+      "test-cases": ["sample-2", "subtask3-dag-multi-path-1"],
+      "traits": {"n_le_30": true, "m_le_500": true, "k_le_12": true, "is_dag": true}
+    },
+    {
+      "full-score": 15.0,
+      "test-cases": ["subtask4-large-dag-1", "subtask4-large-dag-2"],
+      "traits": {"n_le_200": true, "m_le_3e3": true, "k_le_25": true, "is_dag": true}
+    },
+    {
+      "full-score": 50.0,
+      "test-cases": ["subtask5-cycle-1", "subtask5-cycle-max-k-1", "subtask5-general-1"],
+      "traits": {"n_le_200": true, "m_le_3e3": true, "k_le_25": true}
+    }
+  ],
+  "test-cases": {
+    "sample-1": {
+      "actual-traits": {"is_dag": true, "k_le_5": true, "m_le_30": true, "n_le_10": true, "unique_path": false},
+      "arguments": null, "generator": null, "groups": ["sample", "pretest"],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "sample-2": {
+      "actual-traits": {"is_dag": true, "k_le_5": true, "m_le_30": true, "n_le_30": true, "unique_path": false},
+      "arguments": null, "generator": null, "groups": ["sample", "pretest"],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask1-small-1": {
+      "actual-traits": {"is_dag": true, "k_le_5": true, "m_le_30": true, "n_le_10": true, "unique_path": true},
+      "arguments": ["--n=8", "--m=15", "--k=5", "--dag"], "generator": "gen-graph", "groups": ["pretest"],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask1-small-2": {
+      "actual-traits": {"is_dag": true, "k_le_5": true, "m_le_30": true, "n_le_10": true, "unique_path": false},
+      "arguments": ["--n=10", "--m=30", "--k=5", "--dag"], "generator": "gen-graph", "groups": [],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask2-unique-path-1": {
+      "actual-traits": {"is_dag": true, "k_le_12": true, "m_le_30": true, "n_le_30": true, "unique_path": true},
+      "arguments": ["--n=30", "--m=30", "--k=12", "--dag", "--unique-path"], "generator": "gen-graph", "groups": ["pretest"],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask3-dag-multi-path-1": {
+      "actual-traits": {"is_dag": true, "k_le_12": true, "m_le_500": true, "n_le_30": true, "unique_path": false},
+      "arguments": ["--n=30", "--m=500", "--k=12", "--dag"], "generator": "gen-graph", "groups": [],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask4-large-dag-1": {
+      "actual-traits": {"is_dag": true, "k_le_25": true, "m_le_3e3": true, "n_le_200": true, "unique_path": false},
+      "arguments": ["--n=200", "--m=1500", "--k=20", "--dag"], "generator": "gen-graph", "groups": [],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask4-large-dag-2": {
+      "actual-traits": {"is_dag": true, "k_le_25": true, "m_le_3e3": true, "n_le_200": true, "unique_path": false},
+      "arguments": ["--n=200", "--m=3000", "--k=25", "--dag"], "generator": "gen-graph", "groups": [],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask5-cycle-1": {
+      "actual-traits": {"is_dag": false, "k_le_25": true, "m_le_3e3": true, "n_le_200": true, "unique_path": false},
+      "arguments": ["--n=100", "--m=500", "--k=20", "--allow-cycles"], "generator": "gen-graph", "groups": ["pretest"],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask5-cycle-max-k-1": {
+      "actual-traits": {"is_dag": false, "k_le_25": true, "m_le_3e3": true, "n_le_200": true, "unique_path": false},
+      "arguments": ["--n=50", "--m=200", "--k=25", "--allow-cycles"], "generator": "gen-graph", "groups": [],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    },
+    "subtask5-general-1": {
+      "actual-traits": {"is_dag": true, "k_le_25": true, "m_le_3e3": true, "n_le_200": true, "unique_path": false},
+      "arguments": ["--n=200", "--m=3000", "--k=25"], "generator": "gen-graph", "groups": [],
+      "memory-limit": 536870912, "tick-limit": 2000000000
+    }
+  },
+  "tick-limit": 2000000000,
+  "traits": {
+    "is_dag": {"description": {"en": "The graph is a Directed Acyclic Graph (DAG)."}},
+    "k_le_12": {"description": {"en": "$K <= 12$"}},
+    "k_le_25": {"description": {"en": "$K <= 25$"}},
+    "k_le_5": {"description": {"en": "$K <= 5$"}},
+    "m_le_30": {"description": {"en": "$M <= 30$"}},
+    "m_le_3e3": {"description": {"en": "$M <= 3 times 10^3$"}},
+    "m_le_500": {"description": {"en": "$M <= 500$"}},
+    "n_le_10": {"description": {"en": "$N <= 10$"}},
+    "n_le_200": {"description": {"en": "$N <= 200$"}},
+    "n_le_30": {"description": {"en": "$N <= 30$"}},
+    "unique_path": {"description": {"en": "There is a unique path from S to T."}}
+  }
+}

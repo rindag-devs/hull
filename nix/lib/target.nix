@@ -16,7 +16,7 @@
         checker,
         documents,
         ...
-      }:
+      }@problem:
       let
         dataCommand = pkgs.lib.concatMapStringsSep "\n" (tc: ''
           mkdir -p $out/data/${tc.name}
@@ -113,6 +113,7 @@
         documentsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (documentName: document: ''
           cp ${document.path} $out/documents/${documentName}
         '') documents;
+        overviewCommand = "cp ${hull.overview.mkOverview problem} $out/overview.pdf";
       in
       pkgs.runCommandLocal "hull-target-output-${name}-default" { } ''
         ${dataCommand}
@@ -129,6 +130,8 @@
 
         mkdir -p $out/documents
         ${documentsCommand}
+
+        ${overviewCommand}
       '';
   };
 }

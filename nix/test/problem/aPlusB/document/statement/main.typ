@@ -29,7 +29,7 @@
 #import "problem/" + language + ".typ" as problem
 #import "translation/" + language + ".typ" as translation
 
-= #titlecase(hull.name.at(language))
+= #titlecase(hull.display-name.at(language))
 
 #grid(
   columns: (auto, auto),
@@ -64,7 +64,7 @@
 == #titlecase(translation.traits)
 
 #for trait in hull.traits [
-  - #strong(trait.at(0)): #eval(trait.at(1).at(language), mode: "markup")
+  - #strong(trait.at(0)): #eval(trait.at(1).description.at(language), mode: "markup")
 ]
 
 == #titlecase(translation.subtasks)
