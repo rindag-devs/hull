@@ -9,6 +9,12 @@
   imports = [ ./assertions.nix ];
 
   options = {
+    problemAttrs = lib.mkOption {
+      type = lib.types.raw;
+      readOnly = true;
+      description = "User problem configuration passed in when evalProblem.";
+    };
+
     name = lib.mkOption {
       type = hull.types.nameStr;
       description = "The unique name of the problem, used in derivations and outputs.";
@@ -124,6 +130,13 @@
       type = lib.types.attrsOf hull.types.target;
       default = { };
       description = "An attribute set of build targets for the problem, defining final package structures.";
+    };
+
+    fullScore = lib.mkOption {
+      type = lib.types.numbers.nonnegative;
+      description = "Full score of this problem";
+      default = builtins.foldl' builtins.add 0.0 (map ({ fullScore, ... }: fullScore) config.subtasks);
+      defaultText = "The sum of the full score of all subtasks.";
     };
 
     targetOutputs = lib.mkOption {

@@ -7,10 +7,10 @@ edition = "2024"
 anyhow = "1"
 cap-std = "3"
 clap = { version = "4", features = ["derive"] }
+comfy-table = "7"
 rand = "0.8"
 serde = "1"
 serde_json = "1"
-tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wasi-common = "35"

@@ -119,7 +119,7 @@ let
     { config, ... }:
     {
       src = lib.mkOption {
-        type = lib.types.pathInStore;
+        type = lib.types.path;
         description = "Path to the source file of the program.";
       };
       language = lib.mkOption {
