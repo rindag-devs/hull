@@ -57,27 +57,16 @@ pub fn run(build_opts: &BuildOpts) -> Result<()> {
   info!("Building target: {}", flake_attr);
 
   let nix_build = Command::new("nix")
-    .args(
-      &[
-        &[
-          "build",
-          &flake_attr,
-          "--out-link",
-          &build_opts.out_link,
-          "--log-format",
-          "internal-json",
-          "-v",
-          "--",
-        ],
-        build_opts
-          .extra_args
-          .iter()
-          .map(AsRef::as_ref)
-          .collect::<Vec<_>>()
-          .as_slice(),
-      ]
-      .concat(),
-    )
+    .args([
+      "build",
+      &flake_attr,
+      "--out-link",
+      &build_opts.out_link,
+      "--log-format",
+      "internal-json",
+      "-v",
+    ])
+    .args(&build_opts.extra_args)
     .stdin(Stdio::null())
     .stdout(Stdio::null())
     .stderr(Stdio::piped())

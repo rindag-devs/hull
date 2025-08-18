@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand, command};
 
-use crate::cmd::{build::BuildOpts, compile_cwasm::CompileCwasmOpts, run_wasm::RunWasmOpts};
+use crate::cmd::{
+  build::BuildOpts, compile_cwasm::CompileCwasmOpts, judge::JudgeOpts, run_wasm::RunWasmOpts,
+};
 
 /// Competitive programming proposition automation tool
 #[derive(Parser)]
@@ -20,5 +22,6 @@ pub struct Opts {
 pub enum Command {
   Build(BuildOpts),
   CompileCwasm(CompileCwasmOpts),
+  Judge(JudgeOpts),
   RunWasm(RunWasmOpts),
 }

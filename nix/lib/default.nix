@@ -36,6 +36,12 @@ let
           modules = [
             problemModule
             problemAttrs
+            (
+              { ... }:
+              {
+                config.problemAttrs = problemAttrs;
+              }
+            )
           ];
 
           specialArgs = { inherit pkgs hull; };
@@ -46,6 +52,50 @@ let
             problem;
       in
       problemAssertWarn;
+
+    # Judges a single source file against a problem definition.
+    # This function orchestrates the entire judging process within Nix
+    # and produces a derivation containing the final JSON report.
+    judgeSingleFile =
+      problemAttrs: srcPath:
+      let
+        # Define a module that injects the user's source file as a temporary solution.
+        adhocSolutionModule =
+          { config, ... }:
+          {
+            solutions."ad-hoc-judge" = {
+              src = srcPath;
+              # We don't need predictions for an ad-hoc judge.
+              subtaskPredictions = { };
+            };
+          };
+
+        # Evaluate the problem with the ad-hoc solution injected.
+        # This triggers the automatic calculation of testCaseResults, etc.
+        evaluatedProblem = pkgs.lib.evalModules {
+          modules = [
+            problemModule
+            problemAttrs
+            adhocSolutionModule
+          ];
+          specialArgs = { inherit pkgs hull; };
+        };
+
+        # Extract the results for our temporary solution.
+        judgedSolution = evaluatedProblem.config.solutions."ad-hoc-judge";
+
+        # Sanitize the results to create a clean JSON report.
+        reportData = {
+          score = judgedSolution.score;
+          fullScore = evaluatedProblem.config.fullScore;
+          subtaskResults = map (
+            { fst, snd }: builtins.removeAttrs snd [ "testCases" ] // { inherit (fst) fullScore; }
+          ) (pkgs.lib.zipLists evaluatedProblem.config.subtasks judgedSolution.subtaskResults);
+          testCaseResults = judgedSolution.testCaseResults;
+        };
+      in
+      # Create a derivation that contains the final report.
+      pkgs.writeText "judge-report.json" (builtins.toJSON reportData);
   };
 in
 hull
