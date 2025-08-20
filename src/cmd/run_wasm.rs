@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use clap::Parser;
 use wasi_common::{
   WasiFile,
@@ -63,28 +63,65 @@ pub struct RunWasmOpts {
 }
 
 pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
-  let stdin: Box<dyn WasiFile> = if let Some(path) = &run_wasm_opts.stdin_path {
-    Box::new(wasi_common::sync::file::File::from_cap_std(
-      cap_std::fs::File::from_std(std::fs::File::open(path)?),
-    ))
+  let (stdin_res, stdout_res, stderr_res) = std::thread::scope(|s| {
+    let stdin_handle = s.spawn(|| {
+      if let Some(path) = &run_wasm_opts.stdin_path {
+        let file = wasi_common::sync::file::File::from_cap_std(cap_std::fs::File::from_std(
+          std::fs::File::open(path)?,
+        ));
+        Ok(Some(Box::new(file) as Box<dyn WasiFile>))
+      } else {
+        Ok(None)
+      }
+    });
+
+    let stdout_handle = s.spawn(|| {
+      if let Some(path) = &run_wasm_opts.stdout_path {
+        let file = wasi_common::sync::file::File::from_cap_std(cap_std::fs::File::from_std(
+          std::fs::File::create(path)?,
+        ));
+        Ok(Some(Box::new(file) as Box<dyn WasiFile>))
+      } else {
+        Ok(None)
+      }
+    });
+
+    let stderr_handle = s.spawn(|| {
+      if let Some(path) = &run_wasm_opts.stderr_path {
+        let file = wasi_common::sync::file::File::from_cap_std(cap_std::fs::File::from_std(
+          std::fs::File::create(path)?,
+        ));
+        Ok(Some(Box::new(file) as Box<dyn WasiFile>))
+      } else {
+        Ok(None)
+      }
+    });
+
+    (
+      stdin_handle.join().unwrap(),
+      stdout_handle.join().unwrap(),
+      stderr_handle.join().unwrap(),
+    )
+  });
+
+  let stdin: Box<dyn WasiFile> = if let Some(file) = stdin_res? {
+    file
   } else if run_wasm_opts.inherit_stdin {
     Box::new(ReadPipe::new(std::io::stdin()))
   } else {
     Box::new(ReadPipe::new(std::io::empty()))
   };
-  let stdout: Box<dyn WasiFile> = if let Some(path) = &run_wasm_opts.stdout_path {
-    Box::new(wasi_common::sync::file::File::from_cap_std(
-      cap_std::fs::File::from_std(std::fs::File::create(path)?),
-    ))
+
+  let stdout: Box<dyn WasiFile> = if let Some(file) = stdout_res? {
+    file
   } else if run_wasm_opts.inherit_stdout {
     Box::new(WritePipe::new(std::io::stdout()))
   } else {
     Box::new(WritePipe::new(std::io::sink()))
   };
-  let stderr: Box<dyn WasiFile> = if let Some(path) = &run_wasm_opts.stderr_path {
-    Box::new(wasi_common::sync::file::File::from_cap_std(
-      cap_std::fs::File::from_std(std::fs::File::create(path)?),
-    ))
+
+  let stderr: Box<dyn WasiFile> = if let Some(file) = stderr_res? {
+    file
   } else if run_wasm_opts.inherit_stderr {
     Box::new(WritePipe::new(std::io::stderr()))
   } else {

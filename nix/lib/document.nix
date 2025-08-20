@@ -23,8 +23,8 @@
       typstPackages ? [ ],
     }:
     let
-      generatedJsonName = "hull-typst-json-${name}.json";
-      generatedJson = builtins.toFile generatedJsonName (
+      generatedJSONName = "hull-typst-json-${name}.json";
+      generatedJSON = builtins.toFile generatedJSONName (
         builtins.toJSON {
           inherit name traits;
           display-name = displayName;
@@ -108,12 +108,12 @@
       typstSource = entry;
       typstOpts = {
         format = "pdf";
-        input = inputList ++ [ "hull-generated-json-path=${generatedJsonName}" ];
+        input = inputList ++ [ "hull-generated-json-path=${generatedJSONName}" ];
       };
       virtualPaths = virtualPaths ++ [
         {
-          dest = generatedJsonName;
-          src = generatedJson;
+          dest = generatedJSONName;
+          src = generatedJSON;
         }
       ];
       unstable_typstPackages = typstPackages;

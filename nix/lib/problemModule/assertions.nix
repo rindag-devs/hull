@@ -38,7 +38,9 @@
       let
         getTestCaseName =
           tc:
-          "Test Case `${toString tc.name}` (generator: ${tc.generator}, args: ${builtins.toJSON tc.arguments})";
+          "Test Case `${toString tc.name}` (generator: ${
+            if tc.generator == null then "(manual)" else tc.generator
+          }, args: ${builtins.toJSON tc.arguments})";
 
         getSubtaskName = index: st: "Subtask #${toString index} (traits: ${builtins.toJSON st.traits})";
 

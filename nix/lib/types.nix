@@ -32,11 +32,11 @@ let
         type = lib.types.ints.unsigned;
         description = "The peak memory usage in bytes.";
       };
-      exit_code = lib.mkOption {
+      exitCode = lib.mkOption {
         type = lib.types.ints.s32;
         description = "The exit code of the program.";
       };
-      error_message = lib.mkOption {
+      errorMessage = lib.mkOption {
         type = lib.types.str;
         description = "Any error message produced by the runtime.";
       };
@@ -74,12 +74,12 @@ let
         type = lib.types.str;
         description = "A message from the checker explaining the result.";
       };
-      reader_trace_stacks = lib.mkOption {
+      readerTraceStacks = lib.mkOption {
         type = lib.types.listOf lib.types.attrs;
         default = [ ];
         description = "Internal trace information from the checker's input readers.";
       };
-      evaluator_trace_stacks = lib.mkOption {
+      evaluatorTraceStacks = lib.mkOption {
         type = lib.types.listOf lib.types.attrs;
         default = [ ];
         description = "Internal trace information from the checker's evaluator.";
@@ -133,20 +133,29 @@ let
         type = lib.types.package;
         readOnly = true;
         description = "The compiled WASM artifact of the program.";
-        default = hull.compile.wasm problem { inherit (config) src language; };
-        defaultText = lib.literalExpression "hull.compile.wasm problem { inherit (config) src language; }";
+        default =
+          let
+            lang = problem.languages.${config.language};
+          in
+          lang.compile.executable {
+            name = "${problem.name}-program-${builtins.baseNameOf config.src}";
+            inherit (config) src;
+            includes = problem.includes;
+            extraObjects = [ ];
+          };
+        defaultText = lib.literalExpression ''(problem.languages.''${config.language}).compile.executable { ... }'';
       };
       cwasm = lib.mkOption {
         type = lib.types.package;
         readOnly = true;
         description = "The pre-compiled (AOT) CWASM artifact of the program.";
-        default = hull.compile.cwasm problem {
-          srcBaseName = builtins.baseNameOf config.src;
+        default = hull.compile.cwasm {
+          name = "${problem.name}-program-${builtins.baseNameOf config.src}";
           wasm = config.wasm;
         };
         defaultText = lib.literalExpression ''
-          hull.compile.cwasm problem {
-            srcBaseName = builtins.baseNameOf config.src;
+          hull.compile.cwasm {
+            name = ...;
             wasm = config.wasm;
           }'';
       };
@@ -175,6 +184,7 @@ let
     attrs
     nullOr
     numbers
+    float
     strMatching
     ;
 in
@@ -194,8 +204,19 @@ in
   language = submodule {
     options = {
       compile = lib.mkOption {
-        type = functionTo pathInStore;
-        description = "The function used to compile a source file of this language.";
+        type = submodule {
+          options = {
+            object = lib.mkOption {
+              type = functionTo pathInStore;
+              description = "The function used to compile a source file into a linkable object file.";
+            };
+            executable = lib.mkOption {
+              type = functionTo pathInStore;
+              description = "The function used to link a source file and object files into an executable.";
+            };
+          };
+        };
+        description = "Compile functions.";
       };
     };
   };
@@ -209,6 +230,7 @@ in
           en = "$a$ is a positive integer.";
           zh = "$a$ 为正整数";
         };
+        default = { };
       };
     };
   };
@@ -360,7 +382,7 @@ in
             description = "An attribute set of traits that a test case must have to belong to this subtask.";
           };
           fullScore = lib.mkOption {
-            type = numbers.nonnegative;
+            type = float;
             description = "The full score of this subtask.";
           };
           testCases = lib.mkOption {
@@ -383,14 +405,18 @@ in
   solution =
     problem:
     submodule (
-      { config, name, ... }@args:
+      { config, name, ... }:
       {
-        options = programOptions problem args // {
+        options = {
           name = lib.mkOption {
             type = nameStr;
             readOnly = true;
             default = name;
             description = "The name of the solution, derived from its attribute name in the `solutions` set.";
+          };
+          src = lib.mkOption {
+            type = lib.types.path;
+            description = "Path to the source file or directory of the solution.";
           };
           mainCorrectSolution = lib.mkOption {
             type = bool;
@@ -413,29 +439,8 @@ in
             type = attrsOf testCaseResultSubmodule;
             readOnly = true;
             description = "The collected results of running and checking this solution against all test cases.";
-            default = builtins.listToAttrs (
-              map (tc: {
-                name = tc.name;
-                value =
-                  let
-                    run = hull.judge.run problem tc config;
-                    check = if run.report.status == "accepted" then hull.judge.check problem tc config else null;
-                    status = if check != null then check.status else run.report.status;
-                    score = if check != null then check.score else 0.0;
-                    message = if check != null then check.message else run.report.error_message;
-                  in
-                  {
-                    inherit
-                      run
-                      check
-                      status
-                      score
-                      message
-                      ;
-                  };
-              }) (builtins.attrValues problem.testCases)
-            );
-            defaultText = "Computed by running and checking the solution against every test case in `problem.testCases`.";
+            default = lib.mapAttrs (tcName: tc: problem.judger.judge tc config) problem.testCases;
+            defaultText = "Computed by the problem's configured judger for every test case.";
           };
           subtaskResults = lib.mkOption {
             type = listOf (submodule {
@@ -453,7 +458,7 @@ in
                   description = "The lowest score of all test cases in this subtask, with a maximum score of 1.";
                 };
                 scaledScore = lib.mkOption {
-                  type = numbers.nonnegative;
+                  type = float;
                   description =
                     "The lowest score of all test cases in this subtask, "
                     + "with a maximum score of `fullScore` defined in subtask options.";
@@ -489,14 +494,14 @@ in
             defaultText = "Computed by running and checking the solution against every test case in `problem.subtask.{name}.testCases";
           };
           score = lib.mkOption {
-            type = numbers.nonnegative;
+            type = float;
             readOnly = true;
             description = "This final score of the entire problem for this solution.";
-            default = builtins.foldl' builtins.add 0 (
+            default = builtins.foldl' builtins.add 0.0 (
               map ({ scaledScore, ... }: scaledScore) config.subtaskResults
             );
             defaultText = lib.literalExpression ''
-              builtins.foldl' builtins.add 0 (
+              builtins.foldl' builtins.add 0.0 (
                 lib.mapAttrs (stName: st: st.score) config.subtaskResults
               )'';
           };

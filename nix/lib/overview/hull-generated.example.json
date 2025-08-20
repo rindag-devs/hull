@@ -3,8 +3,9 @@
     "en": "example problem",
     "zh": "示例题目"
   },
-  "full-score": 100.0,
+  "full-score": 1.0,
   "memory-limit": 536870912,
+  "tick-limit": 20000000000,
   "name": "example-problem",
   "samples": [
     {
@@ -20,10 +21,10 @@
     "ac-dag-only": {
       "main-correct-solution": false,
       "subtask-results": [
-        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 20.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 15.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.10, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.05, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.20, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.15, "statuses": ["accepted"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["accepted", "time_limit_exceeded"]}
       ],
       "test-case-results": {
@@ -43,8 +44,8 @@
     "mle-large-state": {
       "main-correct-solution": false,
       "subtask-results": [
-        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.10, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.05, "statuses": ["accepted"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["accepted", "memory_limit_exceeded"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["memory_limit_exceeded"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["memory_limit_exceeded"]}
@@ -89,11 +90,11 @@
     "std": {
       "main-correct-solution": true,
       "subtask-results": [
-        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 20.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 15.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 50.0, "statuses": ["accepted"]}
+        {"raw-score": 1.0, "scaled-score": 0.10, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.05, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.20, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.15, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.50, "statuses": ["accepted"]}
       ],
       "test-case-results": {
         "sample-1": {"score": 1.0, "status": "accepted"},
@@ -112,8 +113,8 @@
     "tle-bruteforce-dfs": {
       "main-correct-solution": false,
       "subtask-results": [
-        {"raw-score": 1.0, "scaled-score": 10.0, "statuses": ["accepted"]},
-        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.10, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.05, "statuses": ["accepted"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["time_limit_exceeded"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["time_limit_exceeded"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["time_limit_exceeded"]}
@@ -136,7 +137,7 @@
       "main-correct-solution": false,
       "subtask-results": [
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["accepted", "wrong_answer"]},
-        {"raw-score": 1.0, "scaled-score": 5.0, "statuses": ["accepted"]},
+        {"raw-score": 1.0, "scaled-score": 0.05, "statuses": ["accepted"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["wrong_answer"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["wrong_answer"]},
         {"raw-score": 0.0, "scaled-score": 0.0, "statuses": ["wrong_answer"]}
@@ -158,27 +159,27 @@
   },
   "subtasks": [
     {
-      "full-score": 10.0,
+      "full-score": 0.10,
       "test-cases": ["sample-1", "subtask1-small-1", "subtask1-small-2"],
       "traits": {"n_le_10": true, "m_le_30": true, "k_le_5": true}
     },
     {
-      "full-score": 5.0,
+      "full-score": 0.05,
       "test-cases": ["subtask2-unique-path-1"],
       "traits": {"n_le_30": true, "m_le_30": true, "k_le_12": true, "is_dag": true, "unique_path": true}
     },
     {
-      "full-score": 20.0,
+      "full-score": 0.20,
       "test-cases": ["sample-2", "subtask3-dag-multi-path-1"],
       "traits": {"n_le_30": true, "m_le_500": true, "k_le_12": true, "is_dag": true}
     },
     {
-      "full-score": 15.0,
+      "full-score": 0.15,
       "test-cases": ["subtask4-large-dag-1", "subtask4-large-dag-2"],
       "traits": {"n_le_200": true, "m_le_3e3": true, "k_le_25": true, "is_dag": true}
     },
     {
-      "full-score": 50.0,
+      "full-score": 0.50,
       "test-cases": ["subtask5-cycle-1", "subtask5-cycle-max-k-1", "subtask5-general-1"],
       "traits": {"n_le_200": true, "m_le_3e3": true, "k_le_25": true}
     }
@@ -240,7 +241,6 @@
       "memory-limit": 536870912, "tick-limit": 2000000000
     }
   },
-  "tick-limit": 2000000000,
   "traits": {
     "is_dag": {"description": {"en": "The graph is a Directed Acyclic Graph (DAG)."}},
     "k_le_12": {"description": {"en": "$K <= 12$"}},

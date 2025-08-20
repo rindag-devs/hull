@@ -78,7 +78,7 @@ struct ApplicationState {
   wasi_ctx: WasiCtx,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RunStatus {
   InternalError,
@@ -88,7 +88,8 @@ pub enum RunStatus {
   MemoryLimitExceeded,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RunResult {
   pub status: RunStatus,
   pub tick: u64,
@@ -168,10 +169,7 @@ pub fn run(
     Err(err) => return RunResult::new_internal_error(err),
   };
 
-  match execute_and_get_results(store, start_func, tick_limit) {
-    Ok(x) => x,
-    Err(err) => return RunResult::new_runtime_error(err),
-  }
+  execute_and_get_results(store, start_func, tick_limit)
 }
 
 fn create_engine(memory_limit: u64) -> Result<Engine> {
@@ -266,46 +264,59 @@ fn execute_and_get_results(
   mut store: Store<ApplicationState>,
   start_func: wasmtime::TypedFunc<(), ()>,
   tick_limit: u64,
-) -> Result<RunResult> {
+) -> RunResult {
   let main_call_result = start_func.call(&mut store, ());
 
-  let tick = tick_limit - store.get_fuel()?;
+  let tick = tick_limit
+    - match store.get_fuel() {
+      Ok(x) => x,
+      Err(err) => return RunResult::new_runtime_error(err.context("Unable to get the fuel")),
+    };
 
   let memory_limiter = store.data().memory_limiter.clone();
   let memory = memory_limiter.memory_max_used_bytes.try_into().unwrap();
   let mut exit_code: i32 = -1;
+  let mut error_message = String::new();
 
   let status = if main_call_result.is_ok() {
     exit_code = 0;
     RunStatus::Accepted
   } else if memory_limiter.memory_limit_exceeded {
+    error_message = format!("Memory limit exceeded");
     RunStatus::MemoryLimitExceeded
   } else {
     // Check if the error is due to out of fuel.
     let err = main_call_result.unwrap_err();
     if let Some(trap) = err.downcast_ref::<Trap>() {
       if *trap == Trap::OutOfFuel {
+        error_message = format!("Tick limit exceeded");
         RunStatus::TimeLimitExceeded
       } else {
         // If it's another type of trap, return the error.
-        return Err(err);
+        error_message = format!("Trapped when calling main: {}", err.to_string());
+        RunStatus::RuntimeError
       }
     } else if let Some(exit) = err.downcast_ref::<I32Exit>() {
       exit_code = exit.0;
-      RunStatus::RuntimeError
+      if exit_code == 0 {
+        RunStatus::Accepted
+      } else {
+        error_message = format!("Nonzero exit code: {}", exit_code);
+        RunStatus::RuntimeError
+      }
     } else {
-      // If it's not a trap, return the error.
-      return Err(err);
+      error_message = format!("Error when calling main: {}", err.to_string());
+      RunStatus::RuntimeError
     }
   };
 
   drop(store); // Drop the store to ensure all resources are released before getting buffer contents.
 
-  Ok(RunResult {
+  RunResult {
     status,
     tick,
     memory,
     exit_code,
-    error_message: String::new(),
-  })
+    error_message,
+  }
 }

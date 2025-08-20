@@ -1,30 +1,13 @@
 {
   pkgs,
   hullPkgs,
-  hull,
 }:
 
 {
-  wasm =
-    {
-      name,
-      languages,
-      includes,
-      ...
-    }:
-    { src, language }:
-    languages.${language}.compile {
-      name = "hull-wasm-${name}-${builtins.baseNameOf src}";
-      inherit src includes;
-    };
-
+  # Compiles a WASM file to a native CWASM artifact for faster execution.
   cwasm =
-    {
-      name,
-      ...
-    }:
-    { srcBaseName, wasm }:
-    pkgs.runCommandLocal "hull-cwasm-${name}-${srcBaseName}"
+    { name, wasm }:
+    pkgs.runCommandLocal "hull-cwasm-${name}.cwasm"
       {
         nativeBuildInputs = [ hullPkgs.default ];
       }
