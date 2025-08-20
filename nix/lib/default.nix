@@ -2,6 +2,7 @@
   pkgs,
   hullPkgs,
   typixLib,
+  cplib,
 }:
 
 let
@@ -9,12 +10,14 @@ let
 
   hull = {
     overview = import ./overview { inherit hull pkgs; };
-    compile = import ./compile.nix { inherit hull pkgs hullPkgs; };
+    compile = import ./compile.nix { inherit pkgs hullPkgs; };
     docs = import ./docs.nix { inherit hull pkgs; };
     document = import ./document.nix { inherit pkgs typixLib; };
     generate = import ./generate.nix { inherit hull pkgs hullPkgs; };
-    judge = import ./judge.nix { inherit pkgs hullPkgs; };
-    judger = import ./judger.nix { inherit pkgs; };
+    judger = import ./judger.nix {
+      inherit pkgs hull hullPkgs;
+      lib = pkgs.lib;
+    };
     language = import ./language.nix { inherit pkgs hullPkgs; };
     target = import ./target.nix { inherit hull pkgs; };
     types = import ./types.nix {
@@ -45,7 +48,7 @@ let
             )
           ];
 
-          specialArgs = { inherit pkgs hull; };
+          specialArgs = { inherit pkgs hull cplib; };
         };
 
         problemAssertWarn =
@@ -64,11 +67,7 @@ let
         adhocSolutionModule =
           { config, ... }:
           {
-            solutions."ad-hoc-judge" = {
-              src = srcPath;
-              # We don't need predictions for an ad-hoc judge.
-              subtaskPredictions = { };
-            };
+            solutions."ad-hoc-judge".src = srcPath;
           };
 
         # Evaluate the problem with the ad-hoc solution injected.
@@ -79,7 +78,7 @@ let
             problemAttrs
             adhocSolutionModule
           ];
-          specialArgs = { inherit pkgs hull; };
+          specialArgs = { inherit pkgs hull cplib; };
         };
 
         # Extract the results for our temporary solution.

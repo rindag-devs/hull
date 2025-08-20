@@ -1,3 +1,0 @@
-[submodule "nix/test/problem/aPlusB/third_party/cplib"]
-	path = nix/test/problem/aPlusB/third_party/cplib
-	url = https://github.com/rindag-devs/cplib

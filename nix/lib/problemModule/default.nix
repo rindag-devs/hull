@@ -28,6 +28,7 @@
         en = "example problem";
         zh = "示例题目";
       };
+      default = { };
     };
 
     includes = lib.mkOption {
@@ -45,8 +46,8 @@
 
     judger = lib.mkOption {
       type = hull.types.judger;
-      default = hull.batchJudger { };
-      defaultText = lib.literalExpression "hull.batchJudger { }";
+      default = hull.judger.batchJudger config { };
+      defaultText = lib.literalExpression "hull.judger.batchJudger config { }";
       description = "The judger implementation to use for evaluating solutions.";
     };
 
@@ -92,7 +93,7 @@
 
     subtasks = lib.mkOption {
       type = lib.types.listOf (hull.types.subtask config);
-      default = [ ];
+      default = [ { fullScore = 1.0; } ];
       description = "A list of subtasks, where each subtask is defined by a set of required traits.";
     };
 

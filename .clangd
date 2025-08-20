@@ -4,3 +4,87 @@ CompileFlags:
 Diagnostics:
   UnusedIncludes: Strict
   MissingIncludes: Strict
+
+---
+If:
+  PathMatch: .*\.98\.cpp$
+CompileFlags:
+  Add: ["-xc++", "-std=c++98"]
+
+---
+If:
+  PathMatch: .*\.03\.cpp$
+CompileFlags:
+  Add: ["-xc++", "-std=c++03"]
+
+---
+If:
+  PathMatch: .*\.11\.cpp$
+CompileFlags:
+  Add: ["-xc++", "-std=c++11"]
+
+---
+If:
+  PathMatch: .*\.14\.cpp$
+CompileFlags:
+  Add: ["-xc++", "-std=c++14"]
+
+---
+If:
+  PathMatch: .*\.17\.cpp$
+CompileFlags:
+  Add: ["-xc++", "-std=c++17"]
+
+---
+If:
+  PathMatch: .*\.20\.cpp$
+CompileFlags:
+  Add: ["-xc++", "-std=c++20"]
+
+---
+If:
+  PathMatch: .*\.23\.cpp$
+CompileFlags:
+  Add: ["-xc++", "-std=c++23"]
+
+---
+If:
+  PathMatch: .*\.89\.c$
+CompileFlags:
+  Add: ["-xc", "-std=c89"]
+
+---
+If:
+  PathMatch: .*\.90\.c$
+CompileFlags:
+  Add: ["-xc", "-std=c90"]
+
+---
+If:
+  PathMatch: .*\.99\.c$
+CompileFlags:
+  Add: ["-xc", "-std=c99"]
+
+---
+If:
+  PathMatch: .*\.11\.c$
+CompileFlags:
+  Add: ["-xc", "-std=c11"]
+
+---
+If:
+  PathMatch: .*\.17\.c$
+CompileFlags:
+  Add: ["-xc", "-std=c17"]
+
+---
+If:
+  PathMatch: .*\.18\.c$
+CompileFlags:
+  Add: ["-xc", "-std=c18"]
+
+---
+If:
+  PathMatch: .*\.23\.c$
+CompileFlags:
+  Add: ["-xc", "-std=c23"]

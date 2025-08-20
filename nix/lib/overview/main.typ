@@ -1,5 +1,5 @@
-#import "@preview/tablex:0.0.9": tablex, hlinex, vlinex, cellx
 #import "@preview/oxifmt:1.0.0": strfmt
+#import "@preview/tablex:0.0.9": tablex, hlinex, cellx, colspanx
 
 // Helper to get input from command line or use a default for local testing
 #let get-input-or-default(name, default) = {
@@ -63,6 +63,7 @@
   let (name, color) = (
     ("accepted", ("AC", green)),
     ("wrong_answer", ("WA", red)),
+    ("partially_correct", ("PC", aqua)),
     ("time_limit_exceeded", ("TLE", yellow)),
     ("memory_limit_exceeded", ("MLE", yellow)),
     ("runtime_error", ("RE", purple)),
@@ -73,7 +74,7 @@
   box(
     inset: (x: 4pt, y: 1pt),
     fill: color.lighten(80%),
-    text(fill: color.darken(80%), weight: "bold", name),
+    text(fill: color.darken(60%), weight: "bold", name),
   )
 }
 
@@ -84,7 +85,7 @@
 
 // Document Configuration
 #set document(
-  title: problem.at("display-name").en + " - Overview",
+  title: problem.name + " - Hull Problem Overview",
   author: "hull build system",
 )
 #set page(margin: (x: 2cm, y: 2.5cm))
@@ -107,6 +108,7 @@
   [Full Score:], $#strfmt("{:.3}", problem.at("full-score"))$,
   [Default Tick Limit:], ticks(problem.at("tick-limit")),
   [Default Memory Limit:], bytes(problem.at("memory-limit")),
+  [Build Date:], [#datetime.today().display("[year]-[month]-[day]")],
 )
 
 #pagebreak()
@@ -127,7 +129,7 @@
     .pairs()
     .map(((name, trait)) => (
       raw(name, lang: "txt"),
-      eval(trait.description.en, mode: "markup"),
+      trait.description.at("en", default: text(gray)[(none)]),
     ))
     .flatten(),
 )
@@ -163,8 +165,8 @@
 )
 
 // Table 2: Trait Matrix
-#pagebreak()
 == Test Case Trait Matrix
+
 #let all_trait_names = problem.traits.keys().sorted()
 #let test_case_pairs = problem.at("test-cases").pairs().sorted(key: p => p.at(0))
 
@@ -261,7 +263,11 @@
     let sol = problem.solutions.at(name)
     let is_main = sol.at("main-correct-solution")
     // Use a smaller font and add a star for the main solution.
-    text(size: 0.8em, weight: "bold", if is_main { [*#emoji.star #name*] } else { [#name] })
+    text(
+      size: 0.8em,
+      weight: "bold",
+      if is_main { [*#emoji.star #vertical-text(name)*] } else { [#vertical-text(name)] },
+    )
   }),
 
   hlinex(),
@@ -284,9 +290,29 @@
 
   hlinex(),
 
-  // --- Footer Row (for total scores) ---
+  // Subtasks
+  [*Subtask*],
+  colspanx(solution-names.len(), align: left)[*Score*],
+
+  hlinex(),
+
+  ..problem
+    .subtasks
+    .enumerate()
+    .map(((i, st)) => (
+      i + 1,
+      ..solution-names.map(sol => {
+        let score = problem.solutions.at(sol).subtask-results.at(i).scaled-score
+        strfmt("{:.3}", score)
+      }),
+    ))
+    .flatten(),
+
+  hlinex(),
+
+  // Footer Row (for total scores)
   // First cell: The label for the score row.
-  [*Total Score*],
+  [*Total*],
   // Subsequent cells: The total score for each solution.
   ..solution-names
     .map(sol_name => {
@@ -301,28 +327,12 @@
   pagebreak()
   [= Sample Cases]
   for (i, sample) in problem.samples.enumerate() {
-    heading(level: 2, "Sample " + str(i + 1))
-    grid(
-      columns: (1fr, 1fr),
-      gutter: 1em,
-      [
-        #text(weight: "bold")[Input]
-        #block(
-          fill: luma(240),
-          inset: 0.8em,
-          width: 100%,
-          raw(sample.input, lang: "txt"),
-        )
-      ],
-      [
-        #text(weight: "bold")[Output]
-        #block(
-          fill: luma(240),
-          inset: 0.8em,
-          width: 100%,
-          raw(sample.output, lang: "txt"),
-        )
-      ],
+    [== Sample #str(i + 1)]
+
+    table(
+      columns: (1fr,) * sample.len(), ..sample.keys().map(x => align(center, raw(x))), ..sample
+        .values()
+        .map(x => raw(block: true, x))
     )
   }
 }

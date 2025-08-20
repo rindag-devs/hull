@@ -12,6 +12,10 @@
       url = "github:loqusion/typix/0.3.2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    cplib = {
+      url = "github:/rindag-devs/cplib";
+      flake = false;
+    };
   };
 
   outputs =
@@ -21,6 +25,7 @@
       fenix,
       crane,
       typix,
+      cplib,
     }:
     let
       supportedSystems = [
@@ -59,21 +64,21 @@
               pkgs.cargo-deny
               pkgs.cargo-edit
               pkgs.cargo-watch
-              pkgs.openssl
               pkgs.pkg-config
               pkgs.nix-output-monitor
+              packages.wasm-judge-clang
             ];
 
             env = {
               RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+              CPLUS_INCLUDE_PATH = "${cplib}/include";
             };
           };
 
           typixLib = typix.lib.${system};
 
           hull = import ./nix/lib {
-            inherit pkgs;
-            inherit typixLib;
+            inherit pkgs typixLib cplib;
             hullPkgs = packages;
           };
 
@@ -88,7 +93,12 @@
           };
 
           hullProblems = {
-            test.aPlusB = hull.evalProblem ./nix/test/problem/aPlusB;
+            test = {
+              aPlusB = hull.evalProblem ./nix/test/problem/aPlusB;
+              aPlusBGrader = hull.evalProblem ./nix/test/problem/aPlusBGrader;
+              numberGuessing = hull.evalProblem ./nix/test/problem/numberGuessing;
+              recitePi = hull.evalProblem ./nix/test/problem/recitePi;
+            };
           };
         }
       );

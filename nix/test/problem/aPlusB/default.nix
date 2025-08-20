@@ -3,6 +3,7 @@
   lib,
   config,
   pkgs,
+  cplib,
   ...
 }:
 {
@@ -13,7 +14,7 @@
 
   name = "aPlusB";
 
-  includes = [ ./third_party/cplib/include ];
+  includes = [ (cplib + "/include") ];
 
   checker.src = ./checker.20.cpp;
 
@@ -168,6 +169,16 @@
                 name = "titleize";
                 version = "0.1.1";
                 hash = "sha256-Z0okd0uGhUDpdLXWpS+GvKVk1LSs15CE7l0l7kZqWLo=";
+              }
+              {
+                name = "tablex";
+                version = "0.0.9";
+                hash = "sha256-yzg4LKpT1xfVUR5JyluDQy87zi2sU5GM27mThARx7ok=";
+              }
+              {
+                name = "oxifmt";
+                version = "1.0.0";
+                hash = "sha256-edTDK5F2xFYWypGpR0dWxwM7IiBd8hKGQ0KArkbpHvI=";
               }
             ];
           };

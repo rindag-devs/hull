@@ -13,10 +13,10 @@ let
       "hull run-wasm ${generatorCwasm} --stdout-path=$out --inherit-stderr -- ${pkgs.lib.escapeShellArgs arguments}";
 
   output =
-    { mainCorrectSolution, ... }@problem:
+    { judger, mainCorrectSolution, ... }@problem:
     testCase:
     let
-      runResult = hull.judge.run problem testCase mainCorrectSolution;
+      runResult = judger.run testCase mainCorrectSolution;
     in
     if runResult.report.status == "accepted" then
       runResult.stdout

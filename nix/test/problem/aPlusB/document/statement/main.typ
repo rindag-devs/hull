@@ -1,3 +1,5 @@
+#import "@preview/oxifmt:1.0.0": strfmt
+#import "@preview/tablex:0.0.9": tablex, hlinex, cellx
 #import "@preview/titleize:0.1.1": titlecase
 
 #let get-input-or-default(name, default) = {
@@ -28,6 +30,12 @@
 
 #import "problem/" + language + ".typ" as problem
 #import "translation/" + language + ".typ" as translation
+
+#set document(
+  title: hull.name + " - Hull Problem Overview",
+  author: "hull build system",
+)
+#set page(margin: (x: 2cm, y: 2.5cm))
 
 = #titlecase(hull.display-name.at(language))
 
@@ -69,28 +77,34 @@
 
 == #titlecase(translation.subtasks)
 
-#[
-  #table(columns: (0.5fr, 1fr) + (1fr,) * hull.traits.len(), [\#], [#titlecase(
-        translation.score,
-      )], ..hull.traits.keys().map(x => x.clusters().join(sym.zws)), ..hull
-      .subtasks
-      .enumerate(start: 1)
-      .map(((id, st)) => {
-        (
-          ([#id], $#st.full-score$)
-            + hull
-              .traits
-              .keys()
-              .map(trait => {
-                if not st.traits.keys().contains(trait) {
-                  table.cell(fill: yellow.lighten(60%))[?]
-                } else if st.traits.at(trait) {
-                  table.cell(fill: green.lighten(60%))[#sym.checkmark]
-                } else {
-                  table.cell(fill: red.lighten(60%))[$times$]
-                }
-              })
-        )
-      })
-      .flatten())
-]
+#tablex(
+  columns: (0.5fr, 1fr) + (1fr,) * hull.traits.len(),
+  align: (left + bottom, center + bottom, ..hull.traits.keys().map(_ => center + bottom)),
+  auto-lines: false,
+  header-rows: 1,
+  [*\#*],
+  [*#titlecase(translation.score)*],
+  ..hull.traits.keys().map(x => text(size: 0.8em, x.clusters().join(sym.zws))),
+  hlinex(),
+  ..hull
+    .subtasks
+    .enumerate(start: 1)
+    .map(((id, st)) => {
+      (
+        ([#id], $#strfmt("{:.3}", st.full-score)$)
+          + hull
+            .traits
+            .keys()
+            .map(trait => {
+              if not st.traits.keys().contains(trait) {
+                cellx(fill: yellow.lighten(60%))[?]
+              } else if st.traits.at(trait) {
+                cellx(fill: green.lighten(60%))[#sym.checkmark]
+              } else {
+                cellx(fill: red.lighten(60%))[$times$]
+              }
+            })
+      )
+    })
+    .flatten(),
+)

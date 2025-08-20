@@ -57,7 +57,6 @@
           solName:
           {
             src,
-            language,
             testCaseResults,
             subtaskResults,
             score,
@@ -70,17 +69,30 @@
               let
                 dirPrefix = "$out/solution/${solName}/test-case-result/${tcName}";
                 reportJSON = builtins.toJSON (
-                  builtins.removeAttrs result [
+                  removeAttrs result [
                     "run"
                     "check"
                   ]
                 );
+                runJSON = builtins.toJSON (
+                  removeAttrs result.run [
+                    "stdout"
+                    "stderr"
+                  ]
+                );
+                checkJSONCommand =
+                  if result.check != null then
+                    "echo ${pkgs.lib.escapeShellArg (builtins.toJSON result.check)} > ${dirPrefix}/check.json"
+                  else
+                    "";
               in
               ''
                 mkdir -p ${dirPrefix}
                 cp ${run.stdout} ${dirPrefix}/stdout
                 cp ${run.stderr} ${dirPrefix}/stderr
                 echo ${pkgs.lib.escapeShellArg reportJSON} > ${dirPrefix}/result.json
+                echo ${pkgs.lib.escapeShellArg runJSON} > ${dirPrefix}/run.json
+                ${checkJSONCommand}
               ''
             ) testCaseResults;
             subtaskResultsCommand = pkgs.lib.concatLines (
@@ -104,7 +116,7 @@
           in
           ''
             mkdir -p $out/solution/${solName}
-            cp ${src} $out/solution/${solName}/src.${hull.language.toFileExtension language}
+            cp ${src} $out/solution/${solName}/src
             ${testCaseResultsCommand}
             ${subtaskResultsCommand}
             echo ${builtins.toString score} > $out/solution/${solName}/score.txt
