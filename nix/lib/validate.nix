@@ -1,18 +1,22 @@
-{ pkgs, hullPkgs }:
+{ pkgs, hull, ... }:
 
-{ validator, ... }@problem:
-{ data, ... }@testCase:
+{
+  problemName,
+  testCaseName,
+  validatorWasm,
+  input,
+}:
 let
-  input = data.input;
-  output =
-    pkgs.runCommandLocal "hull-validate-${problem.name}-${testCase.name}"
-      {
-        nativeBuildInputs = [ hullPkgs.default ];
-      }
-      ''
-        cp ${validator.cwasm} cwasm
-        hull run-wasm cwasm --stdin-path=${input} --inherit-stdout --stderr-path=$out || true
-      '';
-  result = builtins.fromJSON (builtins.readFile output);
+  runResult = hull.runWasm {
+    name = "hull-validate-${problemName}-${testCaseName}";
+    wasm = validatorWasm;
+    stdin = input;
+  };
+  result = builtins.fromJSON (builtins.readFile runResult.stderr);
 in
-result
+{
+  inherit (result) status message;
+  readerTraceStacks = result.reader_trace_stacks or [ ];
+  readerTraceTree = result.reader_trace_tree or [ ];
+  traits = result.traits or { };
+}

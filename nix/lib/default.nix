@@ -7,24 +7,31 @@
 
 let
   problemModule = ./problemModule;
-
-  hull = {
-    overview = import ./overview { inherit hull pkgs; };
-    compile = import ./compile.nix { inherit pkgs hullPkgs; };
-    docs = import ./docs.nix { inherit hull pkgs; };
-    document = import ./document.nix { inherit pkgs typixLib; };
-    generate = import ./generate.nix { inherit hull pkgs hullPkgs; };
-    judger = import ./judger.nix {
-      inherit pkgs hull hullPkgs;
-      lib = pkgs.lib;
-    };
-    language = import ./language.nix { inherit pkgs hullPkgs; };
-    target = import ./target.nix { inherit hull pkgs; };
-    types = import ./types.nix {
-      inherit hull;
+  callSubLib =
+    p:
+    import p {
+      inherit
+        hull
+        pkgs
+        hullPkgs
+        typixLib
+        ;
       inherit (pkgs) lib;
     };
-    validate = import ./validate.nix { inherit pkgs hullPkgs; };
+
+  hull = {
+    overview = callSubLib ./overview;
+    check = callSubLib ./check.nix;
+    compile = callSubLib ./compile.nix;
+    docs = callSubLib ./docs.nix;
+    document = callSubLib ./document.nix;
+    generate = callSubLib ./generate.nix;
+    judger = callSubLib ./judger.nix;
+    language = callSubLib ./language.nix;
+    runWasm = callSubLib ./runWasm.nix;
+    target = callSubLib ./target.nix;
+    types = callSubLib ./types.nix;
+    validate = callSubLib ./validate.nix;
 
     inherit problemModule;
 
@@ -48,7 +55,14 @@ let
             )
           ];
 
-          specialArgs = { inherit pkgs hull cplib; };
+          specialArgs = {
+            inherit
+              pkgs
+              hull
+              hullPkgs
+              cplib
+              ;
+          };
         };
 
         problemAssertWarn =
@@ -78,7 +92,14 @@ let
             problemAttrs
             adhocSolutionModule
           ];
-          specialArgs = { inherit pkgs hull cplib; };
+          specialArgs = {
+            inherit
+              pkgs
+              hull
+              hullPkgs
+              cplib
+              ;
+          };
         };
 
         # Extract the results for our temporary solution.

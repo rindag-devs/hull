@@ -7,43 +7,43 @@ Diagnostics:
 
 ---
 If:
-  PathMatch: .*\.98\.cpp$
+  PathMatch: .*\.98\.(cpp|hpp)$
 CompileFlags:
   Add: ["-xc++", "-std=c++98"]
 
 ---
 If:
-  PathMatch: .*\.03\.cpp$
+  PathMatch: .*\.03\.(cpp|hpp)$
 CompileFlags:
   Add: ["-xc++", "-std=c++03"]
 
 ---
 If:
-  PathMatch: .*\.11\.cpp$
+  PathMatch: .*\.11\.(cpp|hpp)$
 CompileFlags:
   Add: ["-xc++", "-std=c++11"]
 
 ---
 If:
-  PathMatch: .*\.14\.cpp$
+  PathMatch: .*\.14\.(cpp|hpp)$
 CompileFlags:
   Add: ["-xc++", "-std=c++14"]
 
 ---
 If:
-  PathMatch: .*\.17\.cpp$
+  PathMatch: .*\.17\.(cpp|hpp)$
 CompileFlags:
   Add: ["-xc++", "-std=c++17"]
 
 ---
 If:
-  PathMatch: .*\.20\.cpp$
+  PathMatch: .*\.20\.(cpp|hpp)$
 CompileFlags:
   Add: ["-xc++", "-std=c++20"]
 
 ---
 If:
-  PathMatch: .*\.23\.cpp$
+  PathMatch: .*\.23\.(cpp|hpp)$
 CompileFlags:
   Add: ["-xc++", "-std=c++23"]
 

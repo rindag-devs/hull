@@ -1,4 +1,8 @@
-{ pkgs, typixLib }:
+{
+  typixLib,
+  lib,
+  ...
+}:
 
 {
   mkTypstDocument =
@@ -31,7 +35,7 @@
           tick-limit = tickLimit;
           memory-limit = memoryLimit;
           full-score = fullScore;
-          test-cases = pkgs.lib.mapAttrs (
+          test-cases = lib.mapAttrs (
             _:
             {
               generator,
@@ -49,9 +53,14 @@
               actual-traits = inputValidation.traits;
             }
           ) testCases;
-          samples = pkgs.lib.mapAttrsToList (
-            _: { data, ... }: pkgs.lib.mapAttrs (_: file: builtins.readFile file) data
-          ) (pkgs.lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
+          samples = lib.mapAttrsToList (
+            _:
+            { data, ... }:
+            {
+              input = builtins.readFile data.input;
+            }
+            // lib.mapAttrs (_: file: builtins.readFile file) data.outputs
+          ) (lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
           subtasks = map (
             {
               traits,
@@ -65,7 +74,7 @@
               test-cases = map ({ name, ... }: name) testCases;
             }
           ) subtasks;
-          solutions = pkgs.lib.mapAttrs (
+          solutions = lib.mapAttrs (
             solName:
             {
               mainCorrectSolution,
@@ -75,7 +84,7 @@
             }:
             {
               main-correct-solution = mainCorrectSolution;
-              test-case-results = pkgs.lib.mapAttrs (
+              test-case-results = lib.mapAttrs (
                 _:
                 { score, status, ... }:
                 {
@@ -99,8 +108,8 @@
           ) solutions;
         }
       );
-      inputList = pkgs.lib.mapAttrsToList (
-        name: value: "${pkgs.lib.escapeShellArg name}=${pkgs.lib.escapeShellArg value}"
+      inputList = lib.mapAttrsToList (
+        name: value: "${lib.escapeShellArg name}=${lib.escapeShellArg value}"
       ) inputs;
     in
     typixLib.buildTypstProject {

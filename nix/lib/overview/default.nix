@@ -1,10 +1,10 @@
-{ hull, pkgs }:
+{ hull, lib, ... }:
 
 {
   mkOverview =
     problem:
     hull.document.mkTypstDocument problem {
-      src = pkgs.lib.fileset.toSource {
+      src = lib.fileset.toSource {
         root = ./.;
         fileset = ./main.typ;
       };

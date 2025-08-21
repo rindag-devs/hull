@@ -1,4 +1,9 @@
-{ pkgs, hullPkgs }:
+{
+  pkgs,
+  hullPkgs,
+  lib,
+  ...
+}:
 
 let
   # A higher-order function that creates a configured C/C++ compiler for WASM.
@@ -17,13 +22,14 @@ let
     }:
     let
       languageFlag = if isCpp then "c++" else "c";
-      includeDirCmd = pkgs.lib.concatMapStringsSep " " (p: "-I${p}") includes;
-      extraObjectsCmd = pkgs.lib.concatMapStringsSep " " (p: "-x none ${p}") extraObjects;
-      outputFlag = if outputObject then "-c" else "";
+      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
+      extraObjectsCmd = lib.concatMapStringsSep " " (p: "-x none ${p}") extraObjects;
+      outputFlag = lib.optionalString outputObject "-c";
       namePrefix = if outputObject then "obj" else "wasm";
       extName = if outputObject then "o" else "wasm";
-      linkerFlags =
-        if outputObject then "" else "-Wl,--strip-debug -Wl,-z,stack-size=${toString stackSizeInBytes}";
+      linkerFlags = lib.optionalString (
+        !outputObject
+      ) "-Wl,--strip-debug -Wl,-z,stack-size=${toString stackSizeInBytes}";
     in
     pkgs.runCommandLocal "hull-${namePrefix}-${name}.${extName}"
       { nativeBuildInputs = [ hullPkgs.wasm-judge-clang ]; }
@@ -46,12 +52,12 @@ let
       kSizes = map (n: {
         suffix = "s${toString n}k";
         bytes = n * k;
-      }) (pkgs.lib.genList (i: 8 * (pow 2 i)) 7);
+      }) (lib.genList (i: 8 * (pow 2 i)) 7);
       # 1m, 2m, ..., 512m
       mSizes = map (n: {
         suffix = "s${toString n}m";
         bytes = n * m;
-      }) (pkgs.lib.genList (i: pow 2 i) 10);
+      }) (lib.genList (i: pow 2 i) 10);
       # 1G, 2G
       gSizes =
         map
@@ -65,6 +71,78 @@ let
           ];
     in
     kSizes ++ mSizes ++ gSizes;
+
+  mkCFamilyLanguage =
+    {
+      isCpp,
+      std,
+      stackSizeInBytes ? defaultStackSizeBytes,
+    }:
+    let
+      stdPrefix = if isCpp then "c++" else "c";
+      compiler = compileCFamily {
+        inherit isCpp stackSizeInBytes;
+        std = "${stdPrefix}${std}";
+      };
+    in
+    {
+      compile.object =
+        {
+          name,
+          src,
+          includes,
+        }:
+        compiler {
+          inherit name src includes;
+          extraObjects = [ ];
+          outputObject = true;
+        };
+      compile.executable =
+        {
+          name,
+          src,
+          includes,
+          extraObjects,
+        }:
+        compiler {
+          inherit
+            name
+            src
+            includes
+            extraObjects
+            ;
+          outputObject = false;
+        };
+    };
+
+  # Generates language definitions for C/C++ standards.
+  mkCFamilyLanguages =
+    {
+      isCpp,
+      standards,
+    }:
+    let
+      langPrefix = if isCpp then "cpp" else "c";
+    in
+    lib.foldl (
+      acc: std:
+      # A sized language has a custom stack size.
+      let
+        defaultLang = {
+          "${langPrefix}.${std}" = mkCFamilyLanguage { inherit isCpp std; };
+        };
+        sizedLangs = builtins.listToAttrs (
+          map (sizeInfo: {
+            name = "${langPrefix}.${std}.${sizeInfo.suffix}";
+            value = mkCFamilyLanguage {
+              inherit isCpp std;
+              stackSizeInBytes = sizeInfo.bytes;
+            };
+          }) stackSizes
+        );
+      in
+      acc // defaultLang // sizedLangs
+    ) { } standards;
 
   cStandards = [
     "89"
@@ -84,81 +162,19 @@ let
     "26"
   ];
 
-  # Generates language definitions for C/C++ standards.
-  makeCFamilyLanguages =
-    {
-      isCpp,
-      standards,
-    }:
-    let
-      langPrefix = if isCpp then "cpp" else "c";
-      stdPrefix = if isCpp then "c++" else "c";
-    in
-    pkgs.lib.foldl (
-      acc: std:
-      let
-        makeLanguage =
-          stackSizeInBytes:
-          let
-            compiler = compileCFamily {
-              inherit isCpp stackSizeInBytes;
-              std = "${stdPrefix}${std}";
-            };
-          in
-          {
-            compile.object =
-              {
-                name,
-                src,
-                includes,
-              }:
-              compiler {
-                inherit name src includes;
-                extraObjects = [ ];
-                outputObject = true;
-              };
-            compile.executable =
-              {
-                name,
-                src,
-                includes,
-                extraObjects,
-              }:
-              compiler {
-                inherit
-                  name
-                  src
-                  includes
-                  extraObjects
-                  ;
-                outputObject = false;
-              };
-          };
-        # A sized language has a custom stack size.
-        makeSizedLang = sizeInfo: {
-          name = "${langPrefix}.${std}.${sizeInfo.suffix}";
-          value = makeLanguage sizeInfo.bytes;
-        };
-        defaultLang = {
-          "${langPrefix}.${std}" = makeLanguage defaultStackSizeBytes;
-        };
-
-        sizedLangs = builtins.listToAttrs (map makeSizedLang stackSizes);
-      in
-      acc // defaultLang // sizedLangs
-    ) { } standards;
-
-  cLanguages = makeCFamilyLanguages {
+  cLanguages = mkCFamilyLanguages {
     isCpp = false;
     standards = cStandards;
   };
-  cppLanguages = makeCFamilyLanguages {
+  cppLanguages = mkCFamilyLanguages {
     isCpp = true;
     standards = cppStandards;
   };
 
 in
 {
+  inherit cLanguages cppLanguages;
+
   commons = cLanguages // cppLanguages;
 
   matchBaseName =
@@ -182,8 +198,5 @@ in
       lib.last validMatches;
 
   toFileExtension =
-    let
-      inherit (pkgs) lib;
-    in
     language: builtins.concatStringsSep "." (lib.reverseList (lib.splitString "." language));
 }

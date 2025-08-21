@@ -1,7 +1,12 @@
-{ hull, pkgs }:
+{
+  hull,
+  pkgs,
+  lib,
+  ...
+}:
 
 let
-  evalOptions = pkgs.lib.evalModules {
+  evalOptions = lib.evalModules {
     modules = [
       (_: { _module.check = false; })
       hull.problemModule
