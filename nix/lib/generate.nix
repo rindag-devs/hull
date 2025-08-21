@@ -1,30 +1,26 @@
 {
   hull,
-  pkgs,
-  hullPkgs,
+  ...
 }:
 
 let
   input =
     { generators, ... }@problem:
     { generatorCwasm, arguments, ... }@testCase:
-    pkgs.runCommandLocal "hull-generated-input-${problem.name}-${testCase.name}"
-      { nativeBuildInputs = [ hullPkgs.default ]; }
-      "hull run-wasm ${generatorCwasm} --stdout-path=$out --inherit-stderr -- ${pkgs.lib.escapeShellArgs arguments}";
-
-  output =
-    { judger, mainCorrectSolution, ... }@problem:
-    testCase:
     let
-      runResult = judger.run testCase mainCorrectSolution;
+      runResult = hull.runWasm {
+        name = "hull-generate-input-${problem.name}-${testCase.name}";
+        wasm = generatorCwasm;
+        inherit arguments;
+        ensureAccepted = true;
+      };
+      generatedInput = runResult.stdout;
     in
-    if runResult.report.status == "accepted" then
-      runResult.stdout
-    else
-      throw "Output generation for problem `${problem.name}`, "
-      + "test case `${testCase.name}` failed: "
-      + "main correct solution runs unaccepted, report: ${runResult.report}";
+    generatedInput;
+
+  outputs =
+    { judger, mainCorrectSolution, ... }: testCase: judger.generateOutputs testCase mainCorrectSolution;
 in
 {
-  inherit input output;
+  inherit input outputs;
 }

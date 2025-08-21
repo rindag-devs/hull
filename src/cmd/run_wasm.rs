@@ -57,6 +57,11 @@ pub struct RunWasmOpts {
   #[arg(long = "write-file")]
   write_files: Vec<String>,
 
+  /// Path to write report files.
+  // If not set, the report will be written to stdout.
+  #[arg(long)]
+  report_path: Option<String>,
+
   /// Arguments to pass to the WASM module.
   #[arg(trailing_var_arg = true)]
   arguments: Vec<String>,
@@ -143,7 +148,10 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
     Some(Box::new(judge_dir)),
   );
 
-  println!("{}", serde_json::to_string(&result)?);
+  match &run_wasm_opts.report_path {
+    Some(path) => std::fs::write(path, serde_json::to_string(&result)?)?,
+    None => println!("{}", serde_json::to_string(&result)?),
+  };
 
-  std::process::exit(result.exit_code);
+  Ok(())
 }

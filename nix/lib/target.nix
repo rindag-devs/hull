@@ -1,6 +1,11 @@
 # This file defines the final build targets for a problem.
 
-{ pkgs, hull }:
+{
+  pkgs,
+  hull,
+  lib,
+  ...
+}:
 
 {
   default = {
@@ -18,18 +23,28 @@
         ...
       }@problem:
       let
-        dataCommand = pkgs.lib.concatMapStringsSep "\n" (tc: ''
-          mkdir -p $out/data/${tc.name}
-          cp ${tc.data.input} $out/data/${tc.name}/input
-          cp ${tc.data.output} $out/data/${tc.name}/output
-          echo ${pkgs.lib.escapeShellArg (builtins.toJSON tc.inputValidation)} > $out/data/${tc.name}/input-validation.json
-        '') (builtins.attrValues testCases);
+        dataCommand = lib.concatMapStringsSep "\n" (
+          tc:
+          let
+            dirPrefix = "$out/data/${lib.escapeShellArg tc.name}";
+            copyOutputsCommand = lib.concatMapAttrsStringSep "\n" (
+              name: file: "cp ${file} ${dirPrefix}/outputs/${lib.escapeShellArg name}"
+            ) tc.data.outputs;
+          in
+          ''
+            mkdir -p ${dirPrefix}
+            cp ${tc.data.input} ${dirPrefix}/input
+            mkdir -p ${dirPrefix}/outputs
+            ${copyOutputsCommand}
+            echo ${lib.escapeShellArg (builtins.toJSON tc.inputValidation)} > $out/data/${tc.name}/input-validation.json
+          ''
+        ) (builtins.attrValues testCases);
 
-        subtaskCommand = pkgs.lib.concatLines (
-          pkgs.lib.imap0 (
+        subtaskCommand = lib.concatLines (
+          lib.imap0 (
             index: st:
             let
-              linkSubtaskDataCommand = pkgs.lib.concatMapStringsSep "\n" (
+              linkSubtaskDataCommand = lib.concatMapStringsSep "\n" (
                 tc: "ln -sr $out/data/${tc.name} $out/subtask/${builtins.toString index}/${tc.name}"
               ) st.testCases;
             in
@@ -46,14 +61,14 @@
 
         programsCommand =
           dirName: programs:
-          pkgs.lib.concatMapAttrsStringSep "\n" (
+          lib.concatMapAttrsStringSep "\n" (
             programName: program: copyProgramCommand dirName programName program
           ) programs;
 
         generatorsCommand = programsCommand "generator" generators;
         checkerCommand = copyProgramCommand "" "checker" checker;
 
-        solutionsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
+        solutionsCommand = lib.concatMapAttrsStringSep "\n" (
           solName:
           {
             src,
@@ -63,52 +78,36 @@
             ...
           }:
           let
-            testCaseResultsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
-              tcName:
-              { run, check, ... }@result:
+            testCaseResultsCommand = lib.concatMapAttrsStringSep "\n" (
+              tcName: result:
               let
                 dirPrefix = "$out/solution/${solName}/test-case-result/${tcName}";
-                reportJSON = builtins.toJSON (
-                  removeAttrs result [
-                    "run"
-                    "check"
-                  ]
-                );
-                runJSON = builtins.toJSON (
-                  removeAttrs result.run [
-                    "stdout"
-                    "stderr"
-                  ]
-                );
-                checkJSONCommand =
-                  if result.check != null then
-                    "echo ${pkgs.lib.escapeShellArg (builtins.toJSON result.check)} > ${dirPrefix}/check.json"
-                  else
-                    "";
+                resultJSON = builtins.toJSON result;
+                copyOutputsCommand = lib.concatMapAttrsStringSep "\n" (
+                  name: file: "cp ${file} ${dirPrefix}/outputs/${lib.escapeShellArg name}"
+                ) result.outputs;
               in
               ''
                 mkdir -p ${dirPrefix}
-                cp ${run.stdout} ${dirPrefix}/stdout
-                cp ${run.stderr} ${dirPrefix}/stderr
-                echo ${pkgs.lib.escapeShellArg reportJSON} > ${dirPrefix}/result.json
-                echo ${pkgs.lib.escapeShellArg runJSON} > ${dirPrefix}/run.json
-                ${checkJSONCommand}
+                echo ${lib.escapeShellArg resultJSON} > ${dirPrefix}/result.json
+                mkdir -p ${dirPrefix}/outputs
+                ${copyOutputsCommand}
               ''
             ) testCaseResults;
-            subtaskResultsCommand = pkgs.lib.concatLines (
-              pkgs.lib.imap0 (
+            subtaskResultsCommand = lib.concatLines (
+              lib.imap0 (
                 index:
                 { testCases, ... }@result:
                 let
                   dirPrefix = "$out/solution/${solName}/subtask-result/${builtins.toString index}";
                   reportJSON = builtins.toJSON (builtins.removeAttrs result [ "testCases" ]);
-                  linkTestCasesCommand = pkgs.lib.concatMapAttrsStringSep "\n" (
+                  linkTestCasesCommand = lib.concatMapAttrsStringSep "\n" (
                     tcName: tc: "ln -sr $out/solution/${solName}/test-case-result/${tcName} ${dirPrefix}/${tcName}"
                   ) testCases;
                 in
                 ''
                   mkdir -p ${dirPrefix}
-                  echo ${pkgs.lib.escapeShellArg reportJSON} > ${dirPrefix}/result.json
+                  echo ${lib.escapeShellArg reportJSON} > ${dirPrefix}/result.json
                   ${linkTestCasesCommand}
                 ''
               ) subtaskResults
@@ -122,7 +121,7 @@
             echo ${builtins.toString score} > $out/solution/${solName}/score.txt
           ''
         ) solutions;
-        documentsCommand = pkgs.lib.concatMapAttrsStringSep "\n" (documentName: document: ''
+        documentsCommand = lib.concatMapAttrsStringSep "\n" (documentName: document: ''
           cp ${document.path} $out/documents/${documentName}
         '') documents;
         overviewCommand = "cp ${hull.overview.mkOverview problem} $out/overview.pdf";

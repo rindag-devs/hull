@@ -98,6 +98,7 @@
               aPlusBGrader = hull.evalProblem ./nix/test/problem/aPlusBGrader;
               numberGuessing = hull.evalProblem ./nix/test/problem/numberGuessing;
               recitePi = hull.evalProblem ./nix/test/problem/recitePi;
+              newYearGreeting = hull.evalProblem ./nix/test/problem/newYearGreeting;
             };
           };
         }
