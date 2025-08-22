@@ -85,9 +85,13 @@
           packages = import ./nix/pkgs { inherit pkgs; } // {
             default = craneLib.buildPackage {
               src = craneLib.cleanCargoSource ./.;
-              buildInputs = [
-                pkgs.nix-output-monitor
+              nativeBuildInputs = [
+                pkgs.makeBinaryWrapper
               ];
+              postInstall = ''
+                wrapProgram $out/bin/hull \
+                  --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix-output-monitor ]}
+              '';
             };
             docs = hull.docs;
           };
@@ -105,9 +109,11 @@
       );
 
       devShells = forEachSystem (system: self.perSystem.${system}.devShells);
-      hull = forEachSystem (system: self.perSystem.${system}.hull);
+      lib = forEachSystem (system: self.perSystem.${system}.hull);
       packages = forEachSystem (system: self.perSystem.${system}.packages);
       formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
       hullProblems = forEachSystem (system: self.perSystem.${system}.hullProblems);
+      templates = import ./nix/templates;
+      defaultTemplate = self.templates.basic;
     };
 }

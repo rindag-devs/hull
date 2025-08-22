@@ -7,17 +7,17 @@
   ...
 }:
 {
-  imports = [
-    ./translation/en.nix
-    ./translation/zh.nix
+  name = "exampleProblem";
+
+  displayName.en = "example problem";
+
+  tickLimit = 1000 * 10000000;
+  memoryLimit = 512 * 1024 * 1024;
+
+  includes = [
+    (cplib + "/include")
+    ./include
   ];
-
-  name = "aPlusB";
-
-  tickLimit = 100 * 10000000;
-  memoryLimit = 16 * 1024 * 1024;
-
-  includes = [ (cplib + "/include") ];
 
   checker = {
     src = ./checker.20.cpp;
@@ -42,6 +42,7 @@
         arguments = [
           "--n-min=0"
           "--n-max=0"
+          "--salt=0"
         ];
         prediction =
           { status, traits, ... }:
@@ -59,66 +60,46 @@
     };
   };
 
-  generators = {
-    rand.src = ./generator/rand.20.cpp;
-  };
+  generators.rand.src = ./generator/rand.20.cpp;
 
   traits = {
-    a_positive = { };
-    b_positive = { };
+    a_positive = {
+      description.en = "$A > 0$.";
+    };
+    b_positive = {
+      description.en = "$B > 0$.";
+    };
   };
 
-  testCases = {
-    rand-1 = {
-      generator = "rand";
-      arguments = [
-        "--n-min=1"
-        "--n-max=10"
-      ];
-      traits = {
-        a_positive = true;
-        b_positive = true;
+  testCases =
+    let
+      maxTests = builtins.listToAttrs (
+        map (i: {
+          name = "max-${toString i}";
+          value = {
+            generator = "rand";
+            arguments = [
+              "--n-min=-1000"
+              "--n-max=1000"
+              "--salt=${toString i}"
+            ];
+          };
+        }) (lib.range 1 5)
+      );
+    in
+    {
+      manual-1 = {
+        inputFile = ./data/1.in;
+        traits = {
+          a_positive = true;
+          b_positive = true;
+        };
+        groups = [
+          "sample"
+        ];
       };
-      groups = [
-        "sample"
-        "pretest"
-      ];
-    };
-    rand-2 = {
-      generator = "rand";
-      arguments = [
-        "--n-min=1"
-        "--n-max=10"
-        "--same"
-      ];
-      traits = {
-        a_positive = true;
-        b_positive = true;
-      };
-    };
-    rand-3 = {
-      generator = "rand";
-      arguments = [
-        "--n-min=-10"
-        "--n-max=-1"
-      ];
-      traits = {
-        a_positive = false;
-        b_positive = false;
-      };
-    };
-    hand-1 = {
-      inputFile = ./data/hand-1.in;
-      traits = {
-        a_positive = true;
-        b_positive = true;
-      };
-      groups = [
-        "sample"
-        "pretest"
-      ];
-    };
-  };
+    }
+    // maxTests;
 
   subtasks = [
     {
@@ -128,14 +109,12 @@
       };
       fullScore = 0.5;
     }
-    # fallback
     { fullScore = 0.5; }
   ];
 
   solutions =
     let
-      ac = { score, ... }: score == 1;
-      unac = { score, ... }: score == 0;
+      ac = { score, ... }: score == 1.0;
       tle_or_ac =
         { statuses, ... }: builtins.all (s: s == "accepted" || s == "time_limit_exceeded") statuses;
     in
@@ -148,49 +127,18 @@
           "1" = ac;
         };
       };
-      wa-unsigned = {
-        src = ./solution/wa-unsigned.20.cpp;
-        subtaskPredictions = {
-          "0" = ac;
-          "1" = unac;
-        };
-      };
-      tle = {
-        src = ./solution/tle.20.cpp;
+      brute-force = {
+        src = ./solution/bf.20.cpp;
         subtaskPredictions = {
           "0" = tle_or_ac;
           "1" = tle_or_ac;
-        };
-      };
-      mle-dynamic = {
-        src = ./solution/mle-dynamic.20.cpp;
-        subtaskPredictions = {
-          "0" = unac;
-          "1" = unac;
-        };
-      };
-      mle-static = {
-        src = ./solution/mle-static.20.cpp;
-        subtaskPredictions = {
-          "0" = unac;
-          "1" = unac;
-        };
-      };
-      re = {
-        src = ./solution/re.20.cpp;
-        subtaskPredictions = {
-          "0" = unac;
-          "1" = unac;
         };
       };
     };
 
   documents =
     let
-      languages = [
-        "en"
-        "zh"
-      ];
+      languages = [ "en" ];
       mkStatement = language: {
         "statement.${language}.pdf" = {
           path = hull.document.mkTypstDocument config {

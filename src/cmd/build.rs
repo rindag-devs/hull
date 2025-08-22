@@ -6,6 +6,7 @@ use tracing::info;
 #[derive(Parser)]
 pub struct BuildOpts {
   /// The problem to build, e.g., "aPlusB".
+  #[arg(long, short, default_value = "default")]
   problem: String,
 
   /// The target to build, e.g., "default".
