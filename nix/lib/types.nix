@@ -142,7 +142,7 @@ let
         description = "A message from the checker.";
       };
       score = lib.mkOption {
-        type = lib.numbers.between 0 1;
+        type = lib.types.numbers.between 0 1;
         description = "The score of the check, where the full score is 1.0.";
       };
       readerTraceStacks = lib.mkOption {
@@ -246,6 +246,7 @@ let
             type = nameStr;
             readOnly = true;
             default = name;
+            description = "The name of the test, derived from its attribute name in the `tests` set.";
           };
           generator = lib.mkOption {
             type = lib.types.nullOr lib.types.nonEmptyStr;
@@ -292,12 +293,14 @@ let
               checkerWasm = problem.checker.cwasm;
               inherit input output answer;
             };
+            defaultText = "The result of running the checker on this test case.";
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
             readOnly = true;
             description = "Whether the prediction holds for this test case.";
             default = config.prediction config.checkResult;
+            defaultText = "Whether the prediction holds for this test case.";
           };
         };
       }
@@ -334,6 +337,7 @@ let
             type = nameStr;
             readOnly = true;
             default = name;
+            description = "The name of the test, derived from its attribute name in the `tests` set.";
           };
           generator = lib.mkOption {
             type = lib.types.nullOr lib.types.nonEmptyStr;
@@ -364,12 +368,14 @@ let
               validatorWasm = problem.validator.cwasm;
               inherit input;
             };
+            defaultText = "The result of running the validator on this test case.";
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
             readOnly = true;
             description = "Whether the prediction holds for this test case.";
             default = config.prediction config.validationResult;
+            defaultText = "Whether the prediction holds for this test case.";
           };
         };
       }
