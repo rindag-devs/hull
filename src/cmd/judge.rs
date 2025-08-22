@@ -272,14 +272,23 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
 
   let nix_expr = format!(
     r#"
+    {{ srcPath }}:
     let
       flake = builtins.getFlake "{final_flake_ref}";
     in
     (flake.inputs.hull.lib or flake.outputs.lib).{system}.judgeSingleFile
-      flake.outputs.hullProblems.{system}.{}.config.problemAttrs {}"#,
-    judge_opts.problem,
-    src_path_abs.to_str().unwrap()
+      flake.outputs.hullProblems.{system}.{problem}.config.problemAttrs (/. + srcPath)"#,
+    final_flake_ref = final_flake_ref,
+    system = system,
+    problem = judge_opts.problem
   );
+
+  let src_path_str = src_path_abs.to_str().with_context(|| {
+    format!(
+      "Path '{}' contains non-UTF8 characters and cannot be processed.",
+      src_path_abs.display()
+    )
+  })?;
 
   // Execute the nix build command to get the path to the report
   let mut nix_build = Command::new("nix")
@@ -287,9 +296,12 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
     .arg("--impure")
     .arg("--expr")
     .arg(&nix_expr)
+    .arg("--argstr")
+    .arg("srcPath")
+    .arg(src_path_str)
     .arg("--print-out-paths")
     .arg("--log-format")
-    .arg("internal-json") // Corrected from "internal-jso"
+    .arg("internal-json")
     .arg("-v")
     .args(&judge_opts.extra_args)
     .stdin(Stdio::null())
