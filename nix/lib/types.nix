@@ -70,7 +70,7 @@ let
     { config, ... }:
     {
       src = lib.mkOption {
-        type = lib.types.path;
+        type = lib.types.pathInStore;
         description = "Path to the source file of the program.";
       };
       language = lib.mkOption {
