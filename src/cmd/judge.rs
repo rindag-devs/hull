@@ -260,7 +260,7 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
     let
       flake = builtins.getFlake "{final_flake_ref}";
     in
-    flake.outputs.hull.{system}.judgeSingleFile flake.outputs.hullProblems.{system}.{}.config.problemAttrs {}"#,
+    (flake.inputs.hull.lib or flake.outputs.lib).{system}.judgeSingleFile flake.outputs.hullProblems.{system}.{}.config.problemAttrs {}"#,
     judge_opts.problem,
     src_path_abs.to_str().unwrap()
   );
