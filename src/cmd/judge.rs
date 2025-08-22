@@ -1,3 +1,18 @@
+/*
+  This file is part of Hull.
+
+  Hull is free software: you can redistribute it and/or modify it under the terms of the GNU
+  Lesser General Public License as published by the Free Software Foundation, either version 3 of
+  the License, or (at your option) any later version.
+
+  Hull is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+  General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License along with Hull. If
+  not, see <https://www.gnu.org/licenses/>.
+*/
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -260,7 +275,8 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
     let
       flake = builtins.getFlake "{final_flake_ref}";
     in
-    (flake.inputs.hull.lib or flake.outputs.lib).{system}.judgeSingleFile flake.outputs.hullProblems.{system}.{}.config.problemAttrs {}"#,
+    (flake.inputs.hull.lib or flake.outputs.lib).{system}.judgeSingleFile
+      flake.outputs.hullProblems.{system}.{}.config.problemAttrs {}"#,
     judge_opts.problem,
     src_path_abs.to_str().unwrap()
   );
