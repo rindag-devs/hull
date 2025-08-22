@@ -21,7 +21,7 @@ let
 
   testCaseResultStatusStr = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct|runtime_error|time_limit_exceeded|memory_limit_exceeded";
 
-  testCaseResultSubmodule = lib.types.submodule {
+  testCaseResult = lib.types.submodule {
     options = {
       status = lib.mkOption {
         type = testCaseResultStatusStr;
@@ -105,6 +105,275 @@ let
           - `wasm`: Compiled WASM is visible.'';
       };
     };
+
+  inputValidation = lib.types.submodule {
+    options = {
+      status = lib.mkOption {
+        type = lib.types.strMatching "internal_error|valid|invalid";
+        description = "The status of the validation: `valid` or `invalid`.";
+      };
+      message = lib.mkOption {
+        type = lib.types.str;
+        description = "A message from the validator.";
+      };
+      readerTraceStacks = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        description = "Internal trace information from the validator's input readers.";
+      };
+      readerTraceTree = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        description = "Internal trace tree from the validator.";
+      };
+      traits = lib.mkOption {
+        type = lib.types.attrsOf lib.types.bool;
+        description = "The set of traits automatically detected by the validator from the input data.";
+      };
+    };
+  };
+
+  checkerReport = lib.types.submodule {
+    options = {
+      status = lib.mkOption {
+        type = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct";
+        description = "The status of the check.";
+      };
+      message = lib.mkOption {
+        type = lib.types.str;
+        description = "A message from the checker.";
+      };
+      score = lib.mkOption {
+        type = lib.numbers.between 0 1;
+        description = "The score of the check, where the full score is 1.0.";
+      };
+      readerTraceStacks = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        description = "Internal reader trace information from the checker.";
+        default = [ ];
+      };
+      evaluatorTraceStacks = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        description = "Internal evaluator trace information from the checker.";
+        default = [ ];
+      };
+    };
+  };
+
+  # Type for a single checker test case.
+  checkerTest =
+    problem:
+    lib.types.submodule (
+      { config, name, ... }:
+      let
+        # 1. Determine input file path.
+        input =
+          if config.inputFile != null then
+            config.inputFile
+          else if config.generator != null then
+            let
+              generatorCwasm =
+                if builtins.hasAttr config.generator problem.generators then
+                  problem.generators.${config.generator}.cwasm
+                else
+                  throw "In checker test `${name}`, generator `${config.generator}` not found in problem.generators";
+            in
+            hull.generate.input problem {
+              inherit generatorCwasm;
+              arguments = config.arguments or [ ];
+              name = "${problem.name}-checker-test-input-${name}";
+            }
+          else
+            throw "Checker test `${name}` must have either inputFile or generator specified.";
+
+        # 2. Determine user output file path.
+        output =
+          if config.outputFile != null then
+            config.outputFile
+          else if config.solution != null then
+            let
+              sol =
+                if builtins.hasAttr config.solution problem.solutions then
+                  problem.solutions.${config.solution}
+                else
+                  throw "In checker test `${name}`, solution `${config.solution}` not found in problem.solutions";
+              # This assumes a simple batch-style run. For complex judgers,
+              # users should pre-generate the output and use `outputFile`.
+              solWasm = hull.compile.executable {
+                languages = problem.languages;
+                name = "${problem.name}-checker-test-solution-${sol.name}";
+                src = sol.src;
+                includes = problem.includes;
+                extraObjects = [ ];
+              };
+              solCwasm = hull.compile.cwasm {
+                name = "${problem.name}-checker-test-solution-${sol.name}";
+                wasm = solWasm;
+              };
+              runResult = hull.runWasm {
+                name = "${problem.name}-run-checker-test-solution-${sol.name}";
+                wasm = solCwasm;
+                stdin = input;
+                tickLimit = problem.tickLimit;
+                memoryLimit = problem.memoryLimit;
+              };
+            in
+            runResult.stdout
+          else
+            throw "Checker test `${name}` must have either outputFile or solution specified.";
+
+        # 3. Determine standard answer file path.
+        answer =
+          let
+            fakeTestCase = {
+              name = "checker-test-answer-${name}";
+              data.input = input;
+              tickLimit = problem.tickLimit;
+              memoryLimit = problem.memoryLimit;
+            };
+            generatedOutputs = problem.judger.generateOutputs fakeTestCase problem.mainCorrectSolution;
+            outputKeys = lib.attrNames generatedOutputs;
+          in
+          if (builtins.length outputKeys) == 1 then
+            generatedOutputs.${lib.head outputKeys}
+          else if builtins.hasAttr config.outputName generatedOutputs then
+            generatedOutputs.${config.outputName}
+          else
+            throw "Cannot automatically determine the answer file for checker test `${name}`. The problem's judger produces outputs (${builtins.toJSON outputKeys}) and none is named '${config.outputName}'.";
+
+      in
+      {
+        options = {
+          name = lib.mkOption {
+            type = nameStr;
+            readOnly = true;
+            default = name;
+          };
+          generator = lib.mkOption {
+            type = lib.types.nullOr lib.types.nonEmptyStr;
+            default = null;
+            description = "The name of the generator to use for creating the input file.";
+          };
+          arguments = lib.mkOption {
+            type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            default = null;
+            description = "A list of string arguments to pass to the generator program.";
+          };
+          inputFile = lib.mkOption {
+            type = lib.types.nullOr lib.types.pathInStore;
+            default = null;
+            description = "A store path to a manually provided input file.";
+          };
+          solution = lib.mkOption {
+            type = lib.types.nullOr lib.types.nonEmptyStr;
+            default = null;
+            description = "The name of a solution (from `problem.solutions`) to run to get the output file.";
+          };
+          outputName = lib.mkOption {
+            type = lib.types.str;
+            default = "output";
+            description = "The name of output file, used to select the output name when solution returns multiple outputs.";
+          };
+          outputFile = lib.mkOption {
+            type = lib.types.nullOr lib.types.pathInStore;
+            default = null;
+            description = "A store path to a manually provided output file.";
+          };
+          prediction = lib.mkOption {
+            type = lib.types.functionTo lib.types.bool;
+            description = "A function that takes the check report and returns true if the test passes.";
+          };
+          checkResult = lib.mkOption {
+            type = checkerReport;
+            readOnly = true;
+            description = "The result of running the checker on this test case.";
+            default = hull.check {
+              problemName = problem.name;
+              testCaseName = "checker-test-${name}";
+              solutionName = "checker-itself";
+              checkerWasm = problem.checker.cwasm;
+              inherit input output answer;
+            };
+          };
+          predictionHolds = lib.mkOption {
+            type = lib.types.bool;
+            readOnly = true;
+            description = "Whether the prediction holds for this test case.";
+            default = config.prediction config.checkResult;
+          };
+        };
+      }
+    );
+
+  # Type for a single validator test case.
+  validatorTest =
+    problem:
+    lib.types.submodule (
+      { config, name, ... }:
+      let
+        input =
+          if config.inputFile != null then
+            config.inputFile
+          else if config.generator != null then
+            let
+              generatorCwasm =
+                if builtins.hasAttr config.generator problem.generators then
+                  problem.generators.${config.generator}.cwasm
+                else
+                  throw "In validator test `${name}`, generator `${config.generator}` not found in problem.generators";
+            in
+            hull.generate.input problem {
+              inherit generatorCwasm;
+              arguments = config.arguments or [ ];
+              name = "validator-test-input-${name}";
+            }
+          else
+            throw "Validator test `${name}` must have either inputFile or generator specified.";
+      in
+      {
+        options = {
+          name = lib.mkOption {
+            type = nameStr;
+            readOnly = true;
+            default = name;
+          };
+          generator = lib.mkOption {
+            type = lib.types.nullOr lib.types.nonEmptyStr;
+            default = null;
+            description = "The name of the generator to use for creating the input file.";
+          };
+          arguments = lib.mkOption {
+            type = lib.types.nullOr (lib.types.listOf lib.types.str);
+            default = null;
+            description = "A list of string arguments to pass to the generator program.";
+          };
+          inputFile = lib.mkOption {
+            type = lib.types.nullOr lib.types.pathInStore;
+            default = null;
+            description = "A store path to a manually provided input file.";
+          };
+          prediction = lib.mkOption {
+            type = lib.types.functionTo lib.types.bool;
+            description = "A function that takes the validation report and returns true if the test passes.";
+          };
+          validationResult = lib.mkOption {
+            type = inputValidation;
+            readOnly = true;
+            description = "The result of running the validator on this test case.";
+            default = hull.validate {
+              problemName = problem.name;
+              testCaseName = "validator-test-${name}";
+              validatorWasm = problem.validator.cwasm;
+              inherit input;
+            };
+          };
+          predictionHolds = lib.mkOption {
+            type = lib.types.bool;
+            readOnly = true;
+            description = "Whether the prediction holds for this test case.";
+            default = config.prediction config.validationResult;
+          };
+        };
+      }
+    );
 in
 let
   inherit (lib.types)
@@ -121,7 +390,6 @@ let
     nullOr
     numbers
     float
-    strMatching
     ;
 in
 {
@@ -129,7 +397,11 @@ in
   inherit
     nameStr
     testCaseResultStatusStr
-    testCaseResultSubmodule
+    inputValidation
+    checkerReport
+    testCaseResult
+    validatorTest
+    checkerTest
     ;
 
   judger = mkUniqueType "hullJudger";
@@ -267,30 +539,7 @@ in
             description = "Read-only container for the test case's input and output data paths.";
           };
           inputValidation = lib.mkOption {
-            type = submodule {
-              options = {
-                status = lib.mkOption {
-                  type = strMatching "internal_error|valid|invalid";
-                  description = "The status of the validation: `valid` or `invalid`.";
-                };
-                message = lib.mkOption {
-                  type = str;
-                  description = "A message from the validator.";
-                };
-                readerTraceStacks = lib.mkOption {
-                  type = listOf attrs;
-                  description = "Internal trace information from the validator's input readers.";
-                };
-                readerTraceTree = lib.mkOption {
-                  type = listOf attrs;
-                  description = "Internal trace tree from the validator.";
-                };
-                traits = lib.mkOption {
-                  type = attrsOf bool;
-                  description = "The set of traits automatically detected by the validator from the input data.";
-                };
-              };
-            };
+            type = inputValidation;
             readOnly = true;
             description = "The result of running the validator on the test case's input data.";
             default = hull.validate {
@@ -371,7 +620,7 @@ in
               }'';
           };
           testCaseResults = lib.mkOption {
-            type = attrsOf testCaseResultSubmodule;
+            type = attrsOf testCaseResult;
             readOnly = true;
             description = "The collected results of running and checking this solution against all test cases.";
             default = lib.mapAttrs (tcName: tc: problem.judger.judge tc config) problem.testCases;
@@ -381,7 +630,7 @@ in
             type = listOf (submodule {
               options = {
                 testCases = lib.mkOption {
-                  type = attrsOf testCaseResultSubmodule;
+                  type = attrsOf testCaseResult;
                   description = "The results of test cases in this subtask.";
                 };
                 statuses = lib.mkOption {
@@ -447,13 +696,25 @@ in
   checker =
     problem:
     submodule (args: {
-      options = programOptions problem args;
+      options = (programOptions problem args) // {
+        tests = lib.mkOption {
+          type = attrsOf (checkerTest problem);
+          default = { };
+          description = "An attribute set of tests for the checker itself.";
+        };
+      };
     });
 
   validator =
     problem:
     submodule (args: {
-      options = programOptions problem args;
+      options = (programOptions problem args) // {
+        tests = lib.mkOption {
+          type = attrsOf (validatorTest problem);
+          default = { };
+          description = "An attribute set of tests for the validator itself.";
+        };
+      };
     });
 
   generator =

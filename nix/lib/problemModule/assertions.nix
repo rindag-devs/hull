@@ -270,6 +270,48 @@
             '';
         };
 
+        # Assertion: Checker tests must pass.
+        failingCheckerTests = lib.filterAttrs (name: test: !test.predictionHolds) config.checker.tests;
+        checkerTestsAssertion = {
+          assertion = failingCheckerTests == { };
+          message =
+            let
+              report = lib.concatStringsSep "\n" (
+                lib.mapAttrsToList (name: test: ''
+                  - Test `${name}` failed.
+                    Prediction function returned false.
+                    Actual checker report: ${builtins.toJSON test.checkResult}
+                '') failingCheckerTests
+              );
+            in
+            ''
+              Problem `${config.name}` has failing checker tests.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: Validator tests must pass.
+        failingValidatorTests = lib.filterAttrs (name: test: !test.predictionHolds) config.validator.tests;
+        validatorTestsAssertion = {
+          assertion = failingValidatorTests == { };
+          message =
+            let
+              report = lib.concatStringsSep "\n" (
+                lib.mapAttrsToList (name: test: ''
+                  - Test `${name}` failed.
+                    Prediction function returned false.
+                    Actual validator report: ${builtins.toJSON test.validationResult}
+                '') failingValidatorTests
+              );
+            in
+            ''
+              Problem `${config.name}` has failing validator tests.
+              Details:
+              ${report}
+            '';
+        };
+
       in
       [
         validationAssertion
@@ -277,6 +319,8 @@
         mismatchedTestCaseTraitsAssertion
         undeclaredSubtaskTraitsAssertion
         subtaskPredictionAssertion
+        checkerTestsAssertion
+        validatorTestsAssertion
       ];
   };
 }

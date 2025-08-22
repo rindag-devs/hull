@@ -57,6 +57,8 @@ struct SubtaskResult {
 struct TestCaseResult {
   status: String,
   score: f64,
+  tick: u64,
+  memory: u64,
 }
 
 #[derive(Deserialize)]
@@ -141,7 +143,7 @@ fn print_human_readable_report(report: &JudgeReport) {
   // --- Test Cases Table ---
   let mut test_case_table = Table::new();
   test_case_table.load_preset(UTF8_FULL);
-  test_case_table.set_header(vec!["Name", "Status", "Score"]);
+  test_case_table.set_header(vec!["Name", "Status", "Score", "Tick", "Memory"]);
 
   // Sort test cases by name for consistent output
   let mut sorted_test_cases: Vec<_> = report.test_case_results.iter().collect();
@@ -151,11 +153,52 @@ fn print_human_readable_report(report: &JudgeReport) {
     let title_case_status = to_title_case(&case.status);
     let colored_status = colorize_status(&case.status, &title_case_status);
     let score_str = format!("{:.3}", case.score);
+    let tick_str = tick_string(case.tick);
+    let memory_str = size_string(case.memory);
 
-    test_case_table.add_row(vec![Cell::new(name), colored_status, Cell::new(score_str)]);
+    test_case_table.add_row(vec![
+      Cell::new(name),
+      colored_status,
+      Cell::new(score_str),
+      Cell::new(tick_str),
+      Cell::new(memory_str),
+    ]);
   }
   println!("\nTest Case Details:");
   println!("{test_case_table}");
+}
+
+fn tick_string(tick: u64) -> String {
+  const THRESHOLD: u64 = 100_000;
+
+  if tick < THRESHOLD {
+    tick.to_string()
+  } else {
+    format!("{:.3e}", tick as f64)
+  }
+}
+
+fn size_string(memory: u64) -> String {
+  const KIB: u64 = 1024;
+  const MIB: u64 = 1024 * KIB;
+  const GIB: u64 = 1024 * MIB;
+  const TIB: u64 = 1024 * GIB;
+
+  if memory < KIB {
+    format!("{} Bytes", memory)
+  } else if memory < MIB {
+    let kib_value = memory as f64 / KIB as f64;
+    format!("{:.3} KiB", kib_value)
+  } else if memory < GIB {
+    let mib_value = memory as f64 / MIB as f64;
+    format!("{:.3} MiB", mib_value)
+  } else if memory < TIB {
+    let gib_value = memory as f64 / GIB as f64;
+    format!("{:.3} GiB", gib_value)
+  } else {
+    let tib_value = memory as f64 / TIB as f64;
+    format!("{:.3} TiB", tib_value)
+  }
 }
 
 fn get_current_system() -> Result<String> {
