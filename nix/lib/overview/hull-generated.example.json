@@ -243,15 +243,15 @@
   },
   "traits": {
     "is_dag": {"description": {"en": "The graph is a Directed Acyclic Graph (DAG)."}},
-    "k_le_12": {"description": {"en": "$K <= 12$"}},
-    "k_le_25": {"description": {"en": "$K <= 25$"}},
-    "k_le_5": {"description": {"en": "$K <= 5$"}},
-    "m_le_30": {"description": {"en": "$M <= 30$"}},
-    "m_le_3e3": {"description": {"en": "$M <= 3 times 10^3$"}},
-    "m_le_500": {"description": {"en": "$M <= 500$"}},
-    "n_le_10": {"description": {"en": "$N <= 10$"}},
-    "n_le_200": {"description": {"en": "$N <= 200$"}},
-    "n_le_30": {"description": {"en": "$N <= 30$"}},
+    "k_le_12": {"description": {"en": "$K <= 12$."}},
+    "k_le_25": {"description": {"en": "$K <= 25$."}},
+    "k_le_5": {"description": {"en": "$K <= 5$."}},
+    "m_le_30": {"description": {"en": "$M <= 30$."}},
+    "m_le_3e3": {"description": {"en": "$M <= 3 times 10^3$."}},
+    "m_le_500": {"description": {"en": "$M <= 500$."}},
+    "n_le_10": {"description": {"en": "$N <= 10$."}},
+    "n_le_200": {"description": {"en": "$N <= 200$."}},
+    "n_le_30": {"description": {"en": "$N <= 30$."}},
     "unique_path": {"description": {"en": "There is a unique path from S to T."}}
   }
 }

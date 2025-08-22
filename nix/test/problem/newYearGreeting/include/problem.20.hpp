@@ -145,7 +145,7 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
   }
 };
 
-auto traits(const Input& input) -> std::vector<cplib::validator::Trait> {
+inline auto traits(const Input& input) -> std::vector<cplib::validator::Trait> {
   return {
       {"k_lt_1024",
        [&]() {

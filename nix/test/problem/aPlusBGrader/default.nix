@@ -7,6 +7,9 @@
 {
   name = "aPlusBGrader";
 
+  tickLimit = 100 * 10000000;
+  memoryLimit = 16 * 1024 * 1024;
+
   includes = [
     (cplib + "/include")
     ./include
@@ -51,9 +54,6 @@
       };
     };
   };
-
-  tickLimit = 100 * 10000000;
-  memoryLimit = 16 * 1024 * 1024;
 
   solutions =
     let

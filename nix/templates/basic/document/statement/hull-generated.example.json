@@ -1,0 +1,44 @@
+{
+  "display-name": {
+    "en": "example problem",
+    "zh": "示例题目"
+  },
+  "full-score": 1.0,
+  "memory-limit": 0,
+  "tick-limit": 0,
+  "name": "example-problem",
+  "samples": [
+    {
+      "input": "input\n",
+      "output": "output\n"
+    }
+  ],
+  "solutions": {
+    "example": {
+      "main-correct-solution": true,
+      "subtask-results": [
+        {"raw-score": 1.0, "scaled-score": 1.0, "statuses": ["accepted"]}
+      ],
+      "test-case-results": {
+        "example": {"score": 1.0, "status": "accepted"}
+      }
+    }
+  },
+  "subtasks": [
+    {
+      "full-score": 1.0,
+      "test-cases": ["example"],
+      "traits": {"example": true}
+    }
+  ],
+  "test-cases": {
+    "example": {
+      "actual-traits": {"example": true},
+      "arguments": ["example"], "generator": "example", "groups": ["sample"],
+      "memory-limit": 0, "tick-limit": 0
+    }
+  },
+  "traits": {
+    "example": {"description": {"en": "This is an example trait"}}
+  }
+}

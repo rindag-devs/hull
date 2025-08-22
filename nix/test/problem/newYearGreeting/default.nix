@@ -9,6 +9,9 @@
 
   name = "newYearGreeting";
 
+  tickLimit = 1000 * 10000000;
+  memoryLimit = 256 * 1024 * 1024;
+
   includes = [
     (cplib + "/include")
     ./include
@@ -53,9 +56,6 @@
       }) (lib.range 1 10);
     in
     builtins.listToAttrs (small ++ big);
-
-  tickLimit = 1000 * 10000000;
-  memoryLimit = 256 * 1024 * 1024;
 
   subtasks = [
     {

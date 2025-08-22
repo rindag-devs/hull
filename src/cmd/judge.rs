@@ -12,11 +12,12 @@ use tracing::info;
 
 #[derive(Parser)]
 pub struct JudgeOpts {
-  /// The problem to build, e.g., "aPlusB".
-  problem: String,
-
   /// Path to the source file to judge.
   src_path: String,
+
+  /// The problem to build, e.g., "aPlusB".
+  #[arg(long, short, default_value = "default")]
+  problem: String,
 
   /// The system to build, e.g., "x86_64-linux".
   #[arg(long)]
