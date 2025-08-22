@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <utils.hpp>
 #include <variant>
 #include <vector>
 
@@ -29,6 +30,16 @@ struct InputFirst {
   static auto read(cplib::var::Reader& in) -> InputFirst {
     auto pairs = in.read(cplib::var::Vec(cplib::var::ExtVar<Pair>("pairs"), CNT, cplib::var::eoln));
     in.read(cplib::var::eoln);
+    if (cplib::get_work_mode() == cplib::WorkMode::VALIDATOR) {
+      std::vector<std::uint32_t> keys(pairs.size());
+      for (std::size_t i = 0; i < pairs.size(); ++i) {
+        keys[i] = pairs[i].k;
+      }
+      std::ranges::sort(keys);
+      if (std::ranges::unique(keys).end() != keys.end()) {
+        in.fail("Keys must be unique");
+      }
+    }
     return {pairs};
   }
 };
@@ -44,6 +55,13 @@ struct InputSecond {
     in.read(cplib::var::eoln);
     auto indexes = in.read(cplib::var::Vec(cplib::var::u32("indexes"), Q, cplib::var::eoln));
     in.read(cplib::var::eoln);
+    if (cplib::get_work_mode() == cplib::WorkMode::VALIDATOR) {
+      std::vector<std::uint32_t> indexes_copy = indexes;
+      std::ranges::sort(indexes_copy);
+      if (std::ranges::unique(indexes_copy).end() != indexes_copy.end()) {
+        in.fail("Indexes must be unique");
+      }
+    }
     return {.encoded = encoded, .Q = Q, .indexes = indexes};
   }
 };

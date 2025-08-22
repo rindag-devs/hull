@@ -116,7 +116,7 @@ let
         };
       in
       # Create a derivation that contains the final report.
-      pkgs.writeText "judge-report.json" (builtins.toJSON reportData);
+      builtins.toFile "judge-report.json" (builtins.toJSON reportData);
   };
 in
 hull

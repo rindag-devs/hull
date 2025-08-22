@@ -2,7 +2,6 @@
   hull,
   config,
   lib,
-  pkgs,
   ...
 }:
 
@@ -62,7 +61,7 @@
 
           # The checker expects a type prefix (0 for encode, 1 for decode).
           # We create the full output file for the first phase.
-          firstOut = pkgs.writeText "firstOut.txt" ''
+          firstOut = builtins.toFile "firstOut.txt" ''
             0
             ${builtins.readFile runResult1.stdout}
           '';
@@ -126,7 +125,7 @@
               };
 
           # Create the full output file for the second phase.
-          secondOut = pkgs.writeText "secondOut.txt" ''
+          secondOut = builtins.toFile "secondOut.txt" ''
             1
             ${builtins.readFile runResult2.stdout}
           '';

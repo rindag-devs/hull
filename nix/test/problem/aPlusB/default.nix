@@ -16,9 +16,41 @@
 
   includes = [ (cplib + "/include") ];
 
-  checker.src = ./checker.20.cpp;
+  checker = {
+    src = ./checker.20.cpp;
+    tests = {
+      ac = {
+        inputFile = builtins.toFile "ac.in" "1 2\n";
+        outputFile = builtins.toFile "ac.out" "\t3\t \t\t\n";
+        prediction = { status, ... }: status == "accepted";
+      };
+    };
+  };
 
-  validator.src = ./validator.20.cpp;
+  validator = {
+    src = ./validator.20.cpp;
+    tests = {
+      noEoln = {
+        inputFile = builtins.toFile "noEoln.in" "1 2";
+        prediction = { status, ... }: status == "invalid";
+      };
+      zero = {
+        generator = "rand";
+        arguments = [
+          "--n-min=0"
+          "--n-max=0"
+        ];
+        prediction =
+          { status, traits, ... }:
+          status == "valid"
+          &&
+            traits == {
+              a_positive = false;
+              b_positive = false;
+            };
+      };
+    };
+  };
 
   generators = {
     rand.src = ./generator/rand.20.cpp;
