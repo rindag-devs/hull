@@ -16,14 +16,16 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::process::{Command, Stdio};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Parser;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Table};
 use serde::Deserialize;
 use tracing::info;
+
+use crate::nix::{BuildCommand, get_current_system, get_flake_url};
+use crate::utils::{format_size, format_tick};
 
 #[derive(Parser)]
 pub struct JudgeOpts {
@@ -75,11 +77,6 @@ struct TestCaseResult {
   score: f64,
   tick: u64,
   memory: u64,
-}
-
-#[derive(Deserialize)]
-struct FlakeMetadata {
-  url: String,
 }
 
 /// Converts a snake_case string to Title Case.
@@ -169,8 +166,8 @@ fn print_human_readable_report(report: &JudgeReport) {
     let title_case_status = to_title_case(&case.status);
     let colored_status = colorize_status(&case.status, &title_case_status);
     let score_str = format!("{:.3}", case.score);
-    let tick_str = tick_string(case.tick);
-    let memory_str = size_string(case.memory);
+    let tick_str = format_tick(case.tick);
+    let memory_str = format_size(case.memory);
 
     test_case_table.add_row(vec![
       Cell::new(name),
@@ -182,67 +179,6 @@ fn print_human_readable_report(report: &JudgeReport) {
   }
   println!("\nTest Case Details:");
   println!("{test_case_table}");
-}
-
-fn tick_string(tick: u64) -> String {
-  const THRESHOLD: u64 = 100_000;
-
-  if tick < THRESHOLD {
-    tick.to_string()
-  } else {
-    format!("{:.3e}", tick as f64)
-  }
-}
-
-fn size_string(memory: u64) -> String {
-  const KIB: u64 = 1024;
-  const MIB: u64 = 1024 * KIB;
-  const GIB: u64 = 1024 * MIB;
-  const TIB: u64 = 1024 * GIB;
-
-  if memory < KIB {
-    format!("{} Bytes", memory)
-  } else if memory < MIB {
-    let kib_value = memory as f64 / KIB as f64;
-    format!("{:.3} KiB", kib_value)
-  } else if memory < GIB {
-    let mib_value = memory as f64 / MIB as f64;
-    format!("{:.3} MiB", mib_value)
-  } else if memory < TIB {
-    let gib_value = memory as f64 / GIB as f64;
-    format!("{:.3} GiB", gib_value)
-  } else {
-    let tib_value = memory as f64 / TIB as f64;
-    format!("{:.3} TiB", tib_value)
-  }
-}
-
-fn get_current_system() -> Result<String> {
-  let output = Command::new("nix")
-    .args(["eval", "--raw", "nixpkgs#system"])
-    .output()?;
-  Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-/// Get the flake URL for the current directory by running `nix flake metadata`.
-fn get_flake_url() -> Result<String> {
-  let output = Command::new("nix")
-    .args(["flake", "metadata", ".", "--json"])
-    .output()
-    .context("Failed to execute `nix flake metadata`")?;
-
-  if !output.status.success() {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    bail!("Failed to get flake metadata. Stderr:\n{}", stderr.trim());
-  }
-
-  let metadata_str = String::from_utf8(output.stdout)
-    .context("Failed to parse `nix flake metadata` output as UTF-8")?;
-
-  let metadata: FlakeMetadata = serde_json::from_str(&metadata_str)
-    .context("Failed to parse JSON from `nix flake metadata`")?;
-
-  Ok(metadata.url)
 }
 
 pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
@@ -278,8 +214,6 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
     in
     (flake.inputs.hull.lib or flake.outputs.lib).{system}.judgeSingleFile
       flake.outputs.hullProblems.{system}.{problem}.config.problemAttrs (/. + srcPath)"#,
-    final_flake_ref = final_flake_ref,
-    system = system,
     problem = judge_opts.problem
   );
 
@@ -291,67 +225,16 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   })?;
 
   // Execute the nix build command to get the path to the report
-  let mut nix_build = Command::new("nix")
-    .arg("build")
-    .arg("--impure")
-    .arg("--expr")
-    .arg(&nix_expr)
-    .arg("--argstr")
-    .arg("srcPath")
-    .arg(src_path_str)
-    .arg("--print-out-paths")
-    .arg("--log-format")
-    .arg("internal-json")
-    .arg("-v")
-    .args(&judge_opts.extra_args)
-    .stdin(Stdio::null())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
+  let report_path_str = BuildCommand::new()
+    .impure(true)
+    .expr(&nix_expr)
+    .argstr("srcPath", src_path_str)
+    .print_out_paths(true)
+    .no_link(true)
+    .extra_args(&judge_opts.extra_args)
+    .run_and_capture_stdout()
     .context("Failed to execute `nix build` for judging")?;
 
-  // Take the stderr handle from the nix_build process. This allows us to pipe it
-  // to another process while still being able to call `wait_with_output` on nix_build.
-  let nix_stderr = nix_build
-    .stderr
-    .take()
-    .context("Failed to capture stderr from nix build process")?;
-
-  // Spawn the `nom` process to format the nix build logs.
-  let mut nom_process = Command::new("nom")
-    .arg("--json")
-    .stdin(nix_stderr)
-    .stdout(Stdio::inherit())
-    .stderr(Stdio::inherit())
-    .spawn()
-    .context("Failed to spawn `nom` log processor")?;
-
-  // Wait for the main `nix build` command to finish. Its output contains the path
-  // to the result, and its completion will close the pipe to `nom`.
-  let output = nix_build
-    .wait_with_output()
-    .context("Failed to wait for nix build process")?;
-
-  // Wait for the `nom` log processor to finish.
-  let nom_status = nom_process
-    .wait()
-    .context("Failed to wait for `nom` log processor")?;
-
-  // Check if the log processor itself ran successfully.
-  if !nom_status.success() {
-    bail!(
-      "Log processor `nom` failed with exit code: {:?}",
-      nom_status
-    );
-  }
-
-  // Check if the nix build command was successful. If not, the formatted logs
-  // from `nom` should have already been printed to the user's terminal.
-  if !output.status.success() {
-    bail!("Nix build command failed during judging.");
-  }
-
-  let report_path_str = String::from_utf8(output.stdout)?.trim().to_string();
   let report_path = Path::new(&report_path_str);
 
   let report_content = fs::read_to_string(report_path)

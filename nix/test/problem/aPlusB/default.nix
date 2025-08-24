@@ -42,6 +42,7 @@
         arguments = [
           "--n-min=0"
           "--n-max=0"
+          "--salt=0"
         ];
         prediction =
           { status, traits, ... }:
@@ -74,6 +75,7 @@
       arguments = [
         "--n-min=1"
         "--n-max=10"
+        "--salt=0"
       ];
       traits = {
         a_positive = true;
@@ -90,6 +92,7 @@
         "--n-min=1"
         "--n-max=10"
         "--same"
+        "--salt=0"
       ];
       traits = {
         a_positive = true;
@@ -101,6 +104,7 @@
       arguments = [
         "--n-min=-10"
         "--n-max=-1"
+        "--salt=0"
       ];
       traits = {
         a_positive = false;

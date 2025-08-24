@@ -13,10 +13,11 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Parser;
-use std::process::{Command, Stdio};
 use tracing::info;
+
+use crate::nix::{BuildCommand, get_current_system};
 
 #[derive(Parser)]
 pub struct BuildOpts {
@@ -45,15 +46,6 @@ pub struct BuildOpts {
   extra_args: Vec<String>,
 }
 
-fn get_current_system() -> Result<String> {
-  let output = Command::new("nix")
-    .args(&["eval", "--raw", "nixpkgs#system"])
-    .output()?;
-
-  let data = String::from_utf8_lossy(&output.stdout);
-  Ok(data.trim().to_string())
-}
-
 pub fn run(build_opts: &BuildOpts) -> Result<()> {
   let system = build_opts.system.clone().unwrap_or(
     get_current_system().context("Failed to determine current system using `nix eval`")?,
@@ -72,32 +64,11 @@ pub fn run(build_opts: &BuildOpts) -> Result<()> {
 
   info!("Building target: {}", flake_attr);
 
-  let nix_build = Command::new("nix")
-    .args([
-      "build",
-      &flake_attr,
-      "--out-link",
-      &build_opts.out_link,
-      "--log-format",
-      "internal-json",
-      "-v",
-    ])
-    .args(&build_opts.extra_args)
-    .stdin(Stdio::null())
-    .stdout(Stdio::null())
-    .stderr(Stdio::piped())
-    .spawn()?;
-
-  let exit_status = Command::new("nom")
-    .arg("--json")
-    .stdin(nix_build.stderr.unwrap())
-    .stdout(Stdio::inherit())
-    .stderr(Stdio::inherit())
-    .status()?;
-
-  if !exit_status.success() {
-    bail!("Build failed with exit code: {:?}", exit_status);
-  }
+  BuildCommand::new()
+    .installable(&flake_attr)
+    .out_link(&build_opts.out_link)
+    .extra_args(&build_opts.extra_args)
+    .run()?;
 
   Ok(())
 }

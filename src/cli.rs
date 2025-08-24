@@ -17,6 +17,7 @@ use clap::{Parser, Subcommand, command};
 
 use crate::cmd::{
   build::BuildOpts, compile_cwasm::CompileCwasmOpts, judge::JudgeOpts, run_wasm::RunWasmOpts,
+  stress::StressOpts,
 };
 
 /// Competitive programming proposition automation tool
@@ -39,4 +40,5 @@ pub enum Command {
   CompileCwasm(CompileCwasmOpts),
   Judge(JudgeOpts),
   RunWasm(RunWasmOpts),
+  Stress(StressOpts),
 }

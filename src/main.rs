@@ -20,7 +20,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod cli;
 pub mod cmd;
+pub mod nix;
 pub mod runner;
+pub mod utils;
 
 fn main() -> Result<()> {
   tracing_subscriber::registry()
@@ -38,5 +40,6 @@ fn main() -> Result<()> {
     cli::Command::CompileCwasm(compile_cwasm_opts) => cmd::compile_cwasm::run(compile_cwasm_opts),
     cli::Command::Judge(judge_opts) => cmd::judge::run(judge_opts),
     cli::Command::RunWasm(run_wasm_opts) => cmd::run_wasm::run(run_wasm_opts),
+    cli::Command::Stress(stress_opts) => cmd::stress::run(stress_opts),
   }
 }
