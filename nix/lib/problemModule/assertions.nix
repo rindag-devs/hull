@@ -67,12 +67,10 @@
           assertion = failingValidationCases == [ ];
           message =
             let
-              report = lib.concatStringsSep "\n" (
-                lib.map (tc: ''
-                  - ${getTestCaseName tc}:
-                      Validation failed. Validator output: ${builtins.toJSON tc.inputValidation}
-                '') failingValidationCases
-              );
+              report = lib.concatMapStringsSep "\n" (tc: ''
+                - ${getTestCaseName tc}:
+                    Validation failed. Validator output: ${builtins.toJSON tc.inputValidation}
+              '') failingValidationCases;
             in
             ''
               Problem `${config.name}` has test cases that failed input validation.
@@ -97,22 +95,20 @@
           assertion = casesWithUndeclaredTraits == [ ];
           message =
             let
-              report = lib.concatStringsSep "\n" (
-                lib.map (
-                  tc:
-                  let
-                    definedTraits = builtins.attrNames tc.traits;
-                    undeclared = builtins.filter (
-                      trait: !(lib.elem trait (builtins.attrNames config.traits))
-                    ) definedTraits;
-                  in
-                  ''
-                    - ${getTestCaseName tc}:
-                        The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
-                        Declared traits are: ${builtins.toJSON (builtins.attrNames config.traits)}
-                  ''
-                ) casesWithUndeclaredTraits
-              );
+              report = lib.concatMapStringsSep "\n" (
+                tc:
+                let
+                  definedTraits = builtins.attrNames tc.traits;
+                  undeclared = builtins.filter (
+                    trait: !(lib.elem trait (builtins.attrNames config.traits))
+                  ) definedTraits;
+                in
+                ''
+                  - ${getTestCaseName tc}:
+                      The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
+                      Declared traits are: ${builtins.toJSON (builtins.attrNames config.traits)}
+                ''
+              ) casesWithUndeclaredTraits;
             in
             ''
               Problem `${config.name}` has test cases with undeclared traits.
@@ -136,14 +132,12 @@
           assertion = casesWithMismatchedTraits == [ ];
           message =
             let
-              report = lib.concatStringsSep "\n" (
-                lib.map (tc: ''
-                  - ${getTestCaseName tc}:
-                      The traits you defined do not match the traits returned by the validator.
-                      - Defined in test case: ${builtins.toJSON tc.traits}
-                      - Returned by validator: ${builtins.toJSON tc.inputValidation.traits}
-                '') casesWithMismatchedTraits
-              );
+              report = lib.concatMapStringsSep "\n" (tc: ''
+                - ${getTestCaseName tc}:
+                    The traits you defined do not match the traits returned by the validator.
+                    - Defined in test case: ${builtins.toJSON tc.traits}
+                    - Returned by validator: ${builtins.toJSON tc.inputValidation.traits}
+              '') casesWithMismatchedTraits;
             in
             ''
               Problem `${config.name}` has test cases with mismatched trait definitions.
@@ -169,23 +163,21 @@
           assertion = subtasksWithUndeclaredTraits == [ ];
           message =
             let
-              report = lib.concatStringsSep "\n" (
-                map (
-                  item:
-                  let
-                    st = item.st;
-                    definedTraits = builtins.attrNames st.traits;
-                    undeclared = builtins.filter (
-                      trait: !(builtins.elem trait (builtins.attrNames config.traits))
-                    ) definedTraits;
-                  in
-                  ''
-                    - ${getSubtaskName item.index st}:
-                        The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
-                        Declared traits are: ${builtins.toJSON (builtins.attrNames config.traits)}
-                  ''
-                ) subtasksWithUndeclaredTraits
-              );
+              report = lib.concatMapStringsSep "\n" (
+                item:
+                let
+                  st = item.st;
+                  definedTraits = builtins.attrNames st.traits;
+                  undeclared = builtins.filter (
+                    trait: !(builtins.elem trait (builtins.attrNames config.traits))
+                  ) definedTraits;
+                in
+                ''
+                  - ${getSubtaskName item.index st}:
+                      The traits not declared in the problem's top-level `traits` list: ${builtins.toJSON undeclared}
+                      Declared traits are: ${builtins.toJSON (builtins.attrNames config.traits)}
+                ''
+              ) subtasksWithUndeclaredTraits;
             in
             ''
               Problem `${config.name}` has subtasks with undeclared traits.
@@ -237,46 +229,31 @@
           assertion = failingSolutions == { };
           message =
             let
-              report = lib.concatStringsSep "\n\n" (
-                lib.mapAttrsToList (
-                  solName:
-                  { subtaskResults, mismatches, ... }:
-                  let
-                    mismatchReports = lib.concatMapStringsSep "\n" (
-                      pred:
-                      let
-                        index = lib.toIntBase10 pred.name;
-                        subtask =
-                          if index >= 0 && index < (builtins.length config.subtasks) then
-                            builtins.elemAt config.subtasks index
-                          else
-                            null;
-                        subtaskResult =
-                          if index >= 0 && index < (builtins.length subtaskResults) then
-                            builtins.elemAt subtaskResults index
-                          else
-                            null;
-                        actualScore =
-                          if subtaskResult != null then toString subtaskResult.rawScore else "N/A (non-existent subtask)";
-                        actualStatuses = if subtaskResult != null then toString subtaskResult.statuses else [ ];
-                        subtaskIdentifier =
-                          if subtask != null then
-                            getSubtaskName index subtask
-                          else
-                            "Subtask #${toString index} (non-existent)";
-                      in
-                      ''
-                        - ${subtaskIdentifier}:
-                            Prediction failed with actual (raw score: ${actualScore}, statuses: ${builtins.toJSON actualStatuses})
-                      ''
-                    ) mismatches;
-                  in
-                  ''
-                    Solution `${solName}` has mismatched subtask predictions:
-                    ${mismatchReports}
-                  ''
-                ) failingSolutions
-              );
+              report = lib.concatMapAttrsStringSep "\n" (
+                solName:
+                { subtaskResults, mismatches, ... }:
+                let
+                  mismatchReports = lib.concatMapStringsSep "\n" (
+                    pred:
+                    let
+                      index = lib.toIntBase10 pred.name;
+                      subtask = builtins.elemAt config.subtasks index;
+                      subtaskResult = builtins.elemAt subtaskResults index;
+                      actualScoreStr = toString subtaskResult.rawScore;
+                      actualStatusesStr = builtins.toJSON subtaskResult.statuses;
+                      subtaskIdentifier = getSubtaskName index subtask;
+                    in
+                    ''
+                      - ${subtaskIdentifier}:
+                          Prediction failed with actual (raw score: ${actualScoreStr}, statuses: ${actualStatusesStr})
+                    ''
+                  ) mismatches;
+                in
+                ''
+                  Solution `${solName}` has mismatched subtask predictions:
+                  ${mismatchReports}
+                ''
+              ) failingSolutions;
             in
             ''
               Problem `${config.name}` has solutions with incorrect subtask predictions.
@@ -291,13 +268,11 @@
           assertion = failingCheckerTests == { };
           message =
             let
-              report = lib.concatStringsSep "\n" (
-                lib.mapAttrsToList (name: test: ''
-                  - Test `${name}` failed.
-                    Prediction function returned false.
-                    Actual checker report: ${builtins.toJSON test.checkResult}
-                '') failingCheckerTests
-              );
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Test `${name}` failed.
+                  Prediction function returned false.
+                  Actual checker report: ${builtins.toJSON test.result}
+              '') failingCheckerTests;
             in
             ''
               Problem `${config.name}` has failing checker tests.
@@ -312,13 +287,11 @@
           assertion = failingValidatorTests == { };
           message =
             let
-              report = lib.concatStringsSep "\n" (
-                lib.mapAttrsToList (name: test: ''
-                  - Test `${name}` failed.
-                    Prediction function returned false.
-                    Actual validator report: ${builtins.toJSON test.validationResult}
-                '') failingValidatorTests
-              );
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Test `${name}` failed.
+                  Prediction function returned false.
+                  Actual validator report: ${builtins.toJSON test.result}
+              '') failingValidatorTests;
             in
             ''
               Problem `${config.name}` has failing validator tests.

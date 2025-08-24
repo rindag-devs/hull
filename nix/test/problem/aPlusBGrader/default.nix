@@ -15,15 +15,13 @@
     ./include
   ];
 
-  judger = hull.judger.batchJudger config { extraObjects = [ ./grader.20.cpp ]; };
+  judger = hull.judger.batch config { extraObjects = [ ./grader.20.cpp ]; };
 
   checker.src = ./checker.20.cpp;
 
   validator.src = ./validator.20.cpp;
 
-  generators = {
-    rand.src = ./generator/rand.20.cpp;
-  };
+  generators.rand.src = ./generator/rand.20.cpp;
 
   traits = {
     a_positive = { };

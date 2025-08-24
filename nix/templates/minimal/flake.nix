@@ -54,7 +54,6 @@
       );
 
       devShells = forEachSystem (system: self.perSystem.${system}.devShells);
-      formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
       hullProblems = forEachSystem (system: self.perSystem.${system}.hullProblems);
     };
 }

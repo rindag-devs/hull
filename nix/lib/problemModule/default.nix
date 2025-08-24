@@ -17,6 +17,7 @@
   lib,
   hull,
   config,
+  pkgs,
   ...
 }:
 
@@ -26,8 +27,8 @@
   options = {
     problemAttrs = lib.mkOption {
       type = lib.types.raw;
-      readOnly = true;
       description = "User problem configuration passed in when evalProblem.";
+      readOnly = true;
     };
 
     name = lib.mkOption {
@@ -48,8 +49,8 @@
 
     includes = lib.mkOption {
       type = lib.types.listOf lib.types.pathInStore;
-      default = [ ];
       description = "A list of paths to be added as include directories for compilation.";
+      default = [ ];
     };
 
     languages = lib.mkOption {
@@ -61,9 +62,9 @@
 
     judger = lib.mkOption {
       type = hull.types.judger;
-      default = hull.judger.batchJudger config { };
-      defaultText = lib.literalExpression "hull.judger.batchJudger config { }";
       description = "The judger implementation to use for evaluating solutions.";
+      default = hull.judger.batch config { };
+      defaultText = lib.literalExpression "hull.judger.batch config { }";
     };
 
     checker = lib.mkOption {
@@ -78,20 +79,42 @@
 
     traits = lib.mkOption {
       type = lib.types.attrsOf hull.types.trait;
-      default = { };
       description = "An attribute set of all possible traits that can be used to categorize test cases and define subtasks.";
+      default = { };
     };
 
     generators = lib.mkOption {
       type = lib.types.attrsOf (hull.types.generator config);
-      default = { };
       description = "An attribute set of generator programs used to create test case inputs.";
+      default = { };
     };
 
     testCases = lib.mkOption {
       type = lib.types.attrsOf (hull.types.testCase config);
-      default = { };
       description = "An attribute set defining all test cases for the problem.";
+      default = { };
+    };
+
+    testCaseInputValidations = lib.mkOption {
+      type = lib.types.attrsOf hull.types.inputValidationReport;
+      description = "An attribute set describing the input validation report for all test cases.";
+      default =
+        let
+          drvs = lib.mapAttrs (
+            tcName:
+            { data, ... }:
+            hull.validate.drv {
+              problemName = config.name;
+              testCaseName = tcName;
+              validatorWasm = config.validator.cwasm;
+              input = data.input;
+            }
+          ) config.testCases;
+          links = pkgs.linkFarm "hull-testCaseInputValidations-${config.name}" drvs;
+          reports = lib.mapAttrs (tcName: _: lib.importJSON (links + "/${tcName}")) drvs;
+        in
+        reports;
+      defaultText = "Computed by runs the validator on the input file for all test cases.";
     };
 
     tickLimit = lib.mkOption {

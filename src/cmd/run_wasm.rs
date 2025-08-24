@@ -13,14 +13,14 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use anyhow::{Ok, Result};
+use anyhow::{Ok, Result, bail};
 use clap::Parser;
 use wasi_common::{
   WasiFile,
   pipe::{ReadPipe, WritePipe},
 };
 
-use crate::runner::{self, judge_dir::JudgeDir};
+use crate::runner::{self, RunStatus, judge_dir::JudgeDir};
 
 const DEFAULT_TICK_LIMIT: u64 = 100_000_000_000;
 const DEFAULT_MEMORY_LIMIT: u64 = u32::MAX as u64;
@@ -76,6 +76,10 @@ pub struct RunWasmOpts {
   // If not set, the report will be written to stdout.
   #[arg(long)]
   report_path: Option<String>,
+
+  /// Whether to ensure that an "accepted" result is returned.
+  #[arg(long)]
+  ensure_accepted: bool,
 
   /// Arguments to pass to the WASM module.
   #[arg(trailing_var_arg = true)]
@@ -167,6 +171,13 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
     Some(path) => std::fs::write(path, serde_json::to_string(&result)?)?,
     None => println!("{}", serde_json::to_string(&result)?),
   };
+
+  if run_wasm_opts.ensure_accepted && result.status != RunStatus::Accepted {
+    bail!(
+      "The running returns an unaccepted status, report: {}",
+      serde_json::to_string(&result)?
+    );
+  }
 
   Ok(())
 }

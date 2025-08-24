@@ -107,6 +107,10 @@
                 wrapProgram $out/bin/hull \
                   --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix-output-monitor ]}
               '';
+              meta = {
+                license = pkgs.lib.licenses.lgpl3Plus;
+                mainProgram = "hull";
+              };
             };
             docs = hull.docs;
           };

@@ -73,8 +73,10 @@
             { data, ... }:
             {
               input = builtins.readFile data.input;
+              outputs = lib.mapAttrs (fileName: _: builtins.readFile (data.outputs + "/" + fileName)) (
+                builtins.readDir data.outputs
+              );
             }
-            // lib.mapAttrs (_: file: builtins.readFile file) data.outputs
           ) (lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
           subtasks = map (
             {
@@ -101,9 +103,22 @@
               main-correct-solution = mainCorrectSolution;
               test-case-results = lib.mapAttrs (
                 _:
-                { score, status, ... }:
                 {
-                  inherit score status;
+                  score,
+                  status,
+                  tick,
+                  memory,
+                  message,
+                  ...
+                }:
+                {
+                  inherit
+                    score
+                    status
+                    tick
+                    memory
+                    message
+                    ;
                 }
               ) testCaseResults;
               subtask-results = map (

@@ -20,52 +20,98 @@
   ...
 }:
 
-{
-  name,
-  wasm,
-  arguments ? [ ],
-  inputFiles ? { },
-  outputFiles ? [ ],
-  stdin ? null,
-  tickLimit ? null,
-  memoryLimit ? null,
-  ensureAccepted ? false,
-}:
 let
-  mkLimitArg = name: limit: lib.optionalString (limit != null) "--${name}-limit=${toString limit}";
-  mkFileArg =
-    name: files:
-    lib.concatMapStringsSep " " (fileName: "--${name}-file ${lib.escapeShellArg fileName}") files;
-  stdinArg = lib.optionalString (stdin != null) "--stdin-path=${stdin}";
-  tickLimitArg = mkLimitArg "tick" tickLimit;
-  memoryLimitArg = mkLimitArg "memory" memoryLimit;
-  copyInputFilesCommand = lib.concatMapAttrsStringSep "\n" (
-    name: file: "cp ${file} ${lib.escapeShellArg name}"
-  ) inputFiles;
-  copyOutputFilesCommand = lib.concatMapStringsSep "\n" (
-    name: "cp ${lib.escapeShellArg name} $out/files/"
-  ) outputFiles;
-  inputFileArg = mkFileArg "read" (builtins.attrNames inputFiles);
-  outputFileArg = mkFileArg "write" outputFiles;
-  runDerivation = pkgs.runCommandLocal name { nativeBuildInputs = [ hullPkgs.default ]; } ''
-    mkdir -p $out/files
-    ${copyInputFilesCommand}
-    hull run-wasm ${wasm} ${stdinArg} --stdout-path=$out/stdout --stderr-path=$out/stderr \
-      ${tickLimitArg} ${memoryLimitArg} ${inputFileArg} ${outputFileArg} --report-path=$out/report.json \
-      -- ${lib.escapeShellArgs arguments}
-    ${copyOutputFilesCommand}
-  '';
-  report = builtins.fromJSON (builtins.readFile "${runDerivation}/report.json");
+  script =
+    {
+      wasm,
+      arguments ? [ ],
+      inputFiles ? { },
+      outputFiles ? [ ],
+      stdin ? null,
+      tickLimit ? null,
+      memoryLimit ? null,
+      ensureAccepted ? false,
+    }:
+
+    let
+      mkLimitArg = name: limit: lib.optionalString (limit != null) "--${name}-limit=${toString limit}";
+
+      mkFileArg =
+        name: files:
+        lib.concatMapStringsSep " " (fileName: "--${name}-file ${lib.escapeShellArg fileName}") files;
+
+      stdinArg = lib.optionalString (stdin != null) "--stdin-path=${stdin}";
+
+      tickLimitArg = mkLimitArg "tick" tickLimit;
+
+      memoryLimitArg = mkLimitArg "memory" memoryLimit;
+
+      copyInputFilesCommand = lib.concatMapAttrsStringSep "\n" (
+        name: file: "cp ${file} ${lib.escapeShellArg name}"
+      ) inputFiles;
+
+      copyOutputFilesCommand = lib.concatMapStringsSep "\n" (
+        name: "cp ${lib.escapeShellArg name} \${DIRSTACK[1]}/outputFiles/"
+      ) outputFiles;
+
+      # --read-file a.txt --read-file b.txt ...
+      inputFileArg = mkFileArg "read" (builtins.attrNames inputFiles);
+
+      # --write-file a.txt --write-file b.txt ...
+      outputFileArg = mkFileArg "write" outputFiles;
+
+      ensureAcceptedArg = lib.optionalString ensureAccepted "--ensure-accepted";
+    in
+    ''
+      mkdir outputFiles
+      pushd $(mktemp -d) > /dev/null
+
+      ${copyInputFilesCommand}
+
+      ${lib.getExe hullPkgs.default} run-wasm ${wasm} \
+        ${stdinArg} --stdout-path="''${DIRSTACK[1]}/stdout" --stderr-path="''${DIRSTACK[1]}/stderr" \
+        ${tickLimitArg} ${memoryLimitArg} ${inputFileArg} ${outputFileArg} ${ensureAcceptedArg} \
+        --report-path="''${DIRSTACK[1]}/report.json" \
+        -- ${lib.escapeShellArgs arguments}
+        
+      ${copyOutputFilesCommand}
+      popd > /dev/null
+    '';
+
+  drv =
+    {
+      name,
+      wasm,
+      arguments ? [ ],
+      inputFiles ? { },
+      outputFiles ? [ ],
+      stdin ? null,
+      tickLimit ? null,
+      memoryLimit ? null,
+      ensureAccepted ? false,
+    }:
+
+    let
+      script' = script {
+        inherit
+          wasm
+          arguments
+          inputFiles
+          outputFiles
+          stdin
+          tickLimit
+          memoryLimit
+          ensureAccepted
+          ;
+      };
+    in
+    pkgs.runCommandLocal name { } ''
+      ${script'}
+      mkdir $out
+      cp -r stdout stderr report.json outputFiles $out/
+    '';
+
 in
-if ensureAccepted && report.status != "accepted" then
-  throw "${name} returns an unaccepted status, report: ${builtins.toJSON report}, derivation output: ${runDerivation}"
-else
-  {
-    inherit report;
-    stdout = runDerivation + "/stdout";
-    stderr = runDerivation + "/stderr";
-    outputFiles = builtins.listToAttrs map (name: {
-      inherit name;
-      value = outputFiles runDerivation + "/files/${name}";
-    });
-  }
+{
+  inherit script drv;
+}
