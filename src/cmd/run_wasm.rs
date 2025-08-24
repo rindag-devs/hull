@@ -174,7 +174,7 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
 
   if run_wasm_opts.ensure_accepted && result.status != RunStatus::Accepted {
     bail!(
-      "The running returns an unaccepted status, report: {}",
+      "The run returned an unaccepted status, report: {}",
       serde_json::to_string(&result)?
     );
   }
