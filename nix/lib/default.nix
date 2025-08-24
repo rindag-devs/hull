@@ -35,14 +35,14 @@ let
     };
 
   hull = {
-    overview = callSubLib ./overview;
     check = callSubLib ./check.nix;
     compile = callSubLib ./compile.nix;
     docs = callSubLib ./docs.nix;
     document = callSubLib ./document.nix;
     generate = callSubLib ./generate.nix;
-    judger = callSubLib ./judger.nix;
+    judger = callSubLib ./judger;
     language = callSubLib ./language.nix;
+    overview = callSubLib ./overview;
     runWasm = callSubLib ./runWasm.nix;
     target = callSubLib ./target.nix;
     types = callSubLib ./types.nix;

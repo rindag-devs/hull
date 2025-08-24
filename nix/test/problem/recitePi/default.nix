@@ -9,7 +9,7 @@
 
   includes = [ (cplib + "/include") ];
 
-  judger = hull.judger.answerOnlyJudger config;
+  judger = hull.judger.answerOnly config;
 
   checker.src = ./checker.20.cpp;
 

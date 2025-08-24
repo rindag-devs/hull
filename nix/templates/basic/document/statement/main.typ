@@ -62,12 +62,13 @@
 
 #for sample in hull.samples {
   table(
-    columns: (1fr,) * sample.len(), ..sample.keys().map(x => align(center, raw(x))), ..sample
-      .values()
-      .map(x => raw(block: true, x))
+    columns: (1fr,) * (sample.outputs.len() + 1),
+    align(center, raw("input")),
+    ..sample.outputs.keys().map(x => align(center, raw(x))),
+    raw(block: true, sample.input),
+    ..sample.outputs.values().map(x => raw(block: true, x))
   )
 }
-
 
 == #titlecase(translation.traits)
 

@@ -1,13 +1,14 @@
 {
   hull,
   config,
-  lib,
+  pkgs,
   ...
 }:
 
 {
   judger =
     let
+      # Compile the transform program once, as it's used in both generateOutputs and judge.
       transformSrc = ./transform.20.cpp;
       transformWasm = hull.compile.executable {
         inherit (config) languages includes;
@@ -19,212 +20,272 @@
         name = "${config.name}-transform";
         wasm = transformWasm;
       };
-
-      # This function encapsulates the two-phase execution logic.
-      # It's used by both `generateOutputs` and `judge`.
-      runTwoPhase =
-        {
-          testCase,
-          solution,
-          # If true, throw an error on non-accepted status.
-          # If false, just return the report.
-          ensureAccepted,
-          # If true, perform checks against standard answers.
-          # If false, this is a generation run, so no checks needed.
-          performCheck,
-        }:
-        let
-          # --- Compile solution ---
-          solutionWasm = hull.compile.executable {
-            inherit (config) languages includes;
-            src = solution.src;
-            name = "${config.name}-solution";
-            extraObjects = [ ];
-          };
-          solutionCwasm = hull.compile.cwasm {
-            name = "${config.name}-solution";
-            wasm = solutionWasm;
-          };
-
-          # --- Phase 1: Encoding ---
-
-          # Run the solution to get the encoded output.
-          # Resource limits are applied here.
-          runResult1 = hull.runWasm {
-            name = "hull-run-phase1-${config.name}-${testCase.name}-${solution.name}";
-            wasm = solutionCwasm;
-            stdin = testCase.data.input;
-            tickLimit = testCase.tickLimit;
-            memoryLimit = testCase.memoryLimit;
-            inherit ensureAccepted;
-          };
-
-          # The checker expects a type prefix (0 for encode, 1 for decode).
-          # We create the full output file for the first phase.
-          firstOut = builtins.toFile "firstOut.txt" ''
-            0
-            ${builtins.readFile runResult1.stdout}
-          '';
-
-          # If checking is enabled, compare the encoded output with the standard answer.
-          checkResult1 =
-            if performCheck then
-              hull.check {
-                problemName = config.name;
-                testCaseName = testCase.name;
-                solutionName = solution.name;
-                checkerWasm = config.checker.cwasm;
-                input = testCase.data.input;
-                output = firstOut;
-                answer = testCase.data.outputs.first;
-              }
-            else
-              null;
-
-          # --- Transformation Step ---
-
-          # Run the transform program to generate the input for the second phase.
-          # The transform program itself is not resource-limited and must always succeed.
-          transformResult = hull.runWasm {
-            name = "hull-transform-${config.name}-${testCase.name}-${solution.name}";
-            wasm = transformCwasm;
-            arguments = [ "--salt=${builtins.hashFile "sha256" testCase.data.input}" ];
-            stdin = testCase.data.input;
-            inputFiles = {
-              # The transform program reads the encoded output from this file.
-              firstOut = firstOut;
-            };
-            ensureAccepted = true;
-          };
-          secondIn = transformResult.stdout;
-
-          # The generated input for the second phase must be valid.
-          # A failure here indicates a problem with the transform logic or the problem setup, not the user's solution.
-          validationResult = hull.validate {
-            problemName = config.name;
-            testCaseName = testCase.name;
-            validatorWasm = config.validator.cwasm;
-            input = secondIn;
-          };
-
-          # --- Phase 2: Decoding ---
-
-          # Run the solution again for the decoding phase.
-          # Resource limits are applied here as well.
-          runResult2 =
-            if validationResult.status != "valid" then
-              throw "Validation for the second phase input failed for test case ${testCase.name}. Validator output: ${builtins.toJSON validationResult}"
-            else
-              hull.runWasm {
-                name = "hull-run-phase2-${config.name}-${testCase.name}-${solution.name}";
-                wasm = solutionCwasm;
-                stdin = secondIn;
-                tickLimit = testCase.tickLimit;
-                memoryLimit = testCase.memoryLimit;
-                inherit ensureAccepted;
-              };
-
-          # Create the full output file for the second phase.
-          secondOut = builtins.toFile "secondOut.txt" ''
-            1
-            ${builtins.readFile runResult2.stdout}
-          '';
-
-          # If checking is enabled, compare the decoded output with the standard answer.
-          checkResult2 =
-            if performCheck then
-              hull.check {
-                problemName = config.name;
-                testCaseName = testCase.name;
-                solutionName = solution.name;
-                checkerWasm = config.checker.cwasm;
-                input = secondIn;
-                output = secondOut;
-                answer = testCase.data.outputs.second;
-              }
-            else
-              null;
-        in
-        {
-          # Return all intermediate results for the caller to decide the final outcome.
-          inherit
-            runResult1
-            runResult2
-            checkResult1
-            checkResult2
-            firstOut
-            secondOut
-            ;
-        };
     in
     {
       _type = "hullJudger";
 
       # This function generates the standard answer files using the main correct solution.
+      # It returns a derivation containing the output files `first` and `second`.
       generateOutputs =
         testCase: std:
         let
-          # Run the two-phase process for the standard solution.
-          # We ensure every step succeeds, otherwise it's a configuration error.
-          results = runTwoPhase {
-            inherit testCase;
-            solution = std;
-            ensureAccepted = true;
-            performCheck = false;
+          # Compile the standard solution.
+          solutionWasm = hull.compile.executable {
+            inherit (config) languages includes;
+            src = std.src;
+            name = "${config.name}-solution-${std.name}";
+            extraObjects = [ ];
+          };
+          solutionCwasm = hull.compile.cwasm {
+            name = "${config.name}-solution-${std.name}";
+            wasm = solutionWasm;
           };
         in
-        {
-          # The standard answers are the outputs from the two phases.
-          first = results.firstOut;
-          second = results.secondOut;
-        };
+        pkgs.runCommandLocal "hull-generateOutputs-${config.name}-${testCase.name}" { } ''
+          # --- Phase 1: Run solution to get encoded output ---
+          (
+            pushd $(mktemp -d) > /dev/null
+            ${hull.runWasm.script {
+              wasm = solutionCwasm;
+              stdin = testCase.data.input;
+              tickLimit = testCase.tickLimit;
+              memoryLimit = testCase.memoryLimit;
+              ensureAccepted = true;
+            }}
+            cp stdout ../run_stdout1.txt
+            popd > /dev/null
+          )
+          echo "0" > firstOut.txt
+          cat run_stdout1.txt >> firstOut.txt
+
+          # --- Transform: Generate input for phase 2 ---
+          (
+            pushd $(mktemp -d) > /dev/null
+            # The transform script needs firstOut.txt from the parent directory.
+            # We pass its path to the script helper.
+            ${hull.runWasm.script {
+              wasm = transformCwasm;
+              arguments = [ "--salt=${builtins.hashString "sha256" testCase.name}" ];
+              stdin = testCase.data.input;
+              inputFiles = {
+                firstOut = "../firstOut.txt";
+              };
+              ensureAccepted = true;
+            }}
+            cp stdout ../secondIn.txt
+            popd > /dev/null
+          )
+
+          # --- Phase 2: Run solution to get decoded output ---
+          (
+            pushd $(mktemp -d) > /dev/null
+            ${hull.runWasm.script {
+              wasm = solutionCwasm;
+              stdin = "../secondIn.txt";
+              tickLimit = testCase.tickLimit;
+              memoryLimit = testCase.memoryLimit;
+              ensureAccepted = true;
+            }}
+            cp stdout ../run_stdout2.txt
+            popd > /dev/null
+          )
+          echo "1" > secondOut.txt
+          cat run_stdout2.txt >> secondOut.txt
+
+          # --- Finalize ---
+          mkdir -p $out
+          install -Dm644 firstOut.txt $out/first
+          install -Dm644 secondOut.txt $out/second
+        '';
 
       # This function judges a user's solution against a test case.
+      # It returns a derivation containing `report.json` and an `outputs` directory.
       judge =
         testCase: solution:
         let
-          # Run the two-phase process for the user's solution.
-          # We don't ensure acceptance here; instead, we check the status report.
-          results = runTwoPhase {
-            inherit testCase solution;
-            ensureAccepted = false;
-            performCheck = true;
+          # Compile the user's solution.
+          solutionWasm = hull.compile.executable {
+            inherit (config) languages includes;
+            src = solution.src;
+            name = "${config.name}-solution-${solution.name}";
+            extraObjects = [ ];
           };
-
-          # Helper to create a failing result structure.
-          failResult = status: message: {
-            inherit status message;
-            score = 0.0;
-            tick = 0;
-            memory = 0;
-            outputs = {
-              first = results.firstOut;
-              second = results.secondOut;
-            };
+          solutionCwasm = hull.compile.cwasm {
+            name = "${config.name}-solution-${solution.name}";
+            wasm = solutionWasm;
           };
         in
-        # Determine the final result based on the outcome of each step.
-        if results.runResult1.report.status != "accepted" then
-          failResult results.runResult1.report.status results.runResult1.report.errorMessage
-        else if results.checkResult1.score == 0.0 then
-          failResult results.checkResult1.status results.checkResult1.message
-        else if results.runResult2.report.status != "accepted" then
-          failResult results.runResult2.report.status results.runResult2.report.errorMessage
-        else if results.checkResult2.score == 0.0 then
-          failResult results.checkResult2.status results.checkResult2.message
-        else
-          # If all steps passed, the final score is determined by the first check.
+        pkgs.runCommandLocal "hull-judge-${config.name}-${testCase.name}-${solution.name}"
           {
-            status = results.checkResult1.status;
-            score = results.checkResult1.score;
-            message = results.checkResult1.message;
-            # Resource usage is the maximum of the two runs.
-            tick = lib.max results.runResult1.report.tick results.runResult2.report.tick;
-            memory = lib.max results.runResult1.report.memory results.runResult2.report.memory;
-            outputs = {
-              first = results.firstOut;
-              second = results.secondOut;
-            };
-          };
+            nativeBuildInputs = [
+              pkgs.jq
+              pkgs.bc
+            ];
+          }
+          ''
+            mkdir -p $out/outputs
+
+            # --- Phase 1: Run ---
+            (
+              pushd $(mktemp -d) > /dev/null
+              ${hull.runWasm.script {
+                wasm = solutionCwasm;
+                stdin = testCase.data.input;
+                tickLimit = testCase.tickLimit;
+                memoryLimit = testCase.memoryLimit;
+                ensureAccepted = false;
+              }}
+              cp report.json ../run_report1.json
+              cp stdout ../run_stdout1.txt
+              popd > /dev/null
+            )
+            run_report1_path=$PWD/run_report1.json
+            run_stdout1_path=$PWD/run_stdout1.txt
+            run_status1=$(jq -r .status "$run_report1_path")
+            if [ "$run_status1" != "accepted" ]; then
+              echo "Phase 1 run failed. Status: $run_status1"
+              jq -n \
+                --arg status "$run_status1" \
+                --arg message "$(jq -r .errorMessage "$run_report1_path")" \
+                --argjson tick "$(jq .tick "$run_report1_path")" \
+                --argjson memory "$(jq .memory "$run_report1_path")" \
+                '{ "status": $status, "score": 0.0, "message": $message, "tick": $tick, "memory": $memory }' > $out/report.json
+              exit 0
+            fi
+            echo "0" > firstOut.txt
+            cat "$run_stdout1_path" >> firstOut.txt
+            install -Dm644 firstOut.txt $out/outputs/first
+
+            # --- Phase 1: Check ---
+            (
+              pushd $(mktemp -d) > /dev/null
+              ${hull.check.script {
+                checkerWasm = config.checker.cwasm;
+                input = testCase.data.input;
+                output = "../firstOut.txt";
+                answer = testCase.data.outputs + "/first";
+              }}
+              cp check.json ../check_report1.json
+              popd > /dev/null
+            )
+            check_report1_path=$PWD/check_report1.json
+            check_score1=$(jq -r .score "$check_report1_path")
+            if [ "$(echo "$check_score1 == 0.0" | bc)" -eq 1 ]; then
+              echo "Phase 1 check failed."
+              jq -n \
+                --arg status "$(jq -r .status "$check_report1_path")" \
+                --arg message "$(jq -r .message "$check_report1_path")" \
+                --argjson tick "$(jq .tick "$run_report1_path")" \
+                --argjson memory "$(jq .memory "$run_report1_path")" \
+                '{ "status": $status, "score": 0.0, "message": $message, "tick": $tick, "memory": $memory }' > $out/report.json
+              exit 0
+            fi
+
+            # --- Transform ---
+            (
+              pushd $(mktemp -d) > /dev/null
+              ${hull.runWasm.script {
+                wasm = transformCwasm;
+                arguments = [ "--salt=${builtins.hashString "sha256" testCase.name}" ];
+                stdin = testCase.data.input;
+                inputFiles = {
+                  firstOut = "../firstOut.txt";
+                };
+                ensureAccepted = true;
+              }}
+              cp stdout ../secondIn.txt
+              popd > /dev/null
+            )
+
+            # --- Validate ---
+            (
+              pushd $(mktemp -d) > /dev/null
+              ${hull.validate.script {
+                validatorWasm = config.validator.cwasm;
+                input = "../secondIn.txt";
+              }}
+              cp validation.json ../validation_report.json
+              popd > /dev/null
+            )
+            validation_report_path=$PWD/validation_report.json
+            validation_status=$(jq -r .status "$validation_report_path")
+            if [ "$validation_status" != "valid" ]; then
+              echo "Internal Error: Transform step produced invalid input for phase 2."
+              false
+            fi
+
+            # --- Phase 2: Run ---
+            (
+              pushd $(mktemp -d) > /dev/null
+              ${hull.runWasm.script {
+                wasm = solutionCwasm;
+                stdin = "../secondIn.txt";
+                tickLimit = testCase.tickLimit;
+                memoryLimit = testCase.memoryLimit;
+                ensureAccepted = false;
+              }}
+              cp report.json ../run_report2.json
+              cp stdout ../run_stdout2.txt
+              popd > /dev/null
+            )
+            run_report2_path=$PWD/run_report2.json
+            run_stdout2_path=$PWD/run_stdout2.txt
+            run_status2=$(jq -r .status "$run_report2_path")
+            if [ "$run_status2" != "accepted" ]; then
+              echo "Phase 2 run failed. Status: $run_status2"
+              jq -n \
+                --arg status "$run_status2" \
+                --arg message "$(jq -r .errorMessage "$run_report2_path")" \
+                --argjson tick "$(jq .tick "$run_report2_path")" \
+                --argjson memory "$(jq .memory "$run_report2_path")" \
+                '{ "status": $status, "score": 0.0, "message": $message, "tick": $tick, "memory": $memory }' > $out/report.json
+              exit 0
+            fi
+            echo "1" > secondOut.txt
+            cat "$run_stdout2_path" >> secondOut.txt
+            install -Dm644 secondOut.txt $out/outputs/second
+
+            # --- Phase 2: Check ---
+            (
+              pushd $(mktemp -d) > /dev/null
+              ${hull.check.script {
+                checkerWasm = config.checker.cwasm;
+                input = "../secondIn.txt";
+                output = "../secondOut.txt";
+                answer = testCase.data.outputs + "/second";
+              }}
+              cp check.json ../check_report2.json
+              popd > /dev/null
+            )
+            check_report2_path=$PWD/check_report2.json
+            check_score2=$(jq -r .score "$check_report2_path")
+            if [ "$(echo "$check_score2 == 0.0" | bc)" -eq 1 ]; then
+              echo "Phase 2 check failed."
+              jq -n \
+                --arg status "$(jq -r .status "$check_report2_path")" \
+                --arg message "$(jq -r .message "$check_report2_path")" \
+                --argjson tick "$(jq .tick "$run_report2_path")" \
+                --argjson memory "$(jq .memory "$run_report2_path")" \
+                '{ "status": $status, "score": 0.0, "message": $message, "tick": $tick, "memory": $memory }' > $out/report.json
+              exit 0
+            fi
+
+            # --- Success ---
+            echo "All phases successful."
+            tick1=$(jq .tick "$run_report1_path")
+            tick2=$(jq .tick "$run_report2_path")
+            memory1=$(jq .memory "$run_report1_path")
+            memory2=$(jq .memory "$run_report2_path")
+            final_tick=$(( tick1 > tick2 ? tick1 : tick2 ))
+            final_memory=$(( memory1 > memory2 ? memory1 : memory2 ))
+
+            jq -n \
+              --arg status "$(jq -r .status "$check_report1_path")" \
+              --argjson score "$(jq .score "$check_report1_path")" \
+              --arg message "$(jq -r .message "$check_report1_path")" \
+              --argjson tick "$final_tick" \
+              --argjson memory "$final_memory" \
+              '{ "status": $status, "score": $score, "message": $message, "tick": $tick, "memory": $memory }' > $out/report.json
+          '';
     };
 }

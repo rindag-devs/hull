@@ -16,36 +16,65 @@
 {
   hull,
   pkgs,
+  lib,
   ...
 }:
 
 # Runs a CPLib checker and return its report
-{
-  problemName,
-  testCaseName,
-  solutionName,
-  checkerWasm,
-  input,
-  output,
-  answer,
-}:
 let
-  runResult = hull.runWasm {
-    name = "hull-check-${problemName}-${testCaseName}-${solutionName}";
-    arguments = [
-      "input"
-      "output"
-      "answer"
-    ];
-    wasm = checkerWasm;
-    inputFiles = {
-      inherit input output answer;
-    };
-  };
-  checkReport = builtins.fromJSON (builtins.readFile runResult.stderr);
+  # Generate a bash script to run the checker, outputs a `check.json` to the current directory
+  script =
+    {
+      checkerWasm,
+      input,
+      output,
+      answer,
+    }:
+    let
+      runChecker = hull.runWasm.script {
+        wasm = checkerWasm;
+        arguments = [
+          "input"
+          "output"
+          "answer"
+        ];
+        inputFiles = {
+          inherit input output answer;
+        };
+      };
+    in
+    ''
+      pushd $(mktemp -d) > /dev/null
+      ${runChecker}
+      ${lib.getExe pkgs.jq} -c \
+        '{ status: .status, score: .score, message: .message, readerTraceStacks: (.reader_trace_stacks // []), evaluatorTraceStacks: (.evaluator_trace_stacks // []) }' \
+        stderr > "''${DIRSTACK[1]}/check.json"
+      popd > /dev/null
+    '';
+
+  drv =
+    {
+      name,
+      checkerWasm,
+      input,
+      output,
+      answer,
+    }:
+    let
+      checkScript = script {
+        inherit
+          checkerWasm
+          input
+          output
+          answer
+          ;
+      };
+    in
+    pkgs.runCommandLocal "process-check-${name}" { } ''
+      ${checkScript}
+      install -Tm644 check.json $out
+    '';
 in
 {
-  inherit (checkReport) status score message;
-  readerTraceStacks = checkReport.reader_trace_stacks or [ ];
-  evaluatorTraceStacks = checkReport.evaluator_trace_stacks or [ ];
+  inherit script drv;
 }

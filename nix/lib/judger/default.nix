@@ -14,28 +14,24 @@
 */
 
 {
+  lib,
   hull,
+  pkgs,
+  hullPkgs,
   ...
 }:
 
-let
-  input =
-    problem:
-    { generatorCwasm, arguments, ... }@testCase:
-    let
-      runResult = hull.runWasm.drv {
-        name = "hull-generateInput-${problem.name}-${testCase.name}";
-        wasm = generatorCwasm;
-        inherit arguments;
-        ensureAccepted = true;
-      };
-      generatedInput = runResult + "/stdout";
-    in
-    generatedInput;
-
-  outputs =
-    { judger, mainCorrectSolution, ... }: testCase: judger.generateOutputs testCase mainCorrectSolution;
-in
 {
-  inherit input outputs;
+  batch = import ./batch.nix { inherit lib hull pkgs; };
+
+  stdioInteraction = import ./stdioInteraction.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      hullPkgs
+      ;
+  };
+
+  answerOnly = import ./answerOnly.nix { inherit lib hull pkgs; };
 }

@@ -16,6 +16,7 @@
 {
   lib,
   hull,
+  pkgs,
   ...
 }:
 
@@ -59,8 +60,8 @@ let
         description = "The memory in bytes of judgement.";
       };
       outputs = lib.mkOption {
-        type = lib.types.attrsOf lib.types.pathInStore;
-        description = "The output files of judgement";
+        type = lib.types.pathInStore;
+        description = "A nix store path. Each file in this directory is an output data file.";
       };
     };
   };
@@ -121,7 +122,7 @@ let
       };
     };
 
-  inputValidation = lib.types.submodule {
+  inputValidationReport = lib.types.submodule {
     options = {
       status = lib.mkOption {
         type = lib.types.strMatching "internal_error|valid|invalid";
@@ -146,7 +147,7 @@ let
     };
   };
 
-  checkerReport = lib.types.submodule {
+  checkReport = lib.types.submodule {
     options = {
       status = lib.mkOption {
         type = lib.types.strMatching "internal_error|accepted|wrong_answer|partially_correct";
@@ -194,7 +195,7 @@ let
             hull.generate.input problem {
               inherit generatorCwasm;
               arguments = config.arguments or [ ];
-              name = "${problem.name}-checker-test-input-${name}";
+              name = "${problem.name}-checkerTestInput-${name}";
             }
           else
             throw "Checker test `${name}` must have either inputFile or generator specified.";
@@ -210,28 +211,14 @@ let
                   problem.solutions.${config.solution}
                 else
                   throw "In checker test `${name}`, solution `${config.solution}` not found in problem.solutions";
-              # This assumes a simple batch-style run. For complex judgers,
-              # users should pre-generate the output and use `outputFile`.
-              solWasm = hull.compile.executable {
-                languages = problem.languages;
-                name = "${problem.name}-checker-test-solution-${sol.name}";
-                src = sol.src;
-                includes = problem.includes;
-                extraObjects = [ ];
+              fakeTestCase = {
+                name = "checkerTestOutput-${name}";
+                inherit (problem) tickLimit memoryLimit;
+                data.input = input;
               };
-              solCwasm = hull.compile.cwasm {
-                name = "${problem.name}-checker-test-solution-${sol.name}";
-                wasm = solWasm;
-              };
-              runResult = hull.runWasm {
-                name = "${problem.name}-run-checker-test-solution-${sol.name}";
-                wasm = solCwasm;
-                stdin = input;
-                tickLimit = problem.tickLimit;
-                memoryLimit = problem.memoryLimit;
-              };
+              generatedOutputs = problem.judger.generateOutputs fakeTestCase sol;
             in
-            runResult.stdout
+            "${generatedOutputs}/${config.outputFile}"
           else
             throw "Checker test `${name}` must have either outputFile or solution specified.";
 
@@ -239,20 +226,14 @@ let
         answer =
           let
             fakeTestCase = {
-              name = "checker-test-answer-${name}";
+              name = "checkerTestAnswer-${name}";
               data.input = input;
               tickLimit = problem.tickLimit;
               memoryLimit = problem.memoryLimit;
             };
             generatedOutputs = problem.judger.generateOutputs fakeTestCase problem.mainCorrectSolution;
-            outputKeys = lib.attrNames generatedOutputs;
           in
-          if (builtins.length outputKeys) == 1 then
-            generatedOutputs.${lib.head outputKeys}
-          else if builtins.hasAttr config.outputName generatedOutputs then
-            generatedOutputs.${config.outputName}
-          else
-            throw "Cannot automatically determine the answer file for checker test `${name}`. The problem's judger produces outputs (${builtins.toJSON outputKeys}) and none is named '${config.outputName}'.";
+          "${generatedOutputs}/${config.outputName}";
 
       in
       {
@@ -297,24 +278,28 @@ let
             type = lib.types.functionTo lib.types.bool;
             description = "A function that takes the check report and returns true if the test passes.";
           };
-          checkResult = lib.mkOption {
-            type = checkerReport;
+          resultDrv = lib.mkOption {
+            type = lib.types.pathInStore;
             readOnly = true;
-            description = "The result of running the checker on this test case.";
-            default = hull.check {
-              problemName = problem.name;
-              testCaseName = "checker-test-${name}";
-              solutionName = "checker-itself";
+            description = "A derivation of the report of running the checker on this test case.";
+            default = hull.check.drv {
+              name = "${problem.name}-checkerTest-${name}";
               checkerWasm = problem.checker.cwasm;
               inherit input output answer;
             };
-            defaultText = "The result of running the checker on this test case.";
+            defaultText = "The derivation of the result of running the checker on this test case.";
+          };
+          result = lib.mkOption {
+            type = checkReport;
+            description = "The result of this test.";
+            readOnly = true;
+            default = problem.checker.testResults.${config.name};
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
             readOnly = true;
             description = "Whether the prediction holds for this test case.";
-            default = config.prediction config.checkResult;
+            default = config.prediction config.result;
             defaultText = "Whether the prediction holds for this test case.";
           };
         };
@@ -373,23 +358,29 @@ let
             type = lib.types.functionTo lib.types.bool;
             description = "A function that takes the validation report and returns true if the test passes.";
           };
-          validationResult = lib.mkOption {
-            type = inputValidation;
+          resultDrv = lib.mkOption {
+            type = lib.types.pathInStore;
             readOnly = true;
-            description = "The result of running the validator on this test case.";
-            default = hull.validate {
+            description = "The derivation of the result of running the validator on this test case.";
+            default = hull.validate.drv {
               problemName = problem.name;
-              testCaseName = "validator-test-${name}";
+              testCaseName = "validatorTest-${name}";
               validatorWasm = problem.validator.cwasm;
               inherit input;
             };
             defaultText = "The result of running the validator on this test case.";
           };
+          result = lib.mkOption {
+            type = inputValidationReport;
+            description = "The result of this test.";
+            readOnly = true;
+            default = problem.validator.testResults.${config.name};
+          };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
             readOnly = true;
             description = "Whether the prediction holds for this test case.";
-            default = config.prediction config.validationResult;
+            default = config.prediction config.result;
             defaultText = "Whether the prediction holds for this test case.";
           };
         };
@@ -418,11 +409,11 @@ in
   inherit
     nameStr
     testCaseResultStatusStr
-    inputValidation
-    checkerReport
     testCaseResult
     validatorTest
     checkerTest
+    inputValidationReport
+    checkReport
     ;
 
   judger = mkUniqueType "hullJudger";
@@ -547,11 +538,11 @@ in
                   defaultText = "Derived from `inputFile` or `generator`.";
                 };
                 outputs = lib.mkOption {
-                  type = attrsOf pathInStore;
+                  type = pathInStore;
                   readOnly = true;
-                  description = "The store path to the correct output data file, generated by running the `mainCorrectSolution`.";
+                  description = "A nix store path generated by running `mainCorrectSolution`. Each file in this directory is a correct output data file.";
                   default = hull.generate.outputs problem config;
-                  defaultText = lib.literalExpression "hull.generate.output problem config";
+                  defaultText = lib.literalExpression "hull.generate.outputs problem config";
                 };
               };
             };
@@ -560,16 +551,11 @@ in
             description = "Read-only container for the test case's input and output data paths.";
           };
           inputValidation = lib.mkOption {
-            type = inputValidation;
+            type = inputValidationReport;
             readOnly = true;
             description = "The result of running the validator on the test case's input data.";
-            default = hull.validate {
-              problemName = problem.name;
-              testCaseName = config.name;
-              validatorWasm = problem.validator.cwasm;
-              input = config.data.input;
-            };
-            defaultText = lib.literalExpression "hull.validate problem config";
+            default = problem.testCaseInputValidations.${config.name};
+            defaultText = "Running `problem.validator` on this test case produces the result.";
           };
         };
       }
@@ -644,7 +630,19 @@ in
             type = attrsOf testCaseResult;
             readOnly = true;
             description = "The collected results of running and checking this solution against all test cases.";
-            default = lib.mapAttrs (tcName: tc: problem.judger.judge tc config) problem.testCases;
+            default =
+              let
+                drvs = lib.mapAttrs (tcName: tc: problem.judger.judge tc config) problem.testCases;
+                links = pkgs.linkFarm "hull-testCaseResults-${problem.name}-${config.name}" drvs;
+                results = lib.mapAttrs (
+                  tcName: _:
+                  let
+                    outputs = links + "/${tcName}/outputs";
+                  in
+                  (lib.importJSON (links + "/${tcName}/report.json")) // { inherit outputs; }
+                ) drvs;
+              in
+              results;
             defaultText = "Computed by the problem's configured judger for every test case.";
           };
           subtaskResults = lib.mkOption {
@@ -720,8 +718,20 @@ in
       options = (programOptions problem args) // {
         tests = lib.mkOption {
           type = attrsOf (checkerTest problem);
-          default = { };
           description = "An attribute set of tests for the checker itself.";
+          default = { };
+        };
+        testResults = lib.mkOption {
+          type = attrsOf checkReport;
+          description = "The result of tests.";
+          readOnly = true;
+          default =
+            let
+              drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.checker.tests;
+              results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
+            in
+            results;
+          defaultText = "Computed by running the checker on every test case in `problem.checker.tests";
         };
       };
     });
@@ -732,8 +742,20 @@ in
       options = (programOptions problem args) // {
         tests = lib.mkOption {
           type = attrsOf (validatorTest problem);
-          default = { };
           description = "An attribute set of tests for the validator itself.";
+          default = { };
+        };
+        testResults = lib.mkOption {
+          type = attrsOf inputValidationReport;
+          description = "The result of tests.";
+          readOnly = true;
+          default =
+            let
+              drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.validator.tests;
+              results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
+            in
+            results;
+          defaultText = "Computed by running the validator on every test case in `problem.validator.tests";
         };
       };
     });

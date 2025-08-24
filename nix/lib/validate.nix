@@ -13,25 +13,52 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-{ pkgs, hull, ... }:
-
 {
-  problemName,
-  testCaseName,
-  validatorWasm,
-  input,
+  pkgs,
+  hull,
+  hullPkgs,
+  ...
 }:
+
 let
-  runResult = hull.runWasm {
-    name = "hull-validate-${problemName}-${testCaseName}";
-    wasm = validatorWasm;
-    stdin = input;
-  };
-  result = builtins.fromJSON (builtins.readFile runResult.stderr);
+  script =
+    {
+      validatorWasm,
+      input,
+    }:
+    let
+      runScript = hull.runWasm.script {
+        wasm = validatorWasm;
+        stdin = input;
+      };
+    in
+    ''
+      pushd $(mktemp -d) > /dev/null
+      ${runScript}
+      ${pkgs.jq}/bin/jq -c \
+        '{ status: .status, message: .message, readerTraceStacks: (.reader_trace_stacks // []), readerTraceTree: (.reader_trace_tree // []), traits: (.traits // {}) }' \
+        stderr > "''${DIRSTACK[1]}/validation.json"
+      popd > /dev/null
+    '';
+
+  drv =
+    {
+      problemName,
+      testCaseName,
+      validatorWasm,
+      input,
+    }:
+    let
+      validateScript = script { inherit validatorWasm input; };
+    in
+    pkgs.runCommandLocal "process-validate-${problemName}-${testCaseName}"
+      { nativeBuildInputs = [ hullPkgs.default ]; }
+      ''
+        ${validateScript}
+        install -Tm644 validation.json $out
+      '';
+
 in
 {
-  inherit (result) status message;
-  readerTraceStacks = result.reader_trace_stacks or [ ];
-  readerTraceTree = result.reader_trace_tree or [ ];
-  traits = result.traits or { };
+  inherit script drv;
 }

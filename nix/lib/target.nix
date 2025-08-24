@@ -42,15 +42,11 @@
           tc:
           let
             dirPrefix = "$out/data/${lib.escapeShellArg tc.name}";
-            copyOutputsCommand = lib.concatMapAttrsStringSep "\n" (
-              name: file: "cp ${file} ${dirPrefix}/outputs/${lib.escapeShellArg name}"
-            ) tc.data.outputs;
           in
           ''
             mkdir -p ${dirPrefix}
             cp ${tc.data.input} ${dirPrefix}/input
-            mkdir -p ${dirPrefix}/outputs
-            ${copyOutputsCommand}
+            cp -r ${tc.data.outputs} ${dirPrefix}/outputs
             echo ${lib.escapeShellArg (builtins.toJSON tc.inputValidation)} > $out/data/${tc.name}/input-validation.json
           ''
         ) (builtins.attrValues testCases);
@@ -97,16 +93,12 @@
               tcName: result:
               let
                 dirPrefix = "$out/solution/${solName}/test-case-result/${tcName}";
-                resultJSON = builtins.toJSON result;
-                copyOutputsCommand = lib.concatMapAttrsStringSep "\n" (
-                  name: file: "cp ${file} ${dirPrefix}/outputs/${lib.escapeShellArg name}"
-                ) result.outputs;
+                resultJSON = builtins.toJSON (builtins.removeAttrs result [ "output" ]);
               in
               ''
                 mkdir -p ${dirPrefix}
                 echo ${lib.escapeShellArg resultJSON} > ${dirPrefix}/result.json
-                mkdir -p ${dirPrefix}/outputs
-                ${copyOutputsCommand}
+                cp -r ${result.outputs} ${dirPrefix}/outputs
               ''
             ) testCaseResults;
             subtaskResultsCommand = lib.concatLines (
