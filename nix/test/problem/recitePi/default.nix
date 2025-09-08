@@ -7,7 +7,7 @@
 {
   name = "recitePi";
 
-  includes = [ (cplib + "/include") ];
+  includes = [ cplib ];
 
   judger = hull.judger.answerOnly config;
 

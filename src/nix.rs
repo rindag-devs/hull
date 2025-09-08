@@ -27,7 +27,7 @@ pub struct FlakeMetadata {
 /// Get the current OS name in nix.
 pub fn get_current_system() -> Result<String> {
   let output = Command::new("nix")
-    .args(&["eval", "--raw", "nixpkgs#system"])
+    .args(["eval", "--raw", "nixpkgs#system"])
     .output()?;
 
   let data = String::from_utf8_lossy(&output.stdout);
@@ -315,5 +315,11 @@ impl BuildCommand {
         String::from_utf8(output.stdout).context("Failed to parse nix build stdout as UTF-8")?;
       Ok(stdout_str.trim().to_string())
     }
+  }
+}
+
+impl Default for BuildCommand {
+  fn default() -> Self {
+    Self::new()
   }
 }

@@ -161,9 +161,7 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
     &run_wasm_opts.arguments,
     run_wasm_opts.tick_limit,
     run_wasm_opts.memory_limit,
-    stdin,
-    stdout,
-    stderr,
+    [stdin, stdout, stderr],
     Some(Box::new(judge_dir)),
   );
 
