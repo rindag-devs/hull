@@ -66,10 +66,7 @@ impl ResourceLimiter for MemoryLimiter {
     desired: usize,
     maximum: Option<usize>,
   ) -> Result<bool> {
-    let allow = match maximum {
-      Some(max) if desired > max => false,
-      _ => true,
-    };
+    let allow = !matches!(maximum, Some(max) if desired > max);
     Ok(allow)
   }
 }
@@ -145,9 +142,7 @@ pub fn run(
   arguments: &[String],
   tick_limit: u64,
   memory_limit: u64,
-  stdin: Box<dyn WasiFile>,
-  stdout: Box<dyn WasiFile>,
-  stderr: Box<dyn WasiFile>,
+  fd_files: [Box<dyn WasiFile>; 3],
   preopened_dir: Option<Box<dyn WasiDir>>,
 ) -> RunResult {
   let engine = match create_engine(memory_limit) {
@@ -165,9 +160,7 @@ pub fn run(
     arguments,
     memory_limit,
     tick_limit,
-    stdin,
-    stdout,
-    stderr,
+    fd_files,
     preopened_dir,
   ) {
     Ok(x) => x,
@@ -189,7 +182,7 @@ pub fn run(
 
 fn create_engine(memory_limit: u64) -> Result<Engine> {
   Engine::new(
-    &Config::new()
+    Config::new()
       .consume_fuel(true)
       .wasm_bulk_memory(false)
       .wasm_custom_page_sizes(false)
@@ -223,15 +216,14 @@ fn create_store(
   arguments: &[String],
   memory_limit: u64,
   tick_limit: u64,
-  stdin: Box<dyn WasiFile>,
-  stdout: Box<dyn WasiFile>,
-  stderr: Box<dyn WasiFile>,
+  fd_files: [Box<dyn WasiFile>; 3],
   preopened_dir: Option<Box<dyn WasiDir>>,
 ) -> Result<Store<ApplicationState>> {
   let random = Box::new(rand::rngs::StdRng::seed_from_u64(0));
   let clocks = WasiClocks::new().with_system(&NULL_SYSTEM_CLOCK);
   let mut wasi_ctx = WasiCtx::new(random, clocks, Box::new(SyncSched::new()), Table::new());
 
+  let [stdin, stdout, stderr] = fd_files;
   wasi_ctx.set_stdin(stdin);
   wasi_ctx.set_stdout(stdout);
   wasi_ctx.set_stderr(stderr);
@@ -256,7 +248,7 @@ fn create_store(
 }
 
 fn create_main_module(engine: &Engine, wasm: &[u8]) -> Result<Module> {
-  let main_module = if let Some(..) = Engine::detect_precompiled(wasm) {
+  let main_module = if Engine::detect_precompiled(wasm).is_some() {
     unsafe { Module::deserialize(engine, wasm)? }
   } else {
     Module::new(engine, wasm)?
@@ -293,35 +285,37 @@ fn execute_and_get_results(
   let mut exit_code: i32 = -1;
   let mut error_message = String::new();
 
-  let status = if main_call_result.is_ok() {
-    exit_code = 0;
-    RunStatus::Accepted
-  } else if memory_limiter.memory_limit_exceeded {
-    error_message = format!("Memory limit exceeded");
-    RunStatus::MemoryLimitExceeded
-  } else {
-    // Check if the error is due to out of fuel.
-    let err = main_call_result.unwrap_err();
-    if let Some(trap) = err.downcast_ref::<Trap>() {
-      if *trap == Trap::OutOfFuel {
-        error_message = format!("Tick limit exceeded");
-        RunStatus::TimeLimitExceeded
+  let status = match main_call_result {
+    Ok(()) => {
+      exit_code = 0;
+      RunStatus::Accepted
+    }
+    Err(err) => {
+      if memory_limiter.memory_limit_exceeded {
+        error_message = "Memory limit exceeded".to_string();
+        RunStatus::MemoryLimitExceeded
+      } else if let Some(trap) = err.downcast_ref::<Trap>() {
+        // Check if the error is due to out of fuel.
+        if *trap == Trap::OutOfFuel {
+          error_message = "Tick limit exceeded".to_string();
+          RunStatus::TimeLimitExceeded
+        } else {
+          // If it's another type of trap, return the error.
+          error_message = format!("Trapped when calling main: {}", err);
+          RunStatus::RuntimeError
+        }
+      } else if let Some(exit) = err.downcast_ref::<I32Exit>() {
+        exit_code = exit.0;
+        if exit_code == 0 {
+          RunStatus::Accepted
+        } else {
+          error_message = format!("Nonzero exit code: {}", exit_code);
+          RunStatus::RuntimeError
+        }
       } else {
-        // If it's another type of trap, return the error.
-        error_message = format!("Trapped when calling main: {}", err.to_string());
+        error_message = format!("Error when calling main: {}", err);
         RunStatus::RuntimeError
       }
-    } else if let Some(exit) = err.downcast_ref::<I32Exit>() {
-      exit_code = exit.0;
-      if exit_code == 0 {
-        RunStatus::Accepted
-      } else {
-        error_message = format!("Nonzero exit code: {}", exit_code);
-        RunStatus::RuntimeError
-      }
-    } else {
-      error_message = format!("Error when calling main: {}", err.to_string());
-      RunStatus::RuntimeError
     }
   };
 

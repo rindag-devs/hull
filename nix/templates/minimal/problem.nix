@@ -6,7 +6,7 @@
 {
   name = "exampleProblem";
 
-  includes = [ (cplib + "/include") ];
+  includes = [ cplib ];
 
   checker = {
     src = ./checker.20.cpp;

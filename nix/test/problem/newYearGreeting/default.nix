@@ -13,7 +13,7 @@
   memoryLimit = 256 * 1024 * 1024;
 
   includes = [
-    (cplib + "/include")
+    cplib
     ./include
   ];
 

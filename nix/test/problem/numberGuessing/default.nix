@@ -7,7 +7,7 @@
 {
   name = "numberGuessing";
 
-  includes = [ (cplib + "/include") ];
+  includes = [ cplib ];
 
   judger = hull.judger.stdioInteraction config { realTimeLimitSeconds = 1; };
 

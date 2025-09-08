@@ -45,7 +45,7 @@
             ];
 
             env = {
-              CPLUS_INCLUDE_PATH = "${cplib}/include";
+              CPLUS_INCLUDE_PATH = toString cplib;
             };
           };
 

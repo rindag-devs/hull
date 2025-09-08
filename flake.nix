@@ -28,7 +28,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     cplib = {
-      url = "github:/rindag-devs/cplib";
+      url = "github:/rindag-devs/cplib/single-header-snapshot";
       flake = false;
     };
   };
@@ -86,7 +86,7 @@
 
             env = {
               RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
-              CPLUS_INCLUDE_PATH = "${cplib}/include";
+              CPLUS_INCLUDE_PATH = toString cplib;
             };
           };
 

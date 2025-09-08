@@ -158,11 +158,11 @@ pub fn run(opts: &StressOpts) -> Result<()> {
       serde_json::to_string(&opts.std).context("Failed to serialize std name to JSON")?;
     let tick_limit = opts
       .tick_limit
-      .and_then(|x| Some(x.to_string()))
+      .map(|x| x.to_string())
       .unwrap_or("null".to_string());
     let memory_limit = opts
       .memory_limit
-      .and_then(|x| Some(x.to_string()))
+      .map(|x| x.to_string())
       .unwrap_or("null".to_string());
 
     let system = opts
