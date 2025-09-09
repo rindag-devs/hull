@@ -2,9 +2,9 @@ let
   welcomeText = ''
     # Getting Started
 
-    - Run `nix develop` to enter the development environment
-    - Run `hull build` to build your problem
-    - Run `hull judge path/to/solution/source/file` to judge a solution
+    - Run `nix develop` to enter the development environment.
+    - Run `hull build` to build your problem.
+    - Run `hull judge path/to/solution/source/file` to judge a solution.
   '';
 in
 {

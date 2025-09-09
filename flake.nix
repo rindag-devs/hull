@@ -31,6 +31,10 @@
       url = "github:/rindag-devs/cplib/single-header-snapshot";
       flake = false;
     };
+    cplibInitializers = {
+      url = "github:/rindag-devs/cplib-initializers";
+      flake = false;
+    };
   };
 
   outputs =
@@ -41,6 +45,7 @@
       crane,
       typix,
       cplib,
+      cplibInitializers,
     }:
     let
       supportedSystems = [
@@ -93,7 +98,12 @@
           typixLib = typix.lib.${system};
 
           hull = import ./nix/lib {
-            inherit pkgs typixLib cplib;
+            inherit
+              pkgs
+              typixLib
+              cplib
+              cplibInitializers
+              ;
             hullPkgs = packages;
           };
 

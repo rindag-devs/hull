@@ -18,6 +18,7 @@
   hullPkgs,
   typixLib,
   cplib,
+  cplibInitializers,
 }:
 
 let
@@ -31,6 +32,7 @@ let
         hullPkgs
         typixLib
         cplib
+        cplibInitializers
         ;
       inherit (pkgs) lib;
     };
@@ -46,6 +48,7 @@ let
     judgeSingleFile = callSubLib ./judgeSingleFile.nix;
     language = callSubLib ./language.nix;
     overview = callSubLib ./overview;
+    patchCplibProgram = callSubLib ./patchCplibProgram.nix;
     runWasm = callSubLib ./runWasm.nix;
     stress = callSubLib ./stress.nix;
     target = callSubLib ./target.nix;

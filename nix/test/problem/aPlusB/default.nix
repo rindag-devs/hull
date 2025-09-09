@@ -32,6 +32,7 @@
 
   validator = {
     src = ./validator.20.cpp;
+    participantVisibility = "src";
     tests = {
       noEoln = {
         inputFile = builtins.toFile "noEoln.in" "1 2";
@@ -61,7 +62,10 @@
   };
 
   generators = {
-    rand.src = ./generator/rand.20.cpp;
+    rand = {
+      src = ./generator/rand.20.cpp;
+      participantVisibility = "wasm";
+    };
   };
 
   traits = {
@@ -165,6 +169,7 @@
           "0" = tle_or_ac;
           "1" = tle_or_ac;
         };
+        participantVisibility = true;
       };
       mle-dynamic = {
         src = ./solution/mle-dynamic.20.cpp;
@@ -232,5 +237,11 @@
 
   targets = {
     default = hull.target.default;
+    hydro = hull.target.hydro {
+      statements = {
+        en = "statement.en.pdf";
+        zh = "statement.zh.pdf";
+      };
+    };
   };
 }

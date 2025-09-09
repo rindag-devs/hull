@@ -15,7 +15,7 @@
     ./include
   ];
 
-  judger = hull.judger.batch config { extraObjects = [ ./grader.20.cpp ]; };
+  judger = hull.judger.batch config { extraObjects = [ ./grader.17.cpp ]; };
 
   checker.src = ./checker.20.cpp;
 
@@ -76,5 +76,10 @@
 
   targets = {
     default = hull.target.default;
+    hydro = hull.target.hydro {
+      grader = ./grader.17.cpp;
+      testDataExtraFiles."add.h" = ./include/add.h;
+      userExtraFiles = [ "add.h" ];
+    };
   };
 }

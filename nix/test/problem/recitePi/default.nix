@@ -54,5 +54,8 @@
 
   targets = {
     default = hull.target.default;
+    hydro = hull.target.hydro {
+      type = "submit_answer";
+    };
   };
 }
