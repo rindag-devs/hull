@@ -393,6 +393,7 @@ let
     functionTo
     pathInStore
     nonEmptyStr
+    strMatching
     listOf
     attrsOf
     str
@@ -576,6 +577,11 @@ in
             type = float;
             description = "The full score of this subtask.";
           };
+          scoringMethod = lib.mkOption {
+            type = strMatching "min|sum";
+            description = "Scoring method for this subtask.";
+            default = "min";
+          };
           testCases = lib.mkOption {
             type = listOf attrs;
             readOnly = true;
@@ -687,7 +693,14 @@ in
                 statuses = lib.unique (
                   builtins.sort builtins.lessThan (lib.map ({ status, ... }: status) (builtins.attrValues testCases))
                 );
-                rawScore = builtins.foldl' lib.min 1.0 (map (tc: tc.score) (builtins.attrValues testCases));
+                rawScore =
+                  if st.scoringMethod == "min" then
+                    builtins.foldl' lib.min 1.0 (map (tc: tc.score) (builtins.attrValues testCases))
+                  else if st.scoringMethod == "sum" then
+                    (builtins.foldl' builtins.add 0.0 (map (tc: tc.score) (builtins.attrValues testCases)))
+                    / (builtins.length (builtins.attrNames testCases))
+                  else
+                    throw "Invalid subtask scoring method: ${st.scoringMethod}";
                 scaledScore = rawScore * st.fullScore;
               in
               {
