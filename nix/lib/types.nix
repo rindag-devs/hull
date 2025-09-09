@@ -609,6 +609,11 @@ in
             type = lib.types.path;
             description = "Path to the source file or directory of the solution.";
           };
+          participantVisibility = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "The visibility of this solution to participants.";
+          };
           mainCorrectSolution = lib.mkOption {
             type = bool;
             default = false;

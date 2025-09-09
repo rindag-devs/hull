@@ -44,7 +44,7 @@ let
       extName = if outputObject then "o" else "wasm";
       linkerFlags = lib.optionalString (
         !outputObject
-      ) "-Wl,--strip-debug -Wl,-z,stack-size=${toString stackSizeInBytes}";
+      ) "-lm -Wl,--strip-debug -Wl,-z,stack-size=${toString stackSizeInBytes}";
     in
     pkgs.runCommandLocal "hull-${namePrefix}-${name}.${extName}"
       { nativeBuildInputs = [ hullPkgs.wasm-judge-clang ]; }
