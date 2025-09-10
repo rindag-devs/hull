@@ -38,6 +38,6 @@
     };
 
   targets = {
-    default = hull.target.default;
+    default = hull.target.common;
   };
 }

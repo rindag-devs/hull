@@ -207,10 +207,7 @@ in
 
       validMatches = builtins.filter (candidate: builtins.elem candidate languageList) candidates;
     in
-    if validMatches == [ ] then
-      throw "Cannot find a matched language for `${baseName}`"
-    else
-      lib.last validMatches;
+    if validMatches == [ ] then null else lib.last validMatches;
 
   toFileExtension =
     language: builtins.concatStringsSep "." (lib.reverseList (lib.splitString "." language));

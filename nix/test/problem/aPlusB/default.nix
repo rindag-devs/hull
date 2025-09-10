@@ -236,12 +236,15 @@
     statements;
 
   targets = {
-    default = hull.target.default;
+    default = hull.target.common;
     hydro = hull.target.hydro {
       statements = {
         en = "statement.en.pdf";
         zh = "statement.zh.pdf";
       };
+    };
+    lemon = hull.target.lemon {
+      solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
   };
 }
