@@ -1,4 +1,5 @@
 {
+  lib,
   hull,
   config,
   cplib,
@@ -75,11 +76,17 @@
     };
 
   targets = {
-    default = hull.target.default;
+    default = hull.target.common;
     hydro = hull.target.hydro {
-      grader = ./grader.17.cpp;
+      graderSrc = ./grader.17.cpp;
       testDataExtraFiles."add.h" = ./include/add.h;
       userExtraFiles = [ "add.h" ];
+    };
+    lemon = hull.target.lemon {
+      graderSrc = ./grader.17.cpp;
+      interactionLib = ./include/add.h;
+      interactionLibName = "add.h";
+      solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
   };
 }

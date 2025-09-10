@@ -51,7 +51,7 @@ let
     patchCplibProgram = callSubLib ./patchCplibProgram.nix;
     runWasm = callSubLib ./runWasm.nix;
     stress = callSubLib ./stress.nix;
-    target = callSubLib ./target.nix;
+    target = callSubLib ./target;
     types = callSubLib ./types.nix;
     validate = callSubLib ./validate.nix;
 
