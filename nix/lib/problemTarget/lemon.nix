@@ -146,11 +146,11 @@
       # Structure is based on reverse-engineering LemonLime's source code.
       lemonJsonContent = {
         version = "1.0";
-        contestTitle = displayName.en or name;
+        contestTitle = name;
 
         tasks = [
           {
-            problemTitle = displayName.en or name;
+            problemTitle = name;
             sourceFileName = name;
             inputFileName = "${name}.in";
             outputFileName = "${name}.out";
