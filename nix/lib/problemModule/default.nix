@@ -166,7 +166,7 @@
     };
 
     targets = lib.mkOption {
-      type = lib.types.attrsOf hull.types.target;
+      type = lib.types.attrsOf hull.types.problemTarget;
       default = { };
       description = "An attribute set of build targets for the problem, defining final package structures.";
     };

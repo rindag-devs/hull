@@ -803,5 +803,6 @@ in
     };
   };
 
-  target = mkUniqueType "hullTarget";
+  problemTarget = mkUniqueType "hullProblemTarget";
+  contestTarget = mkUniqueType "hullContestTarget";
 }

@@ -134,6 +134,10 @@
               newYearGreeting = hull.evalProblem ./nix/test/problem/newYearGreeting;
             };
           };
+
+          hullContests = {
+            test.allProblems = hull.evalContest ./nix/test/contest/allProblems.nix;
+          };
         }
       );
 
@@ -142,6 +146,7 @@
       packages = forEachSystem (system: self.perSystem.${system}.packages);
       formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
       hullProblems = forEachSystem (system: self.perSystem.${system}.hullProblems);
+      hullContests = forEachSystem (system: self.perSystem.${system}.hullContests);
       templates = import ./nix/templates;
       defaultTemplate = self.templates.basic;
     };

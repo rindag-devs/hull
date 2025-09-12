@@ -37,6 +37,7 @@ fn main() -> Result<()> {
 
   match &opts.command {
     cli::Command::Build(opts) => cmd::build::run(opts),
+    cli::Command::BuildContest(opts) => cmd::build_contest::run(opts),
     cli::Command::CompileCwasm(opts) => cmd::compile_cwasm::run(opts),
     cli::Command::Judge(opts) => cmd::judge::run(opts),
     cli::Command::PatchIncludes(opts) => cmd::patch_includes::run(opts),

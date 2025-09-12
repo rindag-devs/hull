@@ -13,10 +13,30 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-pub mod build;
-pub mod build_contest;
-pub mod compile_cwasm;
-pub mod judge;
-pub mod patch_includes;
-pub mod run_wasm;
-pub mod stress;
+{ lib, pkgs }:
+
+# A simple contest target builds a specific problem target for each problem and puts it into the
+# corresponding subdirectory.
+{
+  # Name of problem target.
+  problemTarget ? "default",
+}:
+{
+  _type = "hullContestTarget";
+  __functor =
+    self:
+    {
+      name,
+      problems,
+      ...
+    }:
+    let
+      copyProblemsCommand = lib.concatMapStringsSep "\n" (
+        p: "cp -r ${p.config.targetOutputs.${problemTarget}} $out/${p.config.name}"
+      ) problems;
+    in
+    pkgs.runCommandLocal "hull-contestTargetOutput-${name}-common" { } ''
+      mkdir $out
+      ${copyProblemsCommand}
+    '';
+}
