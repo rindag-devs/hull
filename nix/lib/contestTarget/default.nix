@@ -13,10 +13,14 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-pub mod build;
-pub mod build_contest;
-pub mod compile_cwasm;
-pub mod judge;
-pub mod patch_includes;
-pub mod run_wasm;
-pub mod stress;
+{
+  lib,
+  pkgs,
+  ...
+}:
+
+{
+  common = import ./common.nix {
+    inherit lib pkgs;
+  };
+}

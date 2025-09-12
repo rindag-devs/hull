@@ -241,16 +241,16 @@
     statements;
 
   targets = {
-    default = hull.target.common;
-    hydro = hull.target.hydro {
+    default = hull.problemTarget.common;
+    hydro = hull.problemTarget.hydro {
       statements = {
         en = "statement.en.pdf";
         zh = "statement.zh.pdf";
       };
     };
-    lemon = hull.target.lemon {
+    lemon = hull.problemTarget.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
-    uoj = hull.target.uoj { };
+    uoj = hull.problemTarget.uoj { };
   };
 }

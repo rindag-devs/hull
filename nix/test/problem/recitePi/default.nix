@@ -53,11 +53,11 @@
     };
 
   targets = {
-    default = hull.target.common;
-    hydro = hull.target.hydro {
+    default = hull.problemTarget.common;
+    hydro = hull.problemTarget.hydro {
       type = "answerOnly";
     };
-    uoj = hull.target.uoj {
+    uoj = hull.problemTarget.uoj {
       type = "answerOnly";
     };
   };

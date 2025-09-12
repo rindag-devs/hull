@@ -22,7 +22,6 @@
 }:
 
 let
-  problemModule = ./problemModule;
   callSubLib =
     p:
     import p {
@@ -40,8 +39,10 @@ let
   hull = {
     check = callSubLib ./check.nix;
     compile = callSubLib ./compile.nix;
+    contestTarget = callSubLib ./contestTarget;
     docs = callSubLib ./docs.nix;
     document = callSubLib ./document.nix;
+    evalContest = callSubLib ./evalContest.nix;
     evalProblem = callSubLib ./evalProblem.nix;
     generate = callSubLib ./generate.nix;
     judger = callSubLib ./judger;
@@ -49,13 +50,14 @@ let
     language = callSubLib ./language.nix;
     overview = callSubLib ./overview;
     patchCplibProgram = callSubLib ./patchCplibProgram.nix;
+    problemTarget = callSubLib ./problemTarget;
     runWasm = callSubLib ./runWasm.nix;
     stress = callSubLib ./stress.nix;
-    target = callSubLib ./target;
     types = callSubLib ./types.nix;
     validate = callSubLib ./validate.nix;
 
-    inherit problemModule;
+    contestModule = ./contestModule;
+    problemModule = ./problemModule;
   };
 in
 hull

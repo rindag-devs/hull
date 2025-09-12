@@ -67,11 +67,11 @@
     };
 
   targets = {
-    default = hull.target.common;
-    hydro = hull.target.hydro {
+    default = hull.problemTarget.common;
+    hydro = hull.problemTarget.hydro {
       type = "stdioInteraction";
     };
-    uoj = hull.target.uoj {
+    uoj = hull.problemTarget.uoj {
       type = "stdioInteraction";
       twoStepInteraction = true;
     };

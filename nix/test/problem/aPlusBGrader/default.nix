@@ -76,19 +76,19 @@
     };
 
   targets = {
-    default = hull.target.common;
-    hydro = hull.target.hydro {
+    default = hull.problemTarget.common;
+    hydro = hull.problemTarget.hydro {
       graderSrc = ./grader.17.cpp;
       testDataExtraFiles."add.h" = ./include/add.h;
       userExtraFiles = [ "add.h" ];
     };
-    lemon = hull.target.lemon {
+    lemon = hull.problemTarget.lemon {
       graderSrc = ./grader.17.cpp;
       interactionLib = ./include/add.h;
       interactionLibName = "add.h";
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
-    uoj = hull.target.uoj {
+    uoj = hull.problemTarget.uoj {
       graderSrcs.cpp = ./grader.17.cpp;
       extraRequireFiles = {
         "add.h" = ./include/add.h;

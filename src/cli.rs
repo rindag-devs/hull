@@ -16,8 +16,8 @@
 use clap::{Parser, Subcommand, command};
 
 use crate::cmd::{
-  build::BuildOpts, compile_cwasm::CompileCwasmOpts, judge::JudgeOpts,
-  patch_includes::PatchIncludesOpts, run_wasm::RunWasmOpts, stress::StressOpts,
+  build::BuildOpts, build_contest::BuildContestOpts, compile_cwasm::CompileCwasmOpts,
+  judge::JudgeOpts, patch_includes::PatchIncludesOpts, run_wasm::RunWasmOpts, stress::StressOpts,
 };
 
 /// Competitive programming proposition automation tool
@@ -37,6 +37,7 @@ pub struct Opts {
 #[derive(Subcommand)]
 pub enum Command {
   Build(BuildOpts),
+  BuildContest(BuildContestOpts),
   CompileCwasm(CompileCwasmOpts),
   Judge(JudgeOpts),
   PatchIncludes(PatchIncludesOpts),

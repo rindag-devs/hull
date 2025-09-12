@@ -13,10 +13,51 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-pub mod build;
-pub mod build_contest;
-pub mod compile_cwasm;
-pub mod judge;
-pub mod patch_includes;
-pub mod run_wasm;
-pub mod stress;
+{
+  pkgs,
+  hull,
+  lib,
+  cplib,
+  cplibInitializers,
+  ...
+}:
+
+{
+  common = import ./common.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      ;
+  };
+
+  hydro = import ./hydro.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      cplib
+      cplibInitializers
+      ;
+  };
+
+  lemon = import ./lemon.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      cplib
+      cplibInitializers
+      ;
+  };
+
+  uoj = import ./uoj.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      cplib
+      cplibInitializers
+      ;
+  };
+}
