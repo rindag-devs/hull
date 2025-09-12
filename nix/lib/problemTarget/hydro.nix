@@ -38,8 +38,8 @@
   # Example: { en = "statement.en.pdf"; zh = "statement.zh.pdf"; }
   statements ? { },
 
-  # The default language for the problem statement if not specified otherwise.
-  defaultLanguage ? "en",
+  # The default display language for the problem statement if not specified otherwise.
+  defaultDisplayLanguage ? "en",
 
   # The owner's UID in Hydro for the problem.yaml.
   owner ? 0,
@@ -80,11 +80,15 @@
   # The name of the test case output that will be used as the output of the Hydro test case.
   outputName ? if type == "stdioInteraction" then null else "output",
 
-  # Content of custom compile.sh
+  # Content of custom compile.sh.
   compileSh ? null,
 
-  # Content of custom execute.sh
+  # Content of custom execute.sh.
   executeSh ? null,
+
+  # Allowed programming languages. A list of `langs` for the problem.yaml.
+  # Null means all languages are allowed.
+  allowedLanguages ? null,
 }:
 
 {
@@ -117,7 +121,7 @@
 
       # Content for problem.yaml
       problemYamlContent = {
-        title = displayName.${defaultLanguage} or name;
+        title = displayName.${defaultDisplayLanguage} or name;
         inherit owner tag;
       };
 
@@ -170,7 +174,8 @@
             checker = "checker.${programExtName}";
             checker_type = "syzoj";
           }
-      );
+      )
+      // lib.optionalAttrs (allowedLanguages != null) { langs = allowedLanguages; };
 
       # Shell command to copy test case input/output files
       testDataCommand = lib.concatMapStringsSep "\n" (tc: ''

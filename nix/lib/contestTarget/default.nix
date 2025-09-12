@@ -23,4 +23,8 @@
   common = import ./common.nix {
     inherit lib pkgs;
   };
+
+  lemon = import ./lemon.nix {
+    inherit lib pkgs;
+  };
 }
