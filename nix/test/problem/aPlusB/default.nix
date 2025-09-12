@@ -98,6 +98,10 @@
         "--same"
         "--salt=0"
       ];
+      groups = [
+        "sample_large"
+        "pretest"
+      ];
       traits = {
         a_positive = true;
         b_positive = true;
@@ -135,6 +139,7 @@
         b_positive = true;
       };
       fullScore = 0.5;
+      scoringMethod = "sum";
     }
     # fallback
     { fullScore = 0.5; }
@@ -246,5 +251,6 @@
     lemon = hull.target.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
+    uoj = hull.target.uoj { };
   };
 }

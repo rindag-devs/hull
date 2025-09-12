@@ -88,5 +88,11 @@
       interactionLibName = "add.h";
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
+    uoj = hull.target.uoj {
+      graderSrcs.cpp = ./grader.17.cpp;
+      extraRequireFiles = {
+        "add.h" = ./include/add.h;
+      };
+    };
   };
 }

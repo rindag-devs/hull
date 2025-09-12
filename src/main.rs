@@ -36,10 +36,11 @@ fn main() -> Result<()> {
   let opts = Opts::parse();
 
   match &opts.command {
-    cli::Command::Build(build_opts) => cmd::build::run(build_opts),
-    cli::Command::CompileCwasm(compile_cwasm_opts) => cmd::compile_cwasm::run(compile_cwasm_opts),
-    cli::Command::Judge(judge_opts) => cmd::judge::run(judge_opts),
-    cli::Command::RunWasm(run_wasm_opts) => cmd::run_wasm::run(run_wasm_opts),
-    cli::Command::Stress(stress_opts) => cmd::stress::run(stress_opts),
+    cli::Command::Build(opts) => cmd::build::run(opts),
+    cli::Command::CompileCwasm(opts) => cmd::compile_cwasm::run(opts),
+    cli::Command::Judge(opts) => cmd::judge::run(opts),
+    cli::Command::PatchIncludes(opts) => cmd::patch_includes::run(opts),
+    cli::Command::RunWasm(opts) => cmd::run_wasm::run(opts),
+    cli::Command::Stress(opts) => cmd::stress::run(opts),
   }
 }

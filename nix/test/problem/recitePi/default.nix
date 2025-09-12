@@ -55,7 +55,10 @@
   targets = {
     default = hull.target.common;
     hydro = hull.target.hydro {
-      type = "submit_answer";
+      type = "answerOnly";
+    };
+    uoj = hull.target.uoj {
+      type = "answerOnly";
     };
   };
 }
