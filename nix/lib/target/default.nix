@@ -35,4 +35,14 @@
       cplibInitializers
       ;
   };
+
+  uoj = import ./uoj.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      cplib
+      cplibInitializers
+      ;
+  };
 }

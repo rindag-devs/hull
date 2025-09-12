@@ -125,7 +125,7 @@
           type = st.scoringMethod;
           cases = map (tc: {
             input = "${tc.name}.in";
-            output = if outputName != null then "${tc.name}.out" else "/dev/null";
+            output = if outputName != null then "${tc.name}.ans" else "/dev/null";
           }) st.testCases;
         }) subtasks;
         validator = "validator.${programExtName}";
@@ -162,7 +162,7 @@
         cp ${tc.data.input} $tmpdir/testdata/${tc.name}.in
         ${lib.optionalString (
           outputName != null
-        ) "cp ${tc.data.outputs}/${outputName} $tmpdir/testdata/${tc.name}.out"}
+        ) "cp ${tc.data.outputs}/${outputName} $tmpdir/testdata/${tc.name}.ans"}
       '') (lib.attrValues testCases);
 
       # Shell command to copy documents
@@ -217,6 +217,20 @@
           ) generators)
           (lib.concatMapAttrsStringSep "\n" (solName: sol: mkSolutionCopyCommand solName sol) solutions)
         ];
+
+      # Shell command to copy sample test cases
+      samplesCommand =
+        let
+          samples = lib.filterAttrs (
+            _: { groups, ... }: (builtins.elem "sample" groups) || (builtins.elem "sample_large" groups)
+          ) testCases;
+        in
+        lib.concatMapAttrsStringSep "\n" (tcName: tc: ''
+          cp ${tc.data.input} $tmpdir/additional_file/sample_${tc.name}.in
+          ${lib.optionalString (
+            outputName != null
+          ) "cp ${tc.data.outputs}/${outputName} $tmpdir/additional_file/sample_${tc.name}.ans"}
+        '') samples;
 
       patchedChecker =
         if !patchCplibProgram then
@@ -326,8 +340,9 @@
         # Copy participant-visible programs
         ${participantProgramsCommand}
 
-        # Copy test data (inputs and outputs)
+        # Copy test data (inputs and answers)
         ${testDataCommand}
+        ${samplesCommand}
 
         # Copy checker, interactor, validator
         cp ${patchedChecker} $tmpdir/testdata/checker.${programExtName}

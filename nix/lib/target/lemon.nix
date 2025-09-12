@@ -75,33 +75,57 @@
           throw "Invalid problem type ${type}";
 
       # Lemon's "TestCase" is equivalent to a Hull "Subtask".
-      lemonTestCases = lib.imap0 (
-        index: st:
+      # For Hull subtasks with 'sum' scoring, we create a separate Lemon TestCase for each Hull test case.
+      lemonTestCases =
         let
-          # Ensure all test cases in a subtask have the same limits.
-          firstTc = builtins.head st.testCases;
-          firstTl = firstTc.tickLimit;
-          firstMl = firstTc.memoryLimit;
-          reduceSame =
-            first: list:
-            builtins.foldl' (
-              a: b:
-              if a == b then
-                a
-              else
-                throw "In problem ${name}, subtask ${index}, test cases have different tick or memory limits"
-            ) first list;
-          reducedTl = reduceSame firstTl (map ({ tickLimit, ... }: tickLimit) st.testCases);
-          reducedMl = reduceSame firstMl (map ({ memoryLimit, ... }: memoryLimit) st.testCases);
+          subtasksWithIndex = lib.imap0 (index: st: { inherit index st; }) subtasks;
         in
-        {
-          fullScore = builtins.floor (st.fullScore * 100); # Scale to integer points
-          timeLimit = builtins.floor (reducedTl / ticksPerMs);
-          memoryLimit = builtins.floor (reducedMl / (1024 * 1024));
-          inputFiles = map (tc: "${name}/${tc.name}.in") st.testCases;
-          outputFiles = map (tc: "${name}/${tc.name}.out") st.testCases;
-        }
-      ) subtasks;
+        lib.concatMap (
+          { index, st }:
+          if st.scoringMethod == "sum" then
+            # For 'sum' scoring, each test case becomes a separate Lemon test case.
+            let
+              numTestCases = builtins.length st.testCases;
+              # Distribute the subtask's score among its test cases.
+              scorePerCase = if numTestCases > 0 then st.fullScore / numTestCases else 0;
+            in
+            map (tc: {
+              fullScore = builtins.floor (scorePerCase * scoreScale);
+              timeLimit = builtins.floor (tc.tickLimit / ticksPerMs);
+              memoryLimit = builtins.floor (tc.memoryLimit / (1024 * 1024));
+              inputFiles = [ "${name}/${tc.name}.in" ];
+              outputFiles = [ "${name}/${tc.name}.out" ];
+            }) st.testCases
+          else
+            # For 'min' scoring (default), the entire subtask is one Lemon test case.
+            let
+              # Ensure all test cases in a subtask have the same limits.
+              firstTc = builtins.head st.testCases;
+              firstTl = firstTc.tickLimit;
+              firstMl = firstTc.memoryLimit;
+              reduceSame =
+                first: list:
+                builtins.foldl' (
+                  a: b:
+                  if a == b then
+                    a
+                  else
+                    throw "In problem ${name}, subtask #${toString index}, test cases have different tick or memory limits. This is not allowed for 'min' scoring subtasks in the Lemon target."
+                ) first list;
+              reducedTl = reduceSame firstTl (map ({ tickLimit, ... }: tickLimit) st.testCases);
+              reducedMl = reduceSame firstMl (map ({ memoryLimit, ... }: memoryLimit) st.testCases);
+            in
+            [
+              # Return a list with one element for concatMap
+              {
+                fullScore = builtins.floor (st.fullScore * scoreScale);
+                timeLimit = builtins.floor (reducedTl / ticksPerMs);
+                memoryLimit = builtins.floor (reducedMl / (1024 * 1024));
+                inputFiles = map (tc: "${name}/${tc.name}.in") st.testCases;
+                outputFiles = map (tc: "${name}/${tc.name}.out") st.testCases;
+              }
+            ]
+        ) subtasksWithIndex;
 
       # The main JSON content for the .cdf file.
       # Structure is based on reverse-engineering LemonLime's source code.

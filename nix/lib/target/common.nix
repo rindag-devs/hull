@@ -110,7 +110,7 @@
         ''
       ) solutions;
       documentsCommand = lib.concatMapAttrsStringSep "\n" (documentName: document: ''
-        cp ${document.path} $out/documents/${documentName}
+        cp ${document.path} $out/document/${documentName}
       '') documents;
       overviewCommand = "cp ${hull.overview.mkOverview problem} $out/overview.pdf";
     in
@@ -127,7 +127,7 @@
 
       ${checkerCommand}
 
-      mkdir -p $out/documents
+      mkdir -p $out/document
       ${documentsCommand}
 
       ${overviewCommand}

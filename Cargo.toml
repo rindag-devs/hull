@@ -10,10 +10,13 @@ clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
 num_cpus = "1"
 rand = "0.8"
+regex = "1"
 serde = "1"
 serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tree-sitter = "0.25"
+tree-sitter-cpp = "0.23"
 wasi-common = "36"
 wiggle = "36"
 
@@ -21,3 +24,6 @@ wiggle = "36"
 version = "36"
 default-features = false
 features = ["std", "cranelift", "runtime", "wat"]
+
+[build-dependencies]
+cc = "*"

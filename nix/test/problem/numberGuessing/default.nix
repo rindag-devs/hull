@@ -69,7 +69,11 @@
   targets = {
     default = hull.target.common;
     hydro = hull.target.hydro {
-      type = "interactive";
+      type = "stdioInteraction";
+    };
+    uoj = hull.target.uoj {
+      type = "stdioInteraction";
+      twoStepInteraction = true;
     };
   };
 }
