@@ -7,6 +7,11 @@
 {
   name = "numberGuessing";
 
+  displayName = {
+    en = "number guessing";
+    zh = "猜数";
+  };
+
   includes = [ cplib ];
 
   judger = hull.judger.stdioInteraction config { realTimeLimitSeconds = 1; };

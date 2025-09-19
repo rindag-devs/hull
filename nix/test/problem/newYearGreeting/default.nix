@@ -5,7 +5,11 @@
   ...
 }:
 {
-  imports = [ ./judger.nix ];
+  imports = [
+    ./judger.nix
+    ./translation/en.nix
+    ./translation/zh.nix
+  ];
 
   name = "newYearGreeting";
 

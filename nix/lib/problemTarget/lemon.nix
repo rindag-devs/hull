@@ -49,6 +49,9 @@
   # The name of interaction lib header (.h) file. e.g. `lib.h`
   interactionLibName ? null,
 
+  # The name of the test case output that will be used as the output of the UOJ test case.
+  outputName ? if type == "stdioInteraction" then null else "output",
+
   # Compile command for checker, which should build a statically linked executable.
   checkerCompileCommand ? "$CXX -x c++ checker.code -o checker -lm -fno-stack-limit -std=c++23 -O3",
 
@@ -241,7 +244,15 @@
       # Copy test data (inputs and outputs)
       ${lib.concatMapAttrsStringSep "\n" (tcName: tc: ''
         cp ${tc.data.input} $out/data/${name}/${tcName}.in
-        cp ${tc.data.outputs}/output $out/data/${name}/${tcName}.out
+        ${
+          let
+            outputPath = "$out/data/${name}/${tcName}.out";
+          in
+          if outputName == null then
+            "touch ${outputPath}"
+          else
+            "cp ${tc.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
+        }
       '') testCases}
 
       # Copy checker executable

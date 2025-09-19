@@ -182,7 +182,7 @@
         cp ${tc.data.input} $tmpdir/testdata/${tc.name}.in
         ${lib.optionalString (
           outputName != null
-        ) "cp ${tc.data.outputs}/${outputName} $tmpdir/testdata/${tc.name}.ans"}
+        ) "cp ${tc.data.outputs}/${lib.escapeShellArg outputName} $tmpdir/testdata/${tc.name}.ans"}
       '') (lib.attrValues testCases);
 
       # Shell command to copy documents
@@ -247,9 +247,9 @@
         in
         lib.concatMapAttrsStringSep "\n" (tcName: tc: ''
           cp ${tc.data.input} $tmpdir/additional_file/sample_${tc.name}.in
-          ${lib.optionalString (
-            outputName != null
-          ) "cp ${tc.data.outputs}/${outputName} $tmpdir/additional_file/sample_${tc.name}.ans"}
+          ${lib.optionalString (outputName != null)
+            "cp ${tc.data.outputs}/${lib.escapeShellArg outputName} $tmpdir/additional_file/sample_${tc.name}.ans"
+          }
         '') samples;
 
       patchedChecker =

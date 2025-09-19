@@ -9,3 +9,5 @@
 #let output = [
   输出一行包含一个整数，表示答案．
 ]
+
+#let notes = none

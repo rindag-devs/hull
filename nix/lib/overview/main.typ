@@ -94,14 +94,14 @@
 }
 
 // Helper function to make text flow vertically by inserting zero-width spaces
-#let vertical-text(s) = {
+#let breakable-text(s) = {
   s.clusters().join(sym.zws)
 }
 
 // Document Configuration
 #set document(
   title: problem.name + " - Hull Problem Overview",
-  author: "hull build system",
+  author: "Hull Build System",
 )
 #set page(margin: (x: 2cm, y: 2.5cm))
 
@@ -192,7 +192,7 @@
   header-rows: 1,
   // Header
   [*Test Case*],
-  ..all_trait_names.map(name => text(size: 0.8em, vertical-text(name))),
+  ..all_trait_names.map(name => text(size: 0.8em, breakable-text(name))),
   hlinex(),
   // Body
   ..test_case_pairs
@@ -281,7 +281,7 @@
     text(
       size: 0.8em,
       weight: "bold",
-      if is_main { [*#emoji.star #vertical-text(name)*] } else { [#vertical-text(name)] },
+      if is_main { [*#emoji.star #breakable-text(name)*] } else { [#breakable-text(name)] },
     )
   }),
 

@@ -7,6 +7,11 @@
 {
   name = "recitePi";
 
+  displayName = {
+    en = "recite pi";
+    zh = "背诵圆周率";
+  };
+
   includes = [ cplib ];
 
   judger = hull.judger.answerOnly config;

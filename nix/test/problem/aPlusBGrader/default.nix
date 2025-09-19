@@ -6,6 +6,11 @@
   ...
 }:
 {
+  imports = [
+    ./translation/en.nix
+    ./translation/zh.nix
+  ];
+
   name = "aPlusBGrader";
 
   tickLimit = 100 * 10000000;

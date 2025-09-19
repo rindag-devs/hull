@@ -1,0 +1,15 @@
+{
+  "ticks-per-ms": 10000000,
+  "languages": [
+   {
+      "display-name": "C",
+      "file-name-suffix": ".c",
+      "compile-arguments": "gcc -lm -O3 -std=c23"
+    },
+    {
+      "display-name": "C++",
+      "file-name-suffix": ".cpp",
+      "compile-arguments": "g++ -lm -O3 -std=c++23"
+    }
+  ]
+}

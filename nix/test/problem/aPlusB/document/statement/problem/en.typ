@@ -9,3 +9,5 @@
 #let output = [
   Output a single line contains a single integer, indicating the answer.
 ]
+
+#let notes = none
