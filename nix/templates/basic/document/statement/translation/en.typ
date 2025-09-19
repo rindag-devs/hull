@@ -12,9 +12,10 @@
 #let traits = "traits"
 #let subtasks = "subtasks"
 #let samples = "samples"
-#let tick_limit = "tick limit"
-#let memory_limit = "memory limit"
+#let tick-limit = "tick limit"
+#let memory-limit = "memory limit"
 #let score = "score"
+#let notes = "note"
 
 #let ticks(n) = {
   if n < 100000 {

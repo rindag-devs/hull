@@ -19,8 +19,8 @@
   ...
 }:
 
-{
-  mkTypstDocument =
+let
+  mkProblemOverview =
     {
       name,
       displayName,
@@ -34,6 +34,106 @@
       ...
     }:
     {
+      inherit name traits;
+      display-name = displayName;
+      tick-limit = tickLimit;
+      memory-limit = memoryLimit;
+      full-score = fullScore;
+      test-cases = lib.mapAttrs (
+        _:
+        {
+          generator,
+          arguments,
+          tickLimit,
+          memoryLimit,
+          groups,
+          inputValidation,
+          ...
+        }:
+        {
+          inherit generator arguments groups;
+          tick-limit = tickLimit;
+          memory-limit = memoryLimit;
+          actual-traits = inputValidation.traits;
+        }
+      ) testCases;
+      samples = lib.mapAttrsToList (
+        _:
+        { data, ... }:
+        {
+          input = builtins.readFile data.input;
+          outputs = lib.mapAttrs (fileName: _: builtins.readFile (data.outputs + "/" + fileName)) (
+            builtins.readDir data.outputs
+          );
+        }
+      ) (lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
+      subtasks = map (
+        {
+          traits,
+          fullScore,
+          testCases,
+          ...
+        }:
+        {
+          inherit traits;
+          full-score = fullScore;
+          test-cases = map ({ name, ... }: name) testCases;
+        }
+      ) subtasks;
+      solutions = lib.mapAttrs (
+        solName:
+        {
+          mainCorrectSolution,
+          testCaseResults,
+          subtaskResults,
+          ...
+        }:
+        {
+          main-correct-solution = mainCorrectSolution;
+          test-case-results = lib.mapAttrs (
+            _:
+            {
+              score,
+              status,
+              tick,
+              memory,
+              message,
+              ...
+            }:
+            {
+              inherit
+                score
+                status
+                tick
+                memory
+                message
+                ;
+            }
+          ) testCaseResults;
+          subtask-results = map (
+            {
+              rawScore,
+              scaledScore,
+              statuses,
+              ...
+            }:
+            {
+              inherit statuses;
+              raw-score = rawScore;
+              scaled-score = scaledScore;
+            }
+          ) subtaskResults;
+        }
+      ) solutions;
+    };
+in
+
+{
+  inherit mkProblemOverview;
+
+  mkProblemTypstDocument =
+    problem:
+    {
       src,
       entry ? "main.typ",
       inputs ? { },
@@ -42,100 +142,45 @@
       typstPackages ? [ ],
     }:
     let
-      generatedJSONName = "hull-typst-json-${name}.json";
+      generatedJSONName = "hull-problemTypstJSON-${problem.name}.json";
+      generatedJSON = builtins.toFile generatedJSONName (builtins.toJSON (mkProblemOverview problem));
+      inputList = lib.mapAttrsToList (
+        name: value: "${lib.escapeShellArg name}=${lib.escapeShellArg value}"
+      ) inputs;
+    in
+    typixLib.buildTypstProject {
+      inherit src fontPaths;
+      typstSource = entry;
+      typstOpts = {
+        format = "pdf";
+        input = inputList ++ [ "hull-generated-json-path=${generatedJSONName}" ];
+      };
+      virtualPaths = virtualPaths ++ [
+        {
+          dest = generatedJSONName;
+          src = generatedJSON;
+        }
+      ];
+      unstable_typstPackages = typstPackages;
+    };
+
+  mkContestTypstDocument =
+    contest:
+    {
+      src,
+      entry ? "main.typ",
+      inputs ? { },
+      fontPaths ? [ ],
+      virtualPaths ? [ ],
+      typstPackages ? [ ],
+    }:
+    let
+      generatedJSONName = "hull-contestTypstJSON-${contest.name}.json";
       generatedJSON = builtins.toFile generatedJSONName (
         builtins.toJSON {
-          inherit name traits;
-          display-name = displayName;
-          tick-limit = tickLimit;
-          memory-limit = memoryLimit;
-          full-score = fullScore;
-          test-cases = lib.mapAttrs (
-            _:
-            {
-              generator,
-              arguments,
-              tickLimit,
-              memoryLimit,
-              groups,
-              inputValidation,
-              ...
-            }:
-            {
-              inherit generator arguments groups;
-              tick-limit = tickLimit;
-              memory-limit = memoryLimit;
-              actual-traits = inputValidation.traits;
-            }
-          ) testCases;
-          samples = lib.mapAttrsToList (
-            _:
-            { data, ... }:
-            {
-              input = builtins.readFile data.input;
-              outputs = lib.mapAttrs (fileName: _: builtins.readFile (data.outputs + "/" + fileName)) (
-                builtins.readDir data.outputs
-              );
-            }
-          ) (lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
-          subtasks = map (
-            {
-              traits,
-              fullScore,
-              testCases,
-              ...
-            }:
-            {
-              inherit traits;
-              full-score = fullScore;
-              test-cases = map ({ name, ... }: name) testCases;
-            }
-          ) subtasks;
-          solutions = lib.mapAttrs (
-            solName:
-            {
-              mainCorrectSolution,
-              testCaseResults,
-              subtaskResults,
-              ...
-            }:
-            {
-              main-correct-solution = mainCorrectSolution;
-              test-case-results = lib.mapAttrs (
-                _:
-                {
-                  score,
-                  status,
-                  tick,
-                  memory,
-                  message,
-                  ...
-                }:
-                {
-                  inherit
-                    score
-                    status
-                    tick
-                    memory
-                    message
-                    ;
-                }
-              ) testCaseResults;
-              subtask-results = map (
-                {
-                  rawScore,
-                  scaledScore,
-                  statuses,
-                  ...
-                }:
-                {
-                  inherit statuses;
-                  raw-score = rawScore;
-                  scaled-score = scaledScore;
-                }
-              ) subtaskResults;
-            }
-          ) solutions;
+          inherit (contest) name;
+          display-name = contest.displayName;
+          problems = map (p: mkProblemOverview p.config) contest.problems;
         }
       );
       inputList = lib.mapAttrsToList (

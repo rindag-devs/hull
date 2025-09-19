@@ -16,10 +16,15 @@
 {
   lib,
   pkgs,
+  hull,
   ...
 }:
 
 {
+  cnoiParticipant = import ./cnoiParticipant {
+    inherit lib pkgs hull;
+  };
+
   common = import ./common.nix {
     inherit lib pkgs;
   };

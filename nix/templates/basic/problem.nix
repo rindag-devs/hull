@@ -141,11 +141,10 @@
       languages = [ "en" ];
       mkStatement = language: {
         "statement.${language}.pdf" = {
-          path = hull.document.mkTypstDocument config {
+          path = hull.document.mkProblemTypstDocument config {
             src = ./document/statement;
             inputs = { inherit language; };
             fontPaths = [
-              "${pkgs.libertinus}/share/fonts/opentype"
               "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
             ];
             typstPackages = [

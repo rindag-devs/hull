@@ -294,12 +294,12 @@
           cp ${p.hullTestCase.data.input} $tmpdir/${name}${toString p.uojPointIndex}.in
           ${
             let
-              answerPath = "$tmpdir/${name}${toString p.uojPointIndex}.out";
+              outputPath = "$tmpdir/${name}${toString p.uojPointIndex}.out";
             in
-            if outputName != null then
-              "cp ${p.hullTestCase.data.outputs}/${outputName} ${answerPath}"
+            if outputName == null then
+              "touch ${outputPath}"
             else
-              "touch ${answerPath}"
+              "cp ${p.hullTestCase.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
           }
         '') uojTestPoints}
 
@@ -310,12 +310,12 @@
               cp ${tc.data.input} $tmpdir/ex_${name}${toString i}.in
               ${
                 let
-                  answerPath = "$tmpdir/ex_${name}${toString i}.out";
+                  outputPath = "$tmpdir/ex_${name}${toString i}.out";
                 in
-                if outputName != null then
-                  "cp ${tc.data.outputs}/${outputName} ${answerPath}"
+                if outputName == null then
+                  "touch ${outputPath}"
                 else
-                  "touch ${answerPath}"
+                  "cp ${tc.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
               }
             '')
             (

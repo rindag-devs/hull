@@ -6,7 +6,7 @@
   "full-score": 1.0,
   "memory-limit": 0,
   "tick-limit": 0,
-  "name": "example-problem",
+  "name": "exampleProblem",
   "samples": [
     {
       "input": "input\n",
@@ -19,7 +19,8 @@
     "example": {
       "main-correct-solution": true,
       "subtask-results": [
-        { "raw-score": 1.0, "scaled-score": 1.0, "statuses": ["accepted"] }
+        { "raw-score": 1.0, "scaled-score": 0.5, "statuses": ["accepted"] },
+        { "raw-score": 1.0, "scaled-score": 0.5, "statuses": ["accepted"] }
       ],
       "test-case-results": {
         "example": {
@@ -34,9 +35,14 @@
   },
   "subtasks": [
     {
-      "full-score": 1.0,
+      "full-score": 0.5,
       "test-cases": ["example"],
       "traits": { "example": true }
+    },
+    {
+      "full-score": 0.5,
+      "test-cases": ["example"],
+      "traits": {  }
     }
   ],
   "test-cases": {

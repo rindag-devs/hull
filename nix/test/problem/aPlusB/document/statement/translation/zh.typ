@@ -12,9 +12,10 @@
 #let traits = "特征"
 #let subtasks = "子任务"
 #let samples = "样例"
-#let tick_limit = "时刻限制"
-#let memory_limit = "内存限制"
+#let tick-limit = "时刻限制"
+#let memory-limit = "内存限制"
 #let score = "分数"
+#let notes = "说明"
 
 #let ticks(n) = {
   if n < 100000 {

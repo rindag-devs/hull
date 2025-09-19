@@ -18,7 +18,7 @@
 {
   mkOverview =
     problem:
-    hull.document.mkTypstDocument problem {
+    hull.document.mkProblemTypstDocument problem {
       src = lib.fileset.toSource {
         root = ./.;
         fileset = ./main.typ;

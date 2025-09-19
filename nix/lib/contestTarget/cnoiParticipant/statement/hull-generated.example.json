@@ -1,0 +1,238 @@
+{
+  "name": "example-contest",
+  "display-name": {
+    "en": "example contest",
+    "zh": "示例比赛"
+  },
+  "problems": [
+    {
+      "display-name": {
+        "en": "major",
+        "zh": "众数"
+      },
+      "full-score": 1.0,
+      "memory-limit": 1073741824,
+      "tick-limit": 10000000000,
+      "name": "major",
+      "samples": [
+        {
+          "input": "2 8\n3 1 1 2\n3 3 3 3\n3 1 1\n3 1 2\n4 2 1 3\n3 1 3\n2 3\n3 1 3\n1 3 1\n3 1 3\n",
+          "outputs": {
+            "output": "1\n3\n-1\n3\n-1\n"
+          }
+        },
+        {
+          "input": "4 9\n1 1\n1 2\n1 3\n1 4\n3 4 1 2 3 4\n1 1 2\n3 2 1 2\n2 3\n3 3 1 2 3\n1 4 4\n1 4 4\n1 4 4\n3 4 1 2 3 4\n",
+          "outputs": {
+            "output": "-1\n2\n2\n4\n"
+          }
+        }
+      ],
+      "solutions": {
+        "example": {
+          "main-correct-solution": true,
+          "subtask-results": [
+            { "raw-score": 1.0, "scaled-score": 0.5, "statuses": ["accepted"] },
+            { "raw-score": 1.0, "scaled-score": 0.5, "statuses": ["accepted"] }
+          ],
+          "test-case-results": {
+            "example": {
+              "score": 1.0,
+              "status": "accepted",
+              "message": "example",
+              "tick": 0,
+              "memory": 0
+            }
+          }
+        }
+      },
+      "subtasks": [
+        {
+          "full-score": 0.15,
+          "traits": {
+            "n_le_300": true,
+            "no_op2": true
+          }
+        },
+        {
+          "full-score": 0.2,
+          "traits": {
+            "n_le_4e3": true,
+            "no_op2": true
+          }
+        },
+        {
+          "full-score": 0.05,
+          "traits": {
+            "n_le_1e5": true,
+            "n_is_1_and_no_op4": true,
+            "only_1_and_2": true,
+            "no_op2": true
+          }
+        },
+        {
+          "full-score": 0.05,
+          "traits": {
+            "n_le_1e5": true,
+            "n_is_1_and_no_op4": true
+          }
+        },
+        {
+          "full-score": 0.05,
+          "traits": {
+            "n_le_1e5": true,
+            "only_1_and_2": true
+          }
+        },
+        {
+          "full-score": 0.1,
+          "traits": {
+            "n_le_1e5": true,
+            "no_op2": true
+          }
+        },
+        {
+          "full-score": 0.05,
+          "traits": {
+            "n_le_1e5": true
+          }
+        },
+        {
+          "full-score": 0.05,
+          "traits": {
+            "n_is_1_and_no_op4": true,
+            "only_1_and_2": true,
+            "no_op2": true
+          }
+        },
+        {
+          "full-score": 0.05,
+          "traits": {
+            "n_is_1_and_no_op4": true
+          }
+        },
+        {
+          "full-score": 0.05,
+          "traits": {
+            "only_1_and_2": true
+          }
+        },
+        {
+          "full-score": 0.1,
+          "traits": {
+            "no_op2": true
+          }
+        },
+        {
+          "full-score": 0.1,
+          "traits": {}
+        }
+      ],
+      "traits": {
+        "n_le_300": {
+          "description": {
+            "en": "$n, q, C_m, C_l <= 300$.",
+            "zh": "$n, q, C_m, C_l <= 300$．"
+          }
+        },
+        "n_le_4e3": {
+          "description": {
+            "en": "$n, q, C_m, C_l <= 4000$.",
+            "zh": "$n, q, C_m, C_l <= 4000$．"
+          }
+        },
+        "n_le_1e5": {
+          "description": {
+            "en": "$n, q, C_m, C_l <= 10^5$.",
+            "zh": "$n, q, C_m, C_l <= 10^5$．"
+          }
+        },
+        "n_is_1_and_no_op4": {
+          "description": {
+            "en": "$n = 1$ and there's no type $4$ operation.",
+            "zh": "$n = 1$ 且没有类型 $4$ 的操作．"
+          }
+        },
+        "only_1_and_2": {
+          "description": {
+            "en": "At any time and in any sequence there are only numbers $1$ and $2$.",
+            "zh": "任何时候、任何序列中都只有数字 $1$ 和 $2$．"
+          }
+        },
+        "no_op2": {
+          "description": {
+            "en": "There's no type $2$ operation.",
+            "zh": "没有类型 $2$ 的操作．"
+          }
+        }
+      }
+    },
+    {
+      "display-name": {
+        "en": "example problem 2",
+        "zh": "示例题目 2"
+      },
+      "full-score": 1.0,
+      "memory-limit": 0,
+      "tick-limit": 0,
+      "name": "exampleProblem2",
+      "samples": [
+        {
+          "input": "input\n",
+          "outputs": {
+            "output1": "output1\n",
+            "output2": "output2\n"
+          }
+        }
+      ],
+      "solutions": {
+        "example": {
+          "main-correct-solution": true,
+          "subtask-results": [
+            { "raw-score": 1.0, "scaled-score": 0.5, "statuses": ["accepted"] },
+            { "raw-score": 1.0, "scaled-score": 0.5, "statuses": ["accepted"] }
+          ],
+          "test-case-results": {
+            "example": {
+              "score": 1.0,
+              "status": "accepted",
+              "message": "example",
+              "tick": 0,
+              "memory": 0
+            }
+          }
+        }
+      },
+      "subtasks": [
+        {
+          "full-score": 0.5,
+          "test-cases": ["example"],
+          "traits": { "example": true }
+        },
+        {
+          "full-score": 0.5,
+          "test-cases": ["example"],
+          "traits": {}
+        }
+      ],
+      "test-cases": {
+        "example": {
+          "actual-traits": { "example": true },
+          "arguments": ["example"],
+          "generator": "example",
+          "groups": ["sample"],
+          "memory-limit": 0,
+          "tick-limit": 0
+        }
+      },
+      "traits": {
+        "example": {
+          "description": {
+            "en": "This is an example trait",
+            "zh": "This is an example trait"
+          }
+        }
+      }
+    }
+  ]
+}
