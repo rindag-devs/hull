@@ -48,7 +48,7 @@ Here is the basic skeleton of a custom judger:
     */
     judge = testCase: solution:
       # This function must also return a derivation.
-      pkgs.runCommandLocal "hull-judge-${config.name}-${testCase.name}-${solution.name}"
+      pkgs.runCommandLocal "hull-judge-${config.name}-${testCase.name}-${solution.name}" { } ''
         # Script to judge the solution...
         mkdir -p $out/outputs
         echo '{ "status": "accepted", "score": 1.0, ... }' > $out/report.json
@@ -116,7 +116,7 @@ The `judge` and `generateOutputs` functions should be "pure" from an evaluation 
 
 ```nix
 judge = testCase: solution:
-  pkgs.runCommandLocal "hull-judge-${config.name}-${testCase.name}-${solution.name}"
+  pkgs.runCommandLocal "hull-judge-${config.name}-${testCase.name}-${solution.name}" { } ''
     # Step 1: Run the solution. The path to the compiled WASM is already known.
     # The `hull.runWasm.script` helper generates a script snippet.
     ${hull.runWasm.script {
