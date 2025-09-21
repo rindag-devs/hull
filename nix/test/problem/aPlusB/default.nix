@@ -74,7 +74,7 @@
   };
 
   testCases = {
-    rand-1 = {
+    rand1 = {
       generator = "rand";
       arguments = [
         "--n-min=1"
@@ -90,7 +90,7 @@
         "pretest"
       ];
     };
-    rand-2 = {
+    rand2 = {
       generator = "rand";
       arguments = [
         "--n-min=1"
@@ -107,7 +107,7 @@
         b_positive = true;
       };
     };
-    rand-3 = {
+    rand3 = {
       generator = "rand";
       arguments = [
         "--n-min=-10"
@@ -119,7 +119,7 @@
         b_positive = false;
       };
     };
-    hand-1 = {
+    hand1 = {
       inputFile = ./data/hand-1.in;
       traits = {
         a_positive = true;
@@ -149,7 +149,7 @@
     let
       ac = { score, ... }: score == 1;
       unac = { score, ... }: score == 0;
-      tle_or_ac =
+      tleOrAc =
         { statuses, ... }: builtins.all (s: s == "accepted" || s == "time_limit_exceeded") statuses;
     in
     {
@@ -161,7 +161,7 @@
           "1" = ac;
         };
       };
-      wa-unsigned = {
+      waUnsigned = {
         src = ./solution/wa-unsigned.20.cpp;
         subtaskPredictions = {
           "0" = ac;
@@ -171,19 +171,19 @@
       tle = {
         src = ./solution/tle.20.cpp;
         subtaskPredictions = {
-          "0" = tle_or_ac;
-          "1" = tle_or_ac;
+          "0" = tleOrAc;
+          "1" = tleOrAc;
         };
         participantVisibility = true;
       };
-      mle-dynamic = {
+      mleDynamic = {
         src = ./solution/mle-dynamic.20.cpp;
         subtaskPredictions = {
           "0" = unac;
           "1" = unac;
         };
       };
-      mle-static = {
+      mleStatic = {
         src = ./solution/mle-static.20.cpp;
         subtaskPredictions = {
           "0" = unac;
@@ -251,5 +251,34 @@
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
     uoj = hull.problemTarget.uoj { };
+
+    minimal =
+      (
+        # Options for the target are defined in a function that returns the attrset.
+        {
+          solutionFileName ? "std.cpp",
+        }:
+        {
+          _type = "hullProblemTarget";
+          __functor =
+            self: problem:
+            pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-minimal" { } ''
+              mkdir -p $out/data $out/solution
+
+              # Use the custom option from the `self` argument.
+              cp ${problem.mainCorrectSolution.src} $out/solution/${self.solutionFileName}
+
+              # ... (rest of the script is the same)
+              ${lib.concatMapStringsSep "\n" (tc: ''
+                cp ${tc.data.input} $out/data/${tc.name}.in
+                cp ${tc.data.outputs}/output $out/data/${tc.name}.out
+              '') (builtins.attrValues problem.testCases)}
+            '';
+
+          # The option is now part of the target's attribute set.
+          inherit solutionFileName;
+        }
+      )
+        { solutionFileName = "main_solution.cpp"; }; # We can now configure it.
   };
 }
