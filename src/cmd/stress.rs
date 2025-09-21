@@ -221,14 +221,14 @@ pub fn run(opts: &StressOpts) -> Result<()> {
         let case = report.failing_test_case.unwrap();
         let report = case.report;
         println!(
-          " Solution '{}' failed with status: {}, score: {:.3}, tick: {}, memory: {}",
+          "  Solution '{}' failed with status: {}, score: {:.3}, tick: {}, memory: {}",
           case.failing_solution_name,
           report.status,
           report.score,
           format_tick(report.tick),
           format_size(report.memory),
         );
-        println!(" Message: {}", report.message);
+        println!("  Message: {}", report.message);
         println!(
           "\nTo add this test case to your problem, copy the following into your `problem.nix`:\n"
         );

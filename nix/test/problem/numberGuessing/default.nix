@@ -25,14 +25,14 @@
   };
 
   testCases = {
-    rand-1 = {
+    rand1 = {
       generator = "rand";
       arguments = [
         "--n-min=90"
         "--n-max=100"
       ];
     };
-    rand-2 = {
+    rand2 = {
       generator = "rand";
       arguments = [
         "--n-min=900000000"
@@ -57,13 +57,13 @@
           "0" = ac;
         };
       };
-      too-many-op = {
+      tooManyOp = {
         src = ./solution/too-many-op.17.c;
         subtaskPredictions = {
           "0" = unac;
         };
       };
-      infinity-read = {
+      infinityRead = {
         src = ./solution/infinity-read.20.cpp;
         subtaskPredictions = {
           "0" = unac;

@@ -21,7 +21,7 @@
   validator.src = ./validator.20.cpp;
 
   testCases = {
-    hand-1 = {
+    hand1 = {
       inputFile = ./data.in;
     };
   };
@@ -49,7 +49,7 @@
           "0" = pc;
         };
       };
-      format-error = {
+      formatError = {
         src = ./solution/format-error.txt;
         subtaskPredictions = {
           "0" = unac;

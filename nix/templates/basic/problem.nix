@@ -75,7 +75,7 @@
     let
       maxTests = builtins.listToAttrs (
         map (i: {
-          name = "max-${toString i}";
+          name = "max${toString i}";
           value = {
             generator = "rand";
             arguments = [
@@ -88,7 +88,7 @@
       );
     in
     {
-      manual-1 = {
+      manual1 = {
         inputFile = ./data/1.in;
         traits = {
           a_positive = true;
@@ -115,7 +115,7 @@
   solutions =
     let
       ac = { score, ... }: score == 1.0;
-      tle_or_ac =
+      tleOrAc =
         { statuses, ... }: builtins.all (s: s == "accepted" || s == "time_limit_exceeded") statuses;
     in
     {
@@ -127,11 +127,11 @@
           "1" = ac;
         };
       };
-      brute-force = {
+      bruteForce = {
         src = ./solution/bf.20.cpp;
         subtaskPredictions = {
-          "0" = tle_or_ac;
-          "1" = tle_or_ac;
+          "0" = tleOrAc;
+          "1" = tleOrAc;
         };
       };
     };

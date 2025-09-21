@@ -13,7 +13,7 @@ Hull provides a complete, hermetic environment for the entire lifecycle of a com
 
 ### Prerequisites
 
-You must have [Nix](https://nixos.org/download.html) installed with Flakes support enabled.
+You must have [Nix](https://nixos.org/download/) installed with Flakes support enabled.
 
 ### Creating a New Problem
 
@@ -22,8 +22,8 @@ The easiest way to start a new problem is by using the official Hull flake templ
 1.  **Initialize the project from the template:**
 
     ```bash
-    # This will create a new project in the 'my-problem' directory
-    nix flake new -t github:rindag-devs/hull --refresh ./my-problem
+    # This will create a new project in the 'myProblem' directory
+    nix flake new -t github:rindag-devs/hull --refresh myProblem
 
     # Or use an existing directory
     nix flake init -t github:rindag-devs/hull --refresh
@@ -31,7 +31,7 @@ The easiest way to start a new problem is by using the official Hull flake templ
 
 2.  **Enter the development environment:**
     ```bash
-    cd my-problem
+    cd myProblem
     nix develop
     ```
     This command launches a shell with the `hull` CLI and all necessary compilers and tools available in your `PATH`.

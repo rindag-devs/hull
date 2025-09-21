@@ -35,7 +35,7 @@
   };
 
   testCases = {
-    rand-1 = {
+    rand1 = {
       generator = "rand";
       arguments = [
         "--n-min=1"
@@ -46,7 +46,7 @@
         b_positive = true;
       };
     };
-    rand-2 = {
+    rand2 = {
       generator = "rand";
       arguments = [
         "--n-min=-10"
@@ -72,7 +72,7 @@
           "0" = ac;
         };
       };
-      wa-unsigned = {
+      waUnsigned = {
         src = ./solution/wa-unsigned.99.c;
         subtaskPredictions = {
           "0" = unac;

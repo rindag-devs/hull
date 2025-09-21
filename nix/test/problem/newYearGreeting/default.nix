@@ -36,7 +36,7 @@
   testCases =
     let
       small = map (i: {
-        name = "small-${toString i}";
+        name = "small${toString i}";
         value = {
           generator = "rand";
           arguments = [
@@ -49,7 +49,7 @@
         };
       }) (lib.range 1 5);
       big = map (i: {
-        name = "big-${toString i}";
+        name = "big${toString i}";
         value = {
           generator = "rand";
           arguments = [
@@ -86,14 +86,14 @@
           "1" = ac;
         };
       };
-      small-only = {
+      smallOnly = {
         src = ./solution/small-only.98.cpp;
         subtaskPredictions = {
           "0" = ac;
           "1" = unac;
         };
       };
-      brute-force = {
+      bruteForce = {
         src = ./solution/brute-force.98.cpp;
         subtaskPredictions = {
           "0" = pc20;
