@@ -1,0 +1,61 @@
+name: Deploy docs to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: "cf-pages-deployment"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (shiroa & fonts)
+        run: |
+          echo "Downloading and setting up shiroa..."
+          mkdir -p $HOME/tools
+          curl -L -o shiroa.tar.gz "https://github.com/Myriad-Dreamin/shiroa/releases/download/v0.3.1-rc3/shiroa-x86_64-unknown-linux-gnu.tar.gz"
+          tar -xzf shiroa.tar.gz -C $HOME/tools
+          echo "$HOME/tools/shiroa-x86_64-unknown-linux-gnu" >> $GITHUB_PATH
+
+          echo "Downloading and setting up fonts..."
+          mkdir -p $HOME/fonts
+
+          curl -L -o source-han-sans.zip "https://github.com/adobe-fonts/source-han-sans/releases/download/2.005R/09_SourceHanSansSC.zip"
+          unzip -q source-han-sans.zip -d $HOME/fonts/source-han-sans
+
+          curl -L -o ibm-plex-mono.zip "https://github.com/IBM/plex/releases/download/%40ibm%2Fplex-mono%401.1.0/ibm-plex-mono.zip"
+          unzip -q ibm-plex-mono.zip -d $HOME/fonts/ibm-plex-mono
+
+          curl -L -o ibm-plex-sans.zip "https://github.com/IBM/plex/releases/download/%40ibm%2Fplex-sans%401.1.0/ibm-plex-sans.zip"
+          unzip -q ibm-plex-sans.zip -d $HOME/fonts/ibm-plex-sans
+
+          mkdir -p $HOME/merged-font-path
+          cp -rf $HOME/fonts/source-han-sans/OTF/SimplifiedChinese/* $HOME/merged-font-path
+          cp -rf $HOME/fonts/ibm-plex-mono/ibm-plex-mono/fonts/complete/otf/* $HOME/merged-font-path
+          cp -rf $HOME/fonts/ibm-plex-sans/ibm-plex-sans/fonts/complete/otf/* $HOME/merged-font-path
+
+      - name: Build with Shiroa
+        working-directory: ./docs
+        run: |
+          shiroa build --font-path $HOME/merged-font-path
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: "hull"
+          directory: ./docs/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
