@@ -1,10 +1,10 @@
-#import "../book.typ": book-page
+#import "book.typ": book-page
 
 #show: book-page.with(title: "Introduction")
 
 = Introduction
 
-Welcome to the documentation for Hull, a Nix-powered framework for creating and judging competitive programming problems with unparalleled determinism. This document will guide you from the basic setup to advanced customization, enabling you to build robust and perfectly reproducible programming problems and contests.
+Welcome to the documentation for #link("https://github.com/rindag-devs/hull")[Hull], a Nix-powered framework for creating and judging competitive programming problems with unparalleled determinism. This document will guide you from the basic setup to advanced customization, enabling you to build robust and perfectly reproducible programming problems and contests.
 
 == What is Hull?
 
