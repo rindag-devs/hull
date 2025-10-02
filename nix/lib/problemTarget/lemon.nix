@@ -53,7 +53,7 @@
   outputName ? if type == "stdioInteraction" then null else "output",
 
   # Compile command for checker, which should build a statically linked executable.
-  checkerCompileCommand ? "$CXX -x c++ checker.code -o checker -lm -fno-stack-limit -std=c++23 -O3",
+  checkerCompileCommand ? "$CXX -x c++ checker.code -o checker -lm -fno-stack-limit -std=c++23 -O3 -static",
 
   # A map of solution and extension name.
   # Example { std = "cpp"; bf = "c"; }

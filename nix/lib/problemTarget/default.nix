@@ -23,6 +23,16 @@
 }:
 
 {
+  cms = import ./cms.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      cplib
+      cplibInitializers
+      ;
+  };
+
   common = import ./common.nix {
     inherit
       lib
