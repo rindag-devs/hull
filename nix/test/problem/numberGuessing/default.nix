@@ -80,5 +80,8 @@
       type = "stdioInteraction";
       twoStepInteraction = true;
     };
+    cms = hull.problemTarget.cms {
+      type = "stdioInteraction";
+    };
   };
 }

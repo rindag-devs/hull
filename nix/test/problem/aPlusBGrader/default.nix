@@ -99,5 +99,11 @@
         "add.h" = ./include/add.h;
       };
     };
+    cms = hull.problemTarget.cms {
+      graderSrcs.cpp = ./grader.17.cpp;
+      extraSolFiles = {
+        "add.h" = ./include/add.h;
+      };
+    };
   };
 }

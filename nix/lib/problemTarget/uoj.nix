@@ -73,7 +73,6 @@
   __functor =
     self:
     {
-      name,
       testCases,
       subtasks,
       solutions,
@@ -165,9 +164,9 @@
           n_ex_tests ${toString nSampleTests}
           n_sample_tests ${toString nSampleTests}
           n_subtasks ${toString (builtins.length uojSubtasks)}
-          input_pre ${name}
+          input_pre ${problem.name}
           input_suf in
-          output_pre ${name}
+          output_pre ${problem.name}
           output_suf out
           time_limit ${
             let
@@ -186,7 +185,7 @@
           checker.src
         else if type == "stdioInteraction" then
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = "${cplibInitializers}/include/testlib/checker_two_step.cpp";
             includeReplacements = [
               [
@@ -201,7 +200,7 @@
           }
         else
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = checker.src;
             checker = "::cplib_initializers::testlib::checker::Initializer(false)";
             extraIncludes = [ "\"require/testlib_checker.hpp\"" ];
@@ -216,7 +215,7 @@
       interactor =
         if twoStepInteraction then
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = checker.src;
             interactor = "::cplib_initializers::testlib::interactor_two_step::Initializer()";
             extraIncludes = [ "\"require/testlib_interactor_two_step.hpp\"" ];
@@ -229,7 +228,7 @@
           }
         else
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = checker.src;
             interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
             extraIncludes = [ "\"require/testlib_interactor.hpp\"" ];
@@ -246,7 +245,7 @@
           validator.src
         else
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = validator.src;
             validator = "::cplib_initializers::testlib::validator::Initializer()";
             extraIncludes = [ "\"require/testlib_validator.hpp\"" ];
@@ -273,7 +272,8 @@
         ) files;
 
     in
-    pkgs.runCommandLocal ("hull-problemTargetOutput-${name}-uoj" + (lib.optionalString zipped ".zip"))
+    pkgs.runCommandLocal
+      ("hull-problemTargetOutput-${problem.name}-uoj" + (lib.optionalString zipped ".zip"))
       {
         nativeBuildInputs = [ pkgs.zip ];
       }
@@ -291,10 +291,10 @@
 
         # Copy test data, renumbering as needed
         ${lib.concatMapStringsSep "\n" (p: ''
-          cp ${p.hullTestCase.data.input} $tmpdir/${name}${toString p.uojPointIndex}.in
+          cp ${p.hullTestCase.data.input} $tmpdir/${problem.name}${toString p.uojPointIndex}.in
           ${
             let
-              outputPath = "$tmpdir/${name}${toString p.uojPointIndex}.out";
+              outputPath = "$tmpdir/${problem.name}${toString p.uojPointIndex}.out";
             in
             if outputName == null then
               "touch ${outputPath}"
@@ -307,10 +307,10 @@
         ${lib.concatStringsSep "\n" (
           lib.imap1
             (i: tc: ''
-              cp ${tc.data.input} $tmpdir/ex_${name}${toString i}.in
+              cp ${tc.data.input} $tmpdir/ex_${problem.name}${toString i}.in
               ${
                 let
-                  outputPath = "$tmpdir/ex_${name}${toString i}.out";
+                  outputPath = "$tmpdir/ex_${problem.name}${toString i}.out";
                 in
                 if outputName == null then
                   "touch ${outputPath}"

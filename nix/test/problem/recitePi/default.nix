@@ -65,5 +65,8 @@
     uoj = hull.problemTarget.uoj {
       type = "answerOnly";
     };
+    cms = hull.problemTarget.cms {
+      type = "answerOnly";
+    };
   };
 }

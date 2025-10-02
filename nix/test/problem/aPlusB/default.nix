@@ -251,6 +251,12 @@
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
     uoj = hull.problemTarget.uoj { };
+    cms = hull.problemTarget.cms {
+      statements = {
+        english = "statement.en.pdf";
+        chinese = "statement.zh.pdf";
+      };
+    };
 
     minimal =
       (
