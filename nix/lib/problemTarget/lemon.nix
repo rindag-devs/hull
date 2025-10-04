@@ -58,6 +58,11 @@
   # A map of solution and extension name.
   # Example { std = "cpp"; bf = "c"; }
   solutionExtNames ? { },
+
+  # Specify the target system for the package.
+  # `null` means using the local system.
+  # e.g.: "aarch64-multiplatform" for ARM64 Linux.
+  targetSystem ? null,
 }:
 
 {
@@ -212,8 +217,10 @@
             extraIncludes = [ "\"lemon_checker.hpp\"" ];
           };
 
+      pkgsTarget = if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem};
+
       # Compiled, static-linked checker executable
-      compiledChecker = pkgs.pkgsStatic.stdenv.mkDerivation {
+      compiledChecker = pkgsTarget.pkgsStatic.stdenv.mkDerivation {
         name = "hull-lemonCompiledChecker-${name}";
         unpackPhase = ''
           cp ${patchedChecker} checker.code
@@ -227,8 +234,7 @@
         '';
         installPhase = ''
           runHook preInstall
-          mkdir -p $out/bin
-          install -m755 checker $out/bin
+          install -Dm755 checker $out/bin/checker
           runHook postInstall
         '';
       };

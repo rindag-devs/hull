@@ -53,17 +53,19 @@
   # The name of the test case output that will be used as the output of the CMS test case.
   outputName ? if type == "stdioInteraction" then null else "output",
 
-  # Compile command for the native static checker.
-  checkerCompileCommand ? "$CXX -x c++ checker.code -o checker -lm -fno-stack-limit -std=c++23 -O3 -static",
-
-  # Compile command for the native static manager (interactor).
-  managerCompileCommand ? "$CXX -x c++ manager.code -o manager -lm -fno-stack-limit -std=c++23 -O3 -static",
+  # Compile command for the native static checker or interactor.
+  checkerCompileCommand ? "$CXX -x c++ program.code -o program -lm -fno-stack-limit -std=c++23 -O3 -static",
 
   # Whether to patch CPLib programs to use testlib-compatible initializers.
   patchCplibProgram ? true,
 
   # A map of name to file path. These files will be placed in `att/`.
   attachments ? { },
+
+  # Specify the target system for the package.
+  # `null` means using the local system.
+  # e.g.: "aarch64-multiplatform" for ARM64 Linux.
+  targetSystem ? null,
 }:
 
 {
@@ -169,7 +171,6 @@
       # CMS requires native binaries, not WASM, for these components.
       compileNative =
         {
-          programName,
           programSrc,
           compileCommand,
           mode, # "checker" or "interactor"
@@ -199,11 +200,12 @@
                     throw "Invalid mode `${mode}`"
                 )
               );
+          pkgsTarget = if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem};
         in
-        pkgs.pkgsStatic.stdenv.mkDerivation {
-          name = "hull-cmsNative-${programName}-${problem.name}";
+        pkgsTarget.pkgsStatic.stdenv.mkDerivation {
+          name = "hull-cmsNativeChecker-${problem.name}";
           unpackPhase = ''
-            cp ${patchedSrc} ${programName}.code
+            cp ${patchedSrc} program.code
             cp ${cplib}/cplib.hpp cplib.hpp
             ${
               if mode == "checker" then
@@ -221,25 +223,16 @@
           '';
           installPhase = ''
             runHook preInstall
-            mkdir -p $out/bin
-            install -m755 ${programName} $out/bin/${programName}
+            install -Dm755 program $out/bin/program
             runHook postInstall
           '';
         };
 
-      compiledChecker = lib.optionalAttrs (type != "stdioInteraction") (compileNative {
-        programName = "checker";
+      compiledChecker = compileNative {
         programSrc = checker.src;
         compileCommand = checkerCompileCommand;
-        mode = "checker";
-      });
-
-      compiledManager = lib.optionalAttrs (type == "stdioInteraction") (compileNative {
-        programName = "manager";
-        programSrc = checker.src; # In Hull, the checker is the interactor
-        compileCommand = managerCompileCommand;
-        mode = "interactor";
-      });
+        mode = if type == "stdioInteraction" then "interactor" else "checker";
+      };
 
       # Generate content for task.yaml.
       taskYamlContent = {
@@ -322,11 +315,8 @@
       ) statements}
 
       # Copy checker, manager, graders, and attachments
-      ${
-        if type == "stdioInteraction" then
-          "cp ${compiledManager}/bin/manager $out/check/manager"
-        else
-          "cp ${compiledChecker}/bin/checker $out/check/checker"
+      cp ${compiledChecker}/bin/program $out/check/${
+        if type == "stdioInteraction" then "manager" else "checker"
       }
       ${lib.concatMapAttrsStringSep "\n" (
         lang: src: "cp ${src} $out/sol/${if type == "stdioInteraction" then "stub" else "grader"}.${lang}"
