@@ -83,5 +83,8 @@
     cms = hull.problemTarget.cms {
       type = "stdioInteraction";
     };
+    domjudge = hull.problemTarget.domjudge {
+      type = "stdioInteraction";
+    };
   };
 }

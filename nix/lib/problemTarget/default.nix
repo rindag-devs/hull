@@ -41,6 +41,16 @@
       ;
   };
 
+  domjudge = import ./domjudge.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      cplib
+      cplibInitializers
+      ;
+  };
+
   hydro = import ./hydro.nix {
     inherit
       lib

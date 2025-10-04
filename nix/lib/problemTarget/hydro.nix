@@ -50,9 +50,13 @@
   # Whether to package the output as a zip file.
   zipped ? true,
 
-  # File extension for compiled programs (checker, interactor, etc.).
+  # File extension for checker and interactor.
   # Hydro determines the language by file extension.
-  programExtName ? "cc.cc23o2",
+  checkerExtName ? "cc.cc23o2",
+
+  # File extension for validator.
+  # Hydro determines the language by file extension.
+  validatorExtName ? "cc.cc23o2",
 
   # Conversion rate from Hull's ticks to Hydro's milliseconds.
   # 1ms = 1e7 ticks is a common value for wasmtime.
@@ -147,7 +151,7 @@
             output = if outputName != null then "${tc.name}.ans" else "/dev/null";
           }) st.testCases;
         }) subtasks;
-        validator = "validator.${programExtName}";
+        validator = "validator.${validatorExtName}";
         user_extra_files = lib.unique (
           (lib.optional (finalCompileSh != null) "compile.sh")
           ++ (lib.optional (executeSh != null) "execute.sh")
@@ -167,11 +171,11 @@
       // lib.optionalAttrs (checker != null) (
         if type == "stdioInteraction" then
           {
-            interactor = "checker.${programExtName}";
+            interactor = "checker.${checkerExtName}";
           }
         else
           {
-            checker = "checker.${programExtName}";
+            checker = "checker.${checkerExtName}";
             checker_type = "syzoj";
           }
       )
@@ -365,8 +369,8 @@
         ${samplesCommand}
 
         # Copy checker, interactor, validator
-        cp ${patchedChecker} $tmpdir/testdata/checker.${programExtName}
-        cp ${patchedValidator} $tmpdir/testdata/validator.${programExtName}
+        cp ${patchedChecker} $tmpdir/testdata/checker.${checkerExtName}
+        cp ${patchedValidator} $tmpdir/testdata/validator.${validatorExtName}
 
         # Write compile.sh and execute.sh
         ${lib.optionalString (

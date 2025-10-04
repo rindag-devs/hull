@@ -257,6 +257,9 @@
         chinese = "statement.zh.pdf";
       };
     };
+    domjudge = hull.problemTarget.domjudge {
+      statement = "statement.en.pdf";
+    };
 
     minimal =
       (
