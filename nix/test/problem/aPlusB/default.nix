@@ -99,7 +99,7 @@
         "--salt=0"
       ];
       groups = [
-        "sample_large"
+        "sampleLarge"
         "pretest"
       ];
       traits = {
@@ -260,6 +260,7 @@
     domjudge = hull.problemTarget.domjudge {
       statement = "statement.en.pdf";
     };
+    luogu = hull.problemTarget.luogu { };
 
     minimal =
       (

@@ -95,14 +95,23 @@
     };
     uoj = hull.problemTarget.uoj {
       graderSrcs.cpp = ./grader.17.cpp;
-      extraRequireFiles = {
-        "add.h" = ./include/add.h;
-      };
+      extraRequireFiles."add.h" = ./include/add.h;
     };
     cms = hull.problemTarget.cms {
       graderSrcs.cpp = ./grader.17.cpp;
-      extraSolFiles = {
-        "add.h" = ./include/add.h;
+      extraSolFiles."add.h" = ./include/add.h;
+    };
+    luogu = hull.problemTarget.luogu {
+      graderSrc = hull.patchCplibProgram {
+        problemName = config.name;
+        src = ./grader.17.cpp;
+        extraEmbeds = [ ./include/add.h ];
+        includeReplacements = [
+          [
+            "^add.h$"
+            "/dev/null"
+          ]
+        ];
       };
     };
   };

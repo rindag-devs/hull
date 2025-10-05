@@ -54,7 +54,12 @@
   outputName ? if type == "stdioInteraction" then null else "output",
 
   # Compile command for the native static checker or interactor.
-  checkerCompileCommand ? "$CXX -x c++ program.code -o program -lm -fno-stack-limit -std=c++23 -O3 -static",
+  checkerCompileCommand ?
+    includes:
+    let
+      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
+    in
+    "$CXX -x c++ program.code -o program -lm -fno-stack-limit -std=c++23 -O3 -static ${includeDirCmd}",
 
   # Whether to patch CPLib programs to use testlib-compatible initializers.
   patchCplibProgram ? true,
@@ -80,13 +85,11 @@
       documents,
       generators,
       solutions,
+      includes,
+      samples,
       ...
     }@problem:
     let
-      sampleTestCases = builtins.filter (
-        { groups, ... }: (builtins.elem "sample" groups) || (builtins.elem "sample_large" groups)
-      ) (builtins.attrValues testCases);
-
       # Flatten Hull subtasks into a list of CMS-compatible subtasks.
       # This resolves issues with "sum" scoring and test cases belonging to multiple subtasks.
       # - "sum" scoring subtasks are expanded: one CMS subtask per test case.
@@ -120,13 +123,13 @@
                   ]
               ) subtasksWithIndex;
               sampleSubtasks =
-                if sampleTestCases == [ ] then
+                if samples == [ ] then
                   [ ]
                 else
                   [
                     {
                       score = 0;
-                      testCases = sampleTestCases;
+                      testCases = samples;
                     }
                   ];
             in
@@ -167,71 +170,35 @@
         in
         lib.imap0 (i: p: p // { cmsIndex = i; }) points;
 
-      # Compile native, statically-linked executables for checker/manager.
-      # CMS requires native binaries, not WASM, for these components.
-      compileNative =
-        {
-          programSrc,
-          compileCommand,
-          mode, # "checker" or "interactor"
-        }:
-        let
-          patchedSrc =
-            if !patchCplibProgram then
-              programSrc
-            else
-              hull.patchCplibProgram (
-                {
-                  problemName = problem.name;
-                  src = programSrc;
-                }
-                // (
-                  if mode == "checker" then
-                    {
-                      checker = "::cplib_initializers::cms::checker::Initializer()";
-                      extraIncludes = [ "\"cms_checker.hpp\"" ];
-                    }
-                  else if mode == "interactor" then
-                    {
-                      interactor = "::cplib_initializers::cms::interactor::Initializer()";
-                      extraIncludes = [ "\"cms_interactor.hpp\"" ];
-                    }
-                  else
-                    throw "Invalid mode `${mode}`"
-                )
-              );
-          pkgsTarget = if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem};
-        in
-        pkgsTarget.pkgsStatic.stdenv.mkDerivation {
-          name = "hull-cmsNativeChecker-${problem.name}";
-          unpackPhase = ''
-            cp ${patchedSrc} program.code
-            cp ${cplib}/cplib.hpp cplib.hpp
-            ${
-              if mode == "checker" then
-                "cp ${cplibInitializers}/include/cms/checker.hpp cms_checker.hpp"
-              else if mode == "interactor" then
-                "cp ${cplibInitializers}/include/cms/interactor.hpp cms_interactor.hpp"
-              else
-                throw "Invalid mode `${mode}`"
+      patchedChecker =
+        if !patchCplibProgram then
+          checker.src
+        else
+          hull.patchCplibProgram (
+            {
+              problemName = problem.name;
+              src = checker.src;
             }
-          '';
-          buildPhase = ''
-            runHook preBuild
-            ${compileCommand}
-            runHook postBuild
-          '';
-          installPhase = ''
-            runHook preInstall
-            install -Dm755 program $out/bin/program
-            runHook postInstall
-          '';
-        };
+            // (
+              if type != "stdioInteraction" then
+                {
+                  checker = "::cplib_initializers::cms::checker::Initializer()";
+                  extraIncludes = [ "\"${cplibInitializers}/include/cms/checker.hpp\"" ];
+                }
+              else
+                {
+                  interactor = "::cplib_initializers::cms::interactor::Initializer()";
+                  extraIncludes = [ "\"${cplibInitializers}/include/cms/interactor.hpp\"" ];
+                }
+            )
+          );
 
-      compiledChecker = compileNative {
-        programSrc = checker.src;
-        compileCommand = checkerCompileCommand;
-        mode = if type == "stdioInteraction" then "interactor" else "checker";
+      compiledChecker = hull.problemTarget.utils.compileNativeExecutable {
+        problemName = problem.name;
+        programName = "cmsChecker";
+        src = patchedChecker;
+        compileCommand = checkerCompileCommand includes;
+        stdenv = (if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem}).pkgsStatic.stdenv;
       };
 
       # Generate content for task.yaml.
@@ -245,7 +212,7 @@
         score_precision = 6;
         primary_language = displayLanguage;
         public_testcases = lib.concatMapStringsSep "," toString (
-          lib.range 0 ((builtins.length sampleTestCases) - 1)
+          lib.range 0 ((builtins.length samples) - 1)
         );
       }
       // lib.optionalAttrs (type == "batch") {
@@ -261,29 +228,6 @@
         ) cmsSubtasks
       );
 
-      # Helper to generate shell commands for copying attachments.
-      copyAttachmentsCommand =
-        let
-          makeProgramItem =
-            name: program:
-            if program.participantVisibility == "src" then
-              { "${name}.${hull.language.toFileExtension program.language}" = program.src; }
-            else if program.participantVisibility == "wasm" then
-              { "${name}.wasm" = program.wasm; }
-            else
-              { };
-
-          visiblePrograms =
-            (makeProgramItem "checker" checker)
-            // (lib.mergeAttrsList (lib.mapAttrsToList (n: g: makeProgramItem "generator_${n}" g) generators))
-            // (lib.mergeAttrsList (
-              lib.mapAttrsToList (
-                n: s: lib.optionalAttrs s.participantVisibility { "solution_${n}" = s.src; }
-              ) solutions
-            ));
-          allAttachments = attachments // visiblePrograms;
-        in
-        lib.concatMapAttrsStringSep "\n" (dest: src: "cp ${src} $out/att/${dest}") allAttachments;
     in
     pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-cms" { } ''
       # Create directory structure
@@ -323,22 +267,24 @@
       ) graderSrcs}
       ${lib.concatMapAttrsStringSep "\n" (name: src: "cp ${src} $out/sol/${name}") extraSolFiles}
 
-      # Copy sample data
-      ${lib.concatStringsSep "\n" (
-        lib.imap0 (i: tc: ''
-          cp ${tc.data.input} $out/att/input${toString i}.txt
-          ${
-            let
-              outputPath = "$out/att/output${toString i}.txt";
-            in
-            if outputName == null then
-              "touch ${outputPath}"
-            else
-              "cp ${tc.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
-          }
-        '') sampleTestCases
-      )}
+      # Copy attachments
+      ${hull.problemTarget.utils.samplesCommand {
+        inherit problem outputName;
+        dest = "$out/att";
+        naming =
+          { index, ... }:
+          {
+            input = "sample_input${toString index}.txt";
+            output = "sample_output${toString index}.txt";
+          };
+      }}
 
-      ${copyAttachmentsCommand}
+      ${hull.problemTarget.utils.participantProgramsCommand {
+        inherit problem;
+        dest = "$out/att";
+        flattened = true;
+      }}
+
+      ${lib.concatMapAttrsStringSep "\n" (destPath: src: "cp ${src} $out/att/${destPath}") attachments}
     '';
 }

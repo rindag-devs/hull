@@ -95,6 +95,16 @@
       default = { };
     };
 
+    samples = lib.mkOption {
+      type = lib.types.listOf lib.types.attrs;
+      readOnly = true;
+      description = "A list of test cases with `sample` or `sampleLarge` group.";
+      default = builtins.filter (
+        tc: (builtins.elem "sample" tc.groups) || (builtins.elem "sampleLarge" tc.groups)
+      ) (builtins.attrValues config.testCases);
+      defaultText = "A filtered list of `problem.testCases` with `sample` or `sampleLarge` group.";
+    };
+
     testCaseInputValidations = lib.mkOption {
       type = lib.types.attrsOf hull.types.inputValidationReport;
       description = "An attribute set describing the input validation report for all test cases.";

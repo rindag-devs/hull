@@ -64,16 +64,11 @@
     }@contest:
     let
       mkSampleCommand =
-        { testCases, ... }@problem:
-        let
-          samples = lib.filterAttrs (
-            _: { groups, ... }: (builtins.elem "sample" groups) || (builtins.elem "sample_large" groups)
-          ) testCases;
-        in
-        lib.concatMapAttrsStringSep "\n" (
-          tcName: tc:
+        { samples, ... }@problem:
+        lib.concatMapStringsSep "\n" (
+          tc:
           let
-            dataPathPrefix = "$out/${problem.name}/data/${tcName}";
+            dataPathPrefix = "$out/${problem.name}/data/${tc.name}";
           in
           ''
             mkdir -p ${dataPathPrefix}

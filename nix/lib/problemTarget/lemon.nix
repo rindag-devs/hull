@@ -53,7 +53,12 @@
   outputName ? if type == "stdioInteraction" then null else "output",
 
   # Compile command for checker, which should build a statically linked executable.
-  checkerCompileCommand ? "$CXX -x c++ checker.code -o checker -lm -fno-stack-limit -std=c++23 -O3 -static",
+  checkerCompileCommand ?
+    includes:
+    let
+      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
+    in
+    "$CXX -x c++ program.code -o program -lm -fno-stack-limit -std=c++23 -O3 -static ${includeDirCmd}",
 
   # A map of solution and extension name.
   # Example { std = "cpp"; bf = "c"; }
@@ -70,16 +75,13 @@
   __functor =
     self:
     {
-      name,
-      displayName,
       testCases,
       subtasks,
       solutions,
       checker,
-      judger,
-      languages,
+      includes,
       ...
-    }:
+    }@problem:
     let
       taskTypeEnum = {
         batch = 0;
@@ -116,8 +118,8 @@
               fullScore = builtins.floor (scorePerCase * scoreScale);
               timeLimit = builtins.floor (tc.tickLimit / ticksPerMs);
               memoryLimit = builtins.floor (tc.memoryLimit / (1024 * 1024));
-              inputFiles = [ "${name}/${tc.name}.in" ];
-              outputFiles = [ "${name}/${tc.name}.out" ];
+              inputFiles = [ "${problem.name}/${tc.name}.in" ];
+              outputFiles = [ "${problem.name}/${tc.name}.out" ];
             }) st.testCases
           else
             # For 'min' scoring (default), the entire subtask is one Lemon test case.
@@ -133,7 +135,7 @@
                   if a == b then
                     a
                   else
-                    throw "In problem ${name}, subtask #${toString index}, test cases have different tick or memory limits. This is not allowed for 'min' scoring subtasks in the Lemon target."
+                    throw "In problem ${problem.name}, subtask #${toString index}, test cases have different tick or memory limits. This is not allowed for 'min' scoring subtasks in the Lemon target."
                 ) first list;
               reducedTl = reduceSame firstTl (map ({ tickLimit, ... }: tickLimit) st.testCases);
               reducedMl = reduceSame firstMl (map ({ memoryLimit, ... }: memoryLimit) st.testCases);
@@ -144,8 +146,8 @@
                 fullScore = builtins.floor (st.fullScore * scoreScale);
                 timeLimit = builtins.floor (reducedTl / ticksPerMs);
                 memoryLimit = builtins.floor (reducedMl / (1024 * 1024));
-                inputFiles = map (tc: "${name}/${tc.name}.in") st.testCases;
-                outputFiles = map (tc: "${name}/${tc.name}.out") st.testCases;
+                inputFiles = map (tc: "${problem.name}/${tc.name}.in") st.testCases;
+                outputFiles = map (tc: "${problem.name}/${tc.name}.out") st.testCases;
               }
             ]
         ) subtasksWithIndex;
@@ -154,25 +156,25 @@
       # Structure is based on reverse-engineering LemonLime's source code.
       lemonJsonContent = {
         version = "1.0";
-        contestTitle = name;
+        contestTitle = problem.name;
 
         tasks = [
           {
-            problemTitle = name;
-            sourceFileName = name;
-            inputFileName = "${name}.in";
-            outputFileName = "${name}.out";
+            problemTitle = problem.name;
+            sourceFileName = problem.name;
+            inputFileName = "${problem.name}.in";
+            outputFileName = "${problem.name}.out";
             standardInputCheck = true;
             standardOutputCheck = true;
             subFolderCheck = true;
             comparisonMode = 4;
-            specialJudge = "${name}/checker";
+            specialJudge = "${problem.name}/checker";
 
             inherit taskType;
 
             # For grader interaction problems.
-            grader = if taskType == taskTypeEnum.graderInteraction then "${name}/grader.cpp" else ""; # Assuming single grader file
-            interactor = if interactionLibName != null then "${name}/${interactionLibName}" else null;
+            grader = if taskType == taskTypeEnum.graderInteraction then "${problem.name}/grader.cpp" else ""; # Assuming single grader file
+            interactor = if interactionLibName != null then "${problem.name}/${interactionLibName}" else null;
             interactorName = if interactionLibName != null then interactionLibName else null;
 
             # Default compiler configurations.
@@ -211,48 +213,35 @@
           checker.src
         else
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = checker.src;
             checker = "::cplib_initializers::lemon::checker::Initializer()";
-            extraIncludes = [ "\"lemon_checker.hpp\"" ];
+            extraIncludes = [ "\"${cplibInitializers}/include/lemon/checker.hpp\"" ];
           };
 
-      pkgsTarget = if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem};
-
       # Compiled, static-linked checker executable
-      compiledChecker = pkgsTarget.pkgsStatic.stdenv.mkDerivation {
-        name = "hull-lemonCompiledChecker-${name}";
-        unpackPhase = ''
-          cp ${patchedChecker} checker.code
-          cp ${cplib}/cplib.hpp cplib.hpp
-          cp ${cplibInitializers}/include/lemon/checker.hpp lemon_checker.hpp
-        '';
-        buildPhase = ''
-          runHook preBuild
-          ${checkerCompileCommand}
-          runHook postBuild
-        '';
-        installPhase = ''
-          runHook preInstall
-          install -Dm755 checker $out/bin/checker
-          runHook postInstall
-        '';
+      compiledChecker = hull.problemTarget.utils.compileNativeExecutable {
+        problemName = problem.name;
+        programName = "lemonChecker";
+        src = patchedChecker;
+        compileCommand = checkerCompileCommand includes;
+        stdenv = (if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem}).pkgsStatic.stdenv;
       };
 
     in
-    pkgs.runCommandLocal "hull-problemTargetOutput-${name}-lemon" { } ''
+    pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-lemon" { } ''
       # Create directory structure
-      mkdir -p $out/data/${name} $out/source
+      mkdir -p $out/data/${problem.name} $out/source
 
       # Write the main contest file
-      echo '${builtins.toJSON lemonJsonContent}' > $out/${name}.cdf
+      echo '${builtins.toJSON lemonJsonContent}' > $out/${problem.name}.cdf
 
       # Copy test data (inputs and outputs)
       ${lib.concatMapAttrsStringSep "\n" (tcName: tc: ''
-        cp ${tc.data.input} $out/data/${name}/${tcName}.in
+        cp ${tc.data.input} $out/data/${problem.name}/${tcName}.in
         ${
           let
-            outputPath = "$out/data/${name}/${tcName}.out";
+            outputPath = "$out/data/${problem.name}/${tcName}.out";
           in
           if outputName == null then
             "touch ${outputPath}"
@@ -263,20 +252,20 @@
 
       # Copy checker executable
       # Lemon expects a native executable, not WASM.
-      cp ${compiledChecker}/bin/checker $out/data/${name}/checker
+      cp ${compiledChecker}/bin/program $out/data/${problem.name}/checker
 
       # Copy grader source and interaction lib for interaction problems
       ${lib.optionalString (taskType == taskTypeEnum.graderInteraction) (''
-        cp ${graderSrc} $out/data/${name}/grader.cpp
+        cp ${graderSrc} $out/data/${problem.name}/grader.cpp
         ${lib.optionalString (
           interactionLibName != null
-        ) "cp ${interactionLib} $out/data/${name}/${interactionLibName}"}
+        ) "cp ${interactionLib} $out/data/${problem.name}/${interactionLibName}"}
       '')}
 
       # Copy solution sources into contestant folders
       ${lib.concatMapAttrsStringSep "\n" (solName: ext: ''
-        mkdir -p $out/source/${solName}/${name}
-        cp ${solutions.${solName}.src} $out/source/${solName}/${name}/${name}.${ext}
+        mkdir -p $out/source/${solName}/${problem.name}
+        cp ${solutions.${solName}.src} $out/source/${solName}/${problem.name}/${problem.name}.${ext}
       '') solutionExtNames}
     '';
 }

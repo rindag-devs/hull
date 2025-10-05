@@ -68,5 +68,8 @@
     cms = hull.problemTarget.cms {
       type = "answerOnly";
     };
+    luogu = hull.problemTarget.luogu {
+      type = "answerOnly";
+    };
   };
 }

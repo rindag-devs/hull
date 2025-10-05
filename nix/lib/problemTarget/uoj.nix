@@ -57,9 +57,15 @@
   # Whether to patch CPLib programs, i.e. replace the default initializer.
   patchCplibProgram ? true,
 
-  # File suffix (ext name with point) for compiled programs (checker, interactor, etc.).
-  # UOJ determines the language by file extension.
-  programSuffix ? "20.cpp",
+  # File suffix for checker or interactor.
+  # UOJ determines the language by file suffix.
+  # See https://github.com/vfleaking/uoj/blob/517134629ba066c45c7d8637cfc98b75acb560da/web/app/models/UOJLang.php#L32
+  checkerSuffix ? "20.cpp",
+
+  # File suffix for validator.
+  # UOJ determines the language by file suffix.
+  # See https://github.com/vfleaking/uoj/blob/517134629ba066c45c7d8637cfc98b75acb560da/web/app/models/UOJLang.php#L32
+  validatorSuffix ? "20.cpp",
 
   # Enable integer mode for score. Usually applies to UOJ community edition.
   integerScore ? false,
@@ -80,6 +86,7 @@
       validator,
       documents,
       generators,
+      samples,
       ...
     }@problem:
     let
@@ -133,10 +140,7 @@
       # Generate the content for problem.conf
       problemConfContent =
         let
-          sampleTestCases = lib.filterAttrs (
-            _: { groups, ... }: (builtins.elem "sample" groups) || (builtins.elem "sample_large" groups)
-          ) testCases;
-          nSampleTests = builtins.length (builtins.attrValues sampleTestCases);
+          nSampleTests = builtins.length samples;
 
           subtaskEnds = builtins.foldl' (
             accList: st:
@@ -189,7 +193,7 @@
             src = "${cplibInitializers}/include/testlib/checker_two_step.cpp";
             includeReplacements = [
               [
-                "^testlib/checker.hpp$"
+                "^testlib/checker\\.hpp$"
                 "testlib_checker.hpp"
               ]
               [
@@ -282,8 +286,6 @@
 
         # Create directory structure
         mkdir -p $tmpdir/download/document
-        mkdir -p $tmpdir/download/solution
-        mkdir -p $tmpdir/download/generator
         mkdir -p $tmpdir/require
 
         # Write problem.conf
@@ -304,45 +306,30 @@
         '') uojTestPoints}
 
         # Copy sample data
-        ${lib.concatStringsSep "\n" (
-          lib.imap1
-            (i: tc: ''
-              cp ${tc.data.input} $tmpdir/ex_${problem.name}${toString i}.in
-              ${
-                let
-                  outputPath = "$tmpdir/ex_${problem.name}${toString i}.out";
-                in
-                if outputName == null then
-                  "touch ${outputPath}"
-                else
-                  "cp ${tc.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
-              }
-            '')
-            (
-              lib.attrValues (
-                lib.filterAttrs (
-                  _: { groups, ... }: (builtins.elem "sample" groups) || (builtins.elem "sample_large" groups)
-                ) testCases
-              )
-            )
-        )}
+        ${hull.problemTarget.utils.samplesCommand {
+          inherit problem outputName;
+          dest = "$tmpdir";
+          naming =
+            { index, ... }:
+            {
+              input = "ex_${problem.name}${toString (index + 1)}.in";
+              output = "ex_${problem.name}${toString (index + 1)}.out";
+            };
+        }}
 
         # Copy judger programs (checker, validator, interactor, graders)
-        cp ${patchedValidator} $tmpdir/val${programSuffix}
+        cp ${patchedValidator} $tmpdir/val${validatorSuffix}
         ${lib.optionalString (
           type != "stdioInteraction" || twoStepInteraction
-        ) "cp ${finalChecker} $tmpdir/chk${programSuffix}"}
+        ) "cp ${finalChecker} $tmpdir/chk${checkerSuffix}"}
         ${lib.optionalString (
           type == "stdioInteraction"
-        ) "cp ${interactor} $tmpdir/interactor${programSuffix}"}
+        ) "cp ${interactor} $tmpdir/interactor${checkerSuffix}"}
         ${lib.optionalString (graderSrcs != null) (
           lib.concatMapAttrsStringSep "\n" (
             lang: src: "cp ${src} $tmpdir/require/implementer.${lang}"
           ) graderSrcs
         )}
-
-        # Copy downloadable files
-        ${mkCopyCommands "$tmpdir/download" extraDownloadFiles}
 
         # Copy require files
         cp ${cplib}/cplib.hpp $tmpdir/require/cplib.hpp
@@ -363,33 +350,14 @@
         ) documents}
 
         # Copy visible programs
-        ${lib.optionalString (checker.participantVisibility != "no")
-          "cp ${checker.${checker.participantVisibility}} $tmpdir/download/checker.${
-            if checker.participantVisibility == "src" then
-              hull.language.toFileExtension checker.language
-            else
-              "wasm"
-          }"
-        }
-        ${lib.optionalString (validator.participantVisibility != "no")
-          "cp ${validator.${validator.participantVisibility}} $tmpdir/download/validator.${
-            if validator.participantVisibility == "src" then
-              hull.language.toFileExtension validator.language
-            else
-              "wasm"
-          }"
-        }
-        ${lib.concatMapAttrsStringSep "\n" (
-          genName: gen:
-          lib.optionalString (gen.participantVisibility != "no")
-            "cp ${gen.${gen.participantVisibility}} $tmpdir/download/generator/${genName}.${
-              if gen.participantVisibility == "src" then hull.language.toFileExtension gen.language else "wasm"
-            }"
-        ) generators}
-        ${lib.concatMapAttrsStringSep "\n" (
-          solName: sol:
-          lib.optionalString sol.participantVisibility "cp ${sol.src} $tmpdir/download/solution/${solName}"
-        ) solutions}
+        ${hull.problemTarget.utils.participantProgramsCommand {
+          inherit problem;
+          dest = "$tmpdir/download";
+          flattened = false;
+        }}
+
+        # Copy downloadable files
+        ${mkCopyCommands "$tmpdir/download" extraDownloadFiles}
 
         # Zip the result
         ${
