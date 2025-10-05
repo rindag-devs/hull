@@ -26,9 +26,6 @@
   # Currently supports "batch" and "stdioInteraction"
   type ? "batch",
 
-  # The short name for the problem used within DOMjudge. Defaults to the problem's `name`.
-  problemId ? null,
-
   # Whether to package the output as a zip file. DOMjudge requires this.
   zipped ? true,
 
@@ -56,7 +53,12 @@
   attachments ? { },
 
   # Compile command for the native static checker or interactor.
-  checkerCompileCommand ? "$CXX -x c++ program.code -o program -lm -fno-stack-limit -std=c++23 -O3 -static",
+  checkerCompileCommand ?
+    includes:
+    let
+      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
+    in
+    "$CXX -x c++ program.code -o program -lm -fno-stack-limit -std=c++23 -O3 -static ${includeDirCmd}",
 
   # Specify the target system for the package.
   # `null` means using the local system.
@@ -72,86 +74,48 @@
       displayName,
       testCases,
       checker,
-      judger,
       documents,
       solutions,
       tickLimit,
       memoryLimit,
       mainCorrectSolution,
       generators,
+      includes,
+      validator,
       ...
     }@problem:
     let
       problemDisplayName = displayName.en or problem.name;
 
-      # Use the provided problemId or default to the problem's name.
-      finalProblemId = if problemId != null then problemId else problem.name;
-
-      # Compile native, statically-linked executables for checker/manager.
-      # DOMjudge requires native binaries, not WASM, for these components.
-      compileNative =
-        {
-          programSrc,
-          compileCommand,
-          mode, # "checker" or "interactor"
-        }:
-        let
-          patchedSrc =
-            if !patchCplibProgram then
-              programSrc
-            else
-              hull.patchCplibProgram (
-                {
-                  problemName = problem.name;
-                  src = programSrc;
-                }
-                // (
-                  if mode == "checker" then
-                    {
-                      checker = "::cplib_initializers::kattis::checker::Initializer()";
-                      extraIncludes = [ "\"kattis_checker.hpp\"" ];
-                    }
-                  else if mode == "interactor" then
-                    {
-                      interactor = "::cplib_initializers::kattis::interactor::Initializer()";
-                      extraIncludes = [ "\"kattis_interactor.hpp\"" ];
-                    }
-                  else
-                    throw "Invalid mode `${mode}`"
-                )
-              );
-          pkgsTarget = if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem};
-        in
-        pkgsTarget.pkgsStatic.stdenv.mkDerivation {
-          name = "hull-kattisNativeChecker-${problem.name}";
-          unpackPhase = ''
-            cp ${patchedSrc} program.code
-            cp ${cplib}/cplib.hpp cplib.hpp
-            ${
-              if mode == "checker" then
-                "cp ${cplibInitializers}/include/kattis/checker.hpp kattis_checker.hpp"
-              else if mode == "interactor" then
-                "cp ${cplibInitializers}/include/kattis/interactor.hpp kattis_interactor.hpp"
-              else
-                throw "Invalid mode `${mode}`"
+      patchedChecker =
+        if !patchCplibProgram then
+          checker.src
+        else
+          hull.patchCplibProgram (
+            {
+              problemName = problem.name;
+              src = checker.src;
             }
-          '';
-          buildPhase = ''
-            runHook preBuild
-            ${compileCommand}
-            runHook postBuild
-          '';
-          installPhase = ''
-            runHook preInstall
-            install -Dm755 program $out/bin/program
-            runHook postInstall
-          '';
-        };
+            // (
+              if type != "stdioInteraction" then
+                {
+                  checker = "::cplib_initializers::kattis::checker::Initializer()";
+                  extraIncludes = [ "\"${cplibInitializers}/include/kattis/checker.hpp\"" ];
+                }
+              else
+                {
+                  interactor = "::cplib_initializers::kattis::interactor::Initializer()";
+                  extraIncludes = [ "\"${cplibInitializers}/include/kattis/interactor.hpp\"" ];
+                }
+            )
+          );
 
-      compiledChecker = compileNative {
-        programSrc = checker.src;
-        compileCommand = checkerCompileCommand;
-        mode = if type == "stdioInteraction" then "interactor" else "checker";
+      compiledChecker = hull.problemTarget.utils.compileNativeExecutable {
+        problemName = problem.name;
+        programName = "kattisChecker";
+        src = patchedChecker;
+        compileCommand = checkerCompileCommand includes;
+        stdenv = (if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem}).pkgsStatic.stdenv;
       };
 
       # Generate content for domjudge-problem.ini
@@ -174,32 +138,6 @@
         };
       };
 
-      # Helper to generate shell commands for copying attachments.
-      copyAttachmentsCommand =
-        let
-          makeProgramItem =
-            name: program:
-            if program.participantVisibility == "src" then
-              { "${name}.${hull.language.toFileExtension program.language}" = program.src; }
-            else if program.participantVisibility == "wasm" then
-              { "${name}.wasm" = program.wasm; }
-            else
-              { };
-
-          visiblePrograms =
-            (makeProgramItem "checker" checker)
-            // (lib.mergeAttrsList (lib.mapAttrsToList (n: g: makeProgramItem "generator_${n}" g) generators))
-            // (lib.mergeAttrsList (
-              lib.mapAttrsToList (
-                n: s: lib.optionalAttrs s.participantVisibility { "solution_${n}" = s.src; }
-              ) solutions
-            ));
-          allAttachments = attachments // visiblePrograms;
-        in
-        lib.concatMapAttrsStringSep "\n" (
-          dest: src: "cp ${src} $tmpdir/attachments/${dest}"
-        ) allAttachments;
-
     in
     pkgs.runCommandLocal
       ("hull-problemTargetOutput-${problem.name}-domjudge" + (lib.optionalString zipped ".zip"))
@@ -218,7 +156,7 @@
         ${lib.concatMapStringsSep "\n" (
           tc:
           let
-            isSample = (builtins.elem "sample" tc.groups) || (builtins.elem "sample_large" tc.groups);
+            isSample = (builtins.elem "sample" tc.groups) || (builtins.elem "sampleLarge" tc.groups);
             dir = if isSample then "sample" else "secret";
             idxVar = "${dir}_idx";
           in
@@ -246,14 +184,20 @@
 
         # Copy attachments
         mkdir -p $tmpdir/attachments
-        ${copyAttachmentsCommand}
+        ${hull.problemTarget.utils.participantProgramsCommand {
+          inherit problem;
+          dest = "$tmpdir/attachments";
+          flattened = true;
+        }}
+
+        ${lib.concatMapAttrsStringSep "\n" (destPath: src: "cp ${src} $out/att/${destPath}") attachments}
 
         # Zip the final package
         ${
           if zipped then
             ''
-              (cd $tmpdir && zip -r ../${finalProblemId}.zip .)
-              mv $tmpdir/../${finalProblemId}.zip $out
+              (cd $tmpdir && zip -r ../output.zip .)
+              mv $tmpdir/../output.zip $out
             ''
           else
             ''

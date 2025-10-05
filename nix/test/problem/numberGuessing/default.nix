@@ -86,5 +86,8 @@
     domjudge = hull.problemTarget.domjudge {
       type = "stdioInteraction";
     };
+    luogu = hull.problemTarget.luogu {
+      type = "stdioInteraction";
+    };
   };
 }

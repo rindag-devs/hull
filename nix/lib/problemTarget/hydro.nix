@@ -93,6 +93,9 @@
   # Allowed programming languages. A list of `langs` for the problem.yaml.
   # Null means all languages are allowed.
   allowedLanguages ? null,
+
+  # Extra attachment files placed in `additional_file/`.
+  attachments ? { },
 }:
 
 {
@@ -100,7 +103,6 @@
   __functor =
     self:
     {
-      name,
       displayName,
       testCases,
       subtasks,
@@ -112,7 +114,7 @@
       generators,
       solutions,
       ...
-    }:
+    }@problem:
     let
       testDataExtraFiles' = {
         "cplib.hpp" = "${cplib}/cplib.hpp";
@@ -125,7 +127,7 @@
 
       # Content for problem.yaml
       problemYamlContent = {
-        title = displayName.${defaultDisplayLanguage} or name;
+        title = displayName.${defaultDisplayLanguage} or problem.name;
         inherit owner tag;
       };
 
@@ -204,71 +206,19 @@
         name: path: "cp ${path} $tmpdir/testdata/${name}"
       ) testDataExtraFiles';
 
-      # Shell command to copy participant-visible programs
-      participantProgramsCommand =
-        let
-          # Helper to generate copy commands for programs with string visibility
-          # (checker, validator, generator)
-          mkProgramCopyCommand =
-            programType: programName: program:
-            let
-              baseName = if programName == null then programType else "${programType}_${programName}";
-            in
-            if program.participantVisibility == "src" then
-              let
-                ext = hull.language.toFileExtension program.language;
-                destName = "${baseName}.${ext}";
-              in
-              "cp ${program.src} $tmpdir/additional_file/${destName}"
-            else if program.participantVisibility == "wasm" then
-              let
-                destName = "${baseName}.wasm";
-              in
-              "cp ${program.wasm} $tmpdir/additional_file/${destName}"
-            else
-              ""; # No-op for "no" visibility
-
-          # Helper for programs with boolean visibility (solutions)
-          mkSolutionCopyCommand =
-            solName: sol:
-            lib.optionalString sol.participantVisibility "cp -r ${sol.src} $tmpdir/additional_file/solution_${solName}";
-        in
-        lib.concatStringsSep "\n" [
-          (mkProgramCopyCommand "checker" null checker)
-          (mkProgramCopyCommand "validator" null validator)
-          (lib.concatMapAttrsStringSep "\n" (
-            genName: gen: mkProgramCopyCommand "generator" genName gen
-          ) generators)
-          (lib.concatMapAttrsStringSep "\n" (solName: sol: mkSolutionCopyCommand solName sol) solutions)
-        ];
-
-      # Shell command to copy sample test cases
-      samplesCommand =
-        let
-          samples = lib.filterAttrs (
-            _: { groups, ... }: (builtins.elem "sample" groups) || (builtins.elem "sample_large" groups)
-          ) testCases;
-        in
-        lib.concatMapAttrsStringSep "\n" (tcName: tc: ''
-          cp ${tc.data.input} $tmpdir/additional_file/sample_${tc.name}.in
-          ${lib.optionalString (outputName != null)
-            "cp ${tc.data.outputs}/${lib.escapeShellArg outputName} $tmpdir/additional_file/sample_${tc.name}.ans"
-          }
-        '') samples;
-
       patchedChecker =
         if !patchCplibProgram then
           checker.src
         else if type == "stdioInteraction" then
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = checker.src;
             interactor = "::cplib_initializers::testlib::interactor::Initializer(true)";
             extraIncludes = [ "\"testlib_interactor.hpp\"" ];
           }
         else
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = checker.src;
             checker = "::cplib_initializers::syzoj::checker::Initializer()";
             extraIncludes = [ "\"syzoj_checker.hpp\"" ];
@@ -279,7 +229,7 @@
           validator.src
         else
           hull.patchCplibProgram {
-            problemName = name;
+            problemName = problem.name;
             src = validator.src;
             validator = "::cplib_initializers::testlib::validator::Initializer()";
             extraIncludes = [ "\"testlib_validator.hpp\"" ];
@@ -343,7 +293,8 @@
         else
           null;
     in
-    pkgs.runCommandLocal ("hull-problemTargetOutput-${name}-hydro" + (lib.optionalString zipped ".zip"))
+    pkgs.runCommandLocal
+      ("hull-problemTargetOutput-${problem.name}-hydro" + (lib.optionalString zipped ".zip"))
       {
         nativeBuildInputs = [ pkgs.zip ];
       }
@@ -361,12 +312,8 @@
         ${documentsCommand}
         ${statementsCommand}
 
-        # Copy participant-visible programs
-        ${participantProgramsCommand}
-
         # Copy test data (inputs and answers)
         ${testDataCommand}
-        ${samplesCommand}
 
         # Copy checker, interactor, validator
         cp ${patchedChecker} $tmpdir/testdata/checker.${checkerExtName}
@@ -382,6 +329,28 @@
 
         # Copy extra files
         ${testDataExtraFilesCommand}
+
+        # Additional files
+        ${hull.problemTarget.utils.samplesCommand {
+          inherit problem outputName;
+          dest = "$tmpdir/additional_file";
+          naming =
+            { testCaseName, ... }:
+            {
+              input = "sample_${testCaseName}.in";
+              output = "sample_${testCaseName}.ans";
+            };
+        }}
+
+        ${hull.problemTarget.utils.participantProgramsCommand {
+          inherit problem;
+          dest = "$tmpdir/additional_file";
+          flattened = true;
+        }}
+
+        ${lib.concatMapAttrsStringSep "\n" (
+          destPath: src: "cp ${src} $tmpdir/additional_file/${destPath}"
+        ) attachments}
 
         # Zip the result
         ${
