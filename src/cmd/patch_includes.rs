@@ -63,10 +63,14 @@ fn unescape(input: &str) -> String {
 
 /// This is for sequences such as `\x08` or `\u1234`
 fn escape_n_chars(chars: &mut Chars<'_>, length: usize) -> Option<char> {
-  let s = chars.as_str().get(0..length)?;
-  let u = u32::from_str_radix(&s, 16).ok()?;
+  let mut peek = chars.clone();
+  let hex_str: String = peek.by_ref().take(length).collect();
+  if hex_str.len() != length {
+    return None;
+  }
+  let u = u32::from_str_radix(&hex_str, 16).ok()?;
   let ch = char::from_u32(u)?;
-  _ = chars.nth(length);
+  chars.nth(length - 1);
   Some(ch)
 }
 
@@ -212,4 +216,80 @@ pub fn run(opts: &PatchIncludesOpts) -> Result<()> {
     .with_context(|| format!("Failed to write to output file: {}", opts.output_path))?;
 
   Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_unescape() {
+    // Simple cases
+    assert_eq!(unescape("hello\\nworld"), "hello\nworld");
+    assert_eq!(unescape("\\tindented"), "\tindented");
+    assert_eq!(unescape("a\\rb"), "a\rb");
+    assert_eq!(unescape("quote \\'test\\'"), "quote 'test'");
+    assert_eq!(unescape("quote \\\"test\\\""), "quote \"test\"");
+    assert_eq!(
+      unescape("a literal \\\\ backslash"),
+      "a literal \\ backslash"
+    );
+
+    // No escapes
+    assert_eq!(unescape("a normal string"), "a normal string");
+
+    // An unknown escape sequence should be treated literally
+    assert_eq!(unescape("hello \\z world"), "hello \\z world");
+
+    // Invalid escape
+    assert_eq!(unescape("hello \\z world"), "hello \\z world");
+
+    // Hex and unicode
+    assert_eq!(unescape("A\\u0042C"), "ABC"); // \u0042 is 'B'
+    assert_eq!(unescape("D\\x45F"), "DEF"); // \x45 is 'E'
+    assert_eq!(unescape("\\u2713 check"), "\u{2713} check");
+
+    // If the hex sequence is too short, it's not a valid escape
+    assert_eq!(unescape("incomplete \\u123"), "incomplete \\u123");
+    assert_eq!(unescape("incomplete \\x1"), "incomplete \\x1");
+    assert_eq!(unescape("invalid hex \\uZZZZ"), "invalid hex \\uZZZZ");
+  }
+
+  #[test]
+  fn test_replacer_simple() -> Result<()> {
+    let replacer = Replacer::new("foo".to_string(), "bar".to_string(), None)?;
+    let result = replacer.replace(b"this is foo text");
+    assert_eq!(result, b"this is bar text".as_slice());
+    Ok(())
+  }
+
+  #[test]
+  fn test_replacer_case_insensitive() -> Result<()> {
+    let replacer = Replacer::new("foo".to_string(), "bar".to_string(), Some("i".to_string()))?;
+    let result = replacer.replace(b"this is Foo text, and foo too");
+    assert_eq!(result, b"this is bar text, and bar too".as_slice());
+    Ok(())
+  }
+
+  #[test]
+  fn test_replacer_whole_word() -> Result<()> {
+    let replacer = Replacer::new("cat".to_string(), "dog".to_string(), Some("w".to_string()))?;
+    let result = replacer.replace(b"the cat in the cathedral");
+    assert_eq!(result, b"the dog in the cathedral".as_slice());
+    Ok(())
+  }
+
+  #[test]
+  fn test_replacer_with_escaped_replacement() -> Result<()> {
+    let replacer = Replacer::new(" ".to_string(), "\\n".to_string(), None)?;
+    let result = replacer.replace(b"one two three");
+    assert_eq!(result, b"one\ntwo\nthree".as_slice());
+    Ok(())
+  }
+
+  #[test]
+  fn test_replacer_invalid_regex() {
+    let result = Replacer::new("[".to_string(), "bar".to_string(), None);
+    assert!(result.is_err());
+  }
 }
