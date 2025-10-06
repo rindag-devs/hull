@@ -21,6 +21,29 @@
   cplibInitializers,
 }:
 
+# Luogu's judging environment enforces `-std=c++14` when compiling custom
+# checkers, interactors, and validators. However, Hull's core components,
+# which rely on `cplib`, require at least C++ 20. This creates a fundamental
+# incompatibility that prevents direct compilation of these programs on Luogu.
+#
+# To solve this, this target employs a workaround:
+# 1. **Pre-compilation:** The C++ 20 program (e.g., checker) is first compiled
+#    into a standard `x86_64-linux-gnu` shared library (.so file), since
+#    Luogu's environment is fixed and known.
+# 2. **Embedding:** The resulting .so file is compressed (using deflate) and
+#    then base64-encoded to create a portable string. This reduces the size
+#    and makes it embeddable in source code.
+# 3. **Wrapping:** This string is embedded into a simple C wrapper program
+#    (`sharedWrapper.c`). This wrapper itself is C99 compliant and
+#    compiles fine on Luogu with its C++ 14 flags.
+# 4. **Runtime Execution:** When Luogu compiles and runs the wrapper, the
+#    wrapper decodes the base64 string, inflates the data back into the
+#    original .so binary in memory (using `memfd_create`), and then uses
+#    `dlopen`/`dlsym` to dynamically load and execute the `main` function
+#    from the in-memory shared library.
+#
+# This allows us to effectively run a C++ 20 compliant program within Luogu's
+# C++ 14 constrained environment.
 {
   # The problem type.
   # Since Hull's judger is customizable, you need to manually map it.
@@ -129,7 +152,8 @@
         ''
       ) testCaseNames;
 
-      # Compile x86_64-linux-gnu shared library for checker/interactor/validator.
+      # Compile a C++ source file into an x86_64-linux-gnu shared library (.so).
+      # This is the first step of the Luogu C++ standard workaround.
       compileShared =
         {
           programSrc,
@@ -189,7 +213,9 @@
           '';
         };
 
-      # Wrap a shared library into a C / C++ program.
+      # Wrap a shared library into a C program by embedding it as a compressed,
+      # base64-encoded string. This is the build-time part of the Luogu C++
+      # standard workaround.
       wrapShared =
         wrapperName: shared:
         pkgs.runCommandLocal "hull-luoguWrappedShared-${wrapperName}.cpp"
