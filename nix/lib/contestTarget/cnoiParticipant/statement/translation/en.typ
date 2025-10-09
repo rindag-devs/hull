@@ -41,6 +41,8 @@
 #let sample-0-input(x) = "sample " + str(x) + " input"
 #let sample-0-output(x) = "sample " + str(x) + " output"
 #let sample-0-output-1(x, y) = [sample #str(x) #y]
+#let sample-0-description(x) = "sample " + str(x) + " description"
+#let sample-0-graph-visualization(x) = "sample " + str(x) + " graph visualization"
 
 #let ticks(n) = {
   if n < 100000 {

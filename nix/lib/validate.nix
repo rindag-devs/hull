@@ -25,18 +25,23 @@ let
     {
       validatorWasm,
       input,
+      # 0 = NONE
+      # 1 = STACK_ONLY
+      # 2 = FULL
+      readerTraceLevel ? 1,
     }:
     let
       runScript = hull.runWasm.script {
         wasm = validatorWasm;
         stdin = input;
+        arguments = [ "--reader-trace-level=${toString readerTraceLevel}" ];
       };
     in
     ''
       pushd $(mktemp -d) > /dev/null
       ${runScript}
       ${pkgs.jq}/bin/jq -c \
-        '{ status: .status, message: .message, readerTraceStacks: (.reader_trace_stacks // []), readerTraceTree: (.reader_trace_tree // []), traits: (.traits // {}) }' \
+        '{ status: .status, message: .message, readerTraceStacks: (.reader_trace_stacks // []), readerTraceTree: (.reader_trace_tree // {}), traits: (.traits // {}) }' \
         stderr > "''${DIRSTACK[1]}/validation.json"
       popd > /dev/null
     '';
@@ -47,11 +52,15 @@ let
       testCaseName,
       validatorWasm,
       input,
+      # 0 = NONE
+      # 1 = STACK_ONLY
+      # 2 = FULL
+      readerTraceLevel ? 1,
     }:
     let
-      validateScript = script { inherit validatorWasm input; };
+      validateScript = script { inherit validatorWasm input readerTraceLevel; };
     in
-    pkgs.runCommandLocal "process-validate-${problemName}-${testCaseName}"
+    pkgs.runCommandLocal "hull-validation-${problemName}-${testCaseName}"
       { nativeBuildInputs = [ hullPkgs.default ]; }
       ''
         ${validateScript}

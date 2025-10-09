@@ -137,7 +137,7 @@ let
         description = "Internal trace information from the validator's input readers.";
       };
       readerTraceTree = lib.mkOption {
-        type = lib.types.listOf lib.types.attrs;
+        type = lib.types.attrs;
         description = "Internal trace tree from the validator.";
       };
       traits = lib.mkOption {
@@ -441,7 +441,7 @@ in
 
   trait = submodule {
     options = {
-      description = lib.mkOption {
+      descriptions = lib.mkOption {
         type = attrsOf str;
         description = "The description of this trait for each display language.";
         example = {
@@ -521,6 +521,11 @@ in
               "sample"
               "pretest"
             ];
+          };
+          descriptions = lib.mkOption {
+            type = attrsOf str;
+            description = "The description of this test case for each display language, usually used for samples.";
+            default = { };
           };
           data = lib.mkOption {
             type = submodule {

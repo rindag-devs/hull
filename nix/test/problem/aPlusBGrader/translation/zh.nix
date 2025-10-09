@@ -3,7 +3,7 @@
 {
   displayName.zh = "A + B 问题 grader";
   traits = {
-    a_positive.description.zh = "$A$ 为正整数．";
-    b_positive.description.zh = "$B$ 为正整数．";
+    a_positive.descriptions.zh = "$A$ 为正整数．";
+    b_positive.descriptions.zh = "$B$ 为正整数．";
   };
 }

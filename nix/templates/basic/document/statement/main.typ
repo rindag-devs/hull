@@ -56,7 +56,7 @@
     == #titlecase(translation.traits)
 
     #for trait in problem.traits [
-      - #strong(trait.at(0)): #eval(trait.at(1).description.at(language), mode: "markup")
+      - #strong(trait.at(0)): #eval(trait.at(1).descriptions.at(language), mode: "markup")
     ]
   ]
 

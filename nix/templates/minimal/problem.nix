@@ -8,15 +8,15 @@
 
   includes = [ cplib ];
 
-  checker = {
-    src = ./checker.20.cpp;
+  generators = {
   };
 
   validator = {
     src = ./validator.20.cpp;
   };
 
-  generators = {
+  checker = {
+    src = ./checker.20.cpp;
   };
 
   testCases = {

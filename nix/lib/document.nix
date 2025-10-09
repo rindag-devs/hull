@@ -57,14 +57,27 @@ let
           actual-traits = inputValidation.traits;
         }
       ) testCases;
+      # Sample is used to display directly on the document.
+      # Therefore, only the "sample" group is filtered, excluding "sampleLarge".
       samples = lib.mapAttrsToList (
         _:
-        { data, ... }:
         {
+          data,
+          inputValidation,
+          descriptions,
+          ...
+        }:
+        {
+          inherit descriptions;
           input = builtins.readFile data.input;
           outputs = lib.mapAttrs (fileName: _: builtins.readFile (data.outputs + "/" + fileName)) (
             builtins.readDir data.outputs
           );
+          input-validation = {
+            inherit (inputValidation) status traits;
+            reader-trace-stacks = inputValidation.readerTraceStacks;
+            reader-trace-tree = inputValidation.readerTraceTree;
+          };
         }
       ) (lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
       subtasks = map (

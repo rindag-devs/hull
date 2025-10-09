@@ -144,7 +144,7 @@
     .pairs()
     .map(((name, trait)) => (
       raw(name, lang: "txt"),
-      trait.description.at("en", default: text(gray)[(none)]),
+      trait.descriptions.at("en", default: text(gray)[(none)]),
     ))
     .flatten(),
 )

@@ -100,8 +100,8 @@ The `hull-generated.json` file is the bridge between your Nix configuration and 
 
   // List of all declared traits
   "traits": [
-    [ "a_positive", { "description": { "en": "$A$ is a positive integer." } } ],
-    [ "b_positive", { "description": { "en": "$B$ is a positive integer." } } ]
+    [ "a_positive", { "descriptions": { "en": "$A$ is a positive integer." } } ],
+    [ "b_positive", { "descriptions": { "en": "$B$ is a positive integer." } } ]
   ],
 
   // List of all subtasks
