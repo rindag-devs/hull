@@ -1,3 +1,18 @@
+/*
+  This file is part of Hull.
+
+  Hull is free software: you can redistribute it and/or modify it under the terms of the GNU
+  Lesser General Public License as published by the Free Software Foundation, either version 3 of
+  the License, or (at your option) any later version.
+
+  Hull is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+  General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License along with Hull. If
+  not, see <https://www.gnu.org/licenses/>.
+*/
+
 #import "@preview/tablex:0.0.9": tablex, hlinex, cellx
 #import "@preview/titleize:0.1.1": titlecase
 #import "@preview/diagraph:0.3.6"
@@ -376,5 +391,11 @@
 #let problem = json(hull-generated-json-path)
 
 #import "problem/" + language + ".typ" as statement
+
+#set document(
+  title: problem.name + " - Problem Statement",
+  author: "Hull Build System",
+)
+#set page(margin: (x: 2cm, y: 2.5cm))
 
 #render-problem(problem, statement)

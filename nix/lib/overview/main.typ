@@ -32,6 +32,13 @@
 )
 #let problem = json(hull-generated-json-path)
 
+// Document Configuration
+#set document(
+  title: problem.name + " - Hull Problem Overview",
+  author: "Hull Build System",
+)
+#set page(margin: (x: 2cm, y: 2.5cm))
+
 // Helper functions for formatting values (provided in the prompt)
 #let format-size(num) = {
   let rounded = calc.round(num, digits: 3)
@@ -97,13 +104,6 @@
 #let breakable-text(s) = {
   s.clusters().join(sym.zws)
 }
-
-// Document Configuration
-#set document(
-  title: problem.name + " - Hull Problem Overview",
-  author: "Hull Build System",
-)
-#set page(margin: (x: 2cm, y: 2.5cm))
 
 // Title
 #align(center)[

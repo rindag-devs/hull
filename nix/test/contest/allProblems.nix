@@ -38,7 +38,7 @@
             value = builtins.listToAttrs (
               map (l: {
                 name = l;
-                value = ./. + "/../problem/${p.config.name}/document/statement/problem/${l}.typ";
+                value = ./. + "/../problem/${p.config.name}/document/statement/${l}.typ";
               }) displayLanguages
             );
           }) config.problems
