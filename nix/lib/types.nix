@@ -795,7 +795,7 @@ in
         type = pathInStore;
         description = "The path of this document.";
       };
-      language = lib.mkOption {
+      displayLanguage = lib.mkOption {
         type = str;
         description = "The display language of this document.";
         example = "en";

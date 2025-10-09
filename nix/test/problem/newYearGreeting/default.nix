@@ -2,6 +2,7 @@
   hull,
   lib,
   cplib,
+  config,
   ...
 }:
 {
@@ -101,6 +102,26 @@
         };
       };
     };
+
+  documents =
+    let
+      languages = [
+        "en"
+        "zh"
+      ];
+      mkStatement = language: {
+        "statement.${language}.pdf" = {
+          path = hull.xcpcStatement config {
+            statement = "${./document/statement}/${language}.typ";
+            displayLanguage = language;
+          };
+          displayLanguage = language;
+          participantVisibility = true;
+        };
+      };
+      statements = lib.mergeAttrsList (map mkStatement languages);
+    in
+    statements;
 
   targets = {
     default = hull.problemTarget.common;

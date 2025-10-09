@@ -28,7 +28,7 @@
 
   # Path of statement typst files for each problem in each display language.
   # 2-D attr set. problem name - language - path.
-  # Example: { aPlusB.en = ./path/to/aPlusB/English/statement; };
+  # Example: { aPlusB.en = ./path/to/aPlusB/English/statement.typ; };
   statements ? { },
 
   # Extra translation .typ files for statement.
@@ -54,10 +54,10 @@
   ],
 
   # Extra typst packages for building statement.
-  extraTypstPackages ? [ ],
+  statementExtraTypstPackages ? [ ],
 
   # Extra font paths for building statement.
-  extraFontPaths ? [ ],
+  statementExtraFontPaths ? [ ],
 }:
 
 {
@@ -226,7 +226,7 @@
                 hash = "sha256-U/KxwlNyCIFHyMJKkjeQ4NDCYZhqNgM+oxJZ8Lov3nA=";
               }
             ]
-            ++ extraTypstPackages;
+            ++ statementExtraTypstPackages;
             fontPaths = [
               "${pkgs.source-han-sans}/share/fonts/opentype/source-han-sans"
               "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
@@ -239,7 +239,7 @@
                 ];
               })
             ]
-            ++ extraFontPaths;
+            ++ statementExtraFontPaths;
           };
         in
         "cp ${statement} $out/statement_${displayLanguage}.pdf"

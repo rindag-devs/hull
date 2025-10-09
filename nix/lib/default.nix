@@ -55,6 +55,7 @@ let
     stress = callSubLib ./stress.nix;
     types = callSubLib ./types.nix;
     validate = callSubLib ./validate.nix;
+    xcpcStatement = callSubLib ./xcpcStatement;
 
     contestModule = ./contestModule;
     problemModule = ./problemModule;

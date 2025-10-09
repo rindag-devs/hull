@@ -2,7 +2,6 @@
   hull,
   lib,
   config,
-  pkgs,
   cplib,
   ...
 }:
@@ -141,26 +140,11 @@
       languages = [ "en" ];
       mkStatement = language: {
         "statement.${language}.pdf" = {
-          path = hull.document.mkProblemTypstDocument config {
-            src = ./document/statement;
-            inputs = { inherit language; };
-            fontPaths = [
-              "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
-            ];
-            typstPackages = [
-              {
-                name = "titleize";
-                version = "0.1.1";
-                hash = "sha256-Z0okd0uGhUDpdLXWpS+GvKVk1LSs15CE7l0l7kZqWLo=";
-              }
-              {
-                name = "tablex";
-                version = "0.0.9";
-                hash = "sha256-yzg4LKpT1xfVUR5JyluDQy87zi2sU5GM27mThARx7ok=";
-              }
-            ];
+          path = hull.xcpcStatement config {
+            statement = "${./document/statement}/${language}.typ";
+            displayLanguage = language;
           };
-          inherit language;
+          displayLanguage = language;
           participantVisibility = true;
         };
       };
