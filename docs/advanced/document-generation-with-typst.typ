@@ -10,7 +10,7 @@ Hull leverages the powerful, modern typesetting system #link("https://typst.app/
 
 The core of Hull's document generation system is the declarative definition within your `problem.nix` file. The process ensures that your documents are always perfectly synchronized with your problem's configuration.
 
-1. *Declaration in `problem.nix`*: You define documents within the `documents` attribute set. Each entry maps an output filename to a document-generating function, typically `hull.document.mkProblemTypstDocument`.
+1. *Declaration in `problem.nix`*: You define documents within the `documents` attribute set. Each entry maps an output filename to a document definition. The `path` attribute of this definition is assigned a document-generating function, such as the built-in `hull.xcpcStatement` helper.
 
   ```nix
   # In problem.nix
@@ -18,13 +18,16 @@ The core of Hull's document generation system is the declarative definition with
     # ... other problem options
 
     documents = {
-      "statement.en.pdf" = hull.document.mkProblemTypstDocument config {
-        # Path to the directory containing your Typst source files.
-        src = ./document/statement;
-
-        # Pass custom inputs to the Typst template.
-        # Here, we tell the template to render in English.
-        inputs = { language = "en"; };
+      "statement.en.pdf" = {
+        # The `path` attribute points to the final PDF derivation.
+        path = hull.xcpcStatement config {
+          # Path to the Typst file containing the problem's narrative.
+          statement = ./document/statement/en.typ;
+          # Tell the template which language to render.
+          displayLanguage = "en";
+        };
+        displayLanguage = "en";
+        participantVisibility = true;
       };
     };
 
@@ -34,56 +37,45 @@ The core of Hull's document generation system is the declarative definition with
 
 2. *Data Serialization*: When you run `hull build`, Hull first evaluates your complete `problem.nix`. It then gathers all relevant data—such as `name`, `displayName`, `tickLimit`, `memoryLimit`, `subtasks`, and sample test cases—and serializes it into a structured JSON file named `hull-generated.json`.
 
-3. *Typst Compilation*: Hull invokes the Typst compiler, providing it with your template's entry point (e.g., `main.typ` from the `src` directory). Crucially, it passes the path to the newly created `hull-generated.json` as an input to the template.
+3. *Typst Compilation*: Hull invokes the Typst compiler with a pre-configured template (provided by `hull.xcpcStatement`). Crucially, it passes the path to the newly created `hull-generated.json` as an input to the template.
 
-4. *Rendering*: The Typst template reads the `hull-generated.json` file and uses the data within it to dynamically render the final PDF.
+4. *Rendering*: The Typst template reads the `hull-generated.json` file and uses the data within it to dynamically render the final PDF, combining technical data with the narrative content you provided.
 
 This workflow guarantees that your problem statement is a direct reflection of its technical definition. If you change a subtask score or a memory limit in `problem.nix`, the PDF will be automatically updated with the new values on the next build, eliminating any possibility of inconsistency.
 
 == Customizing the Template
 
-The official Hull template provides a well-organized directory structure for your Typst documents, designed for clarity and easy customization.
+Hull's philosophy is to abstract away boilerplate. Instead of requiring you to build a Typst template from scratch, it provides high-level helpers like `hull.xcpcStatement` that handle all the layout and styling for you.
+
+Your only task is to provide the narrative content for the problem. The official Hull template provides a simple structure for this:
 
 ```plain
 document/
 └── statement/
-    ├── main.typ
-    ├── problem/
-    │   └── en.typ
-    └── translation/
-        └── en.typ
+    └── en.typ
 ```
 
-The roles of these files are:
-- `main.typ`: This is the main entry point and layout controller. Its primary job is to load the `hull-generated.json` data, import the necessary language-specific files, and define the overall structure and style of the document (e.g., fonts, colors, table layouts). *Modify this file to change the visual style.*
-- `problem/en.typ`: This file contains the narrative content of your problem statement for a specific language, such as the problem description, input/output format, and any special notes. *Modify this file to change the problem's text.*
-- `translation/en.typ`: This file provides translations for static UI text within the template, such as "Input Format", "Memory Limit", or "Subtasks". This makes it easy to internationalize your statement's chrome.
-
-The `main.typ` file orchestrates everything by loading data and dynamically importing the correct content files based on the `inputs` you provided in `problem.nix`.
+The `en.typ` file does not contain any layout logic. It simply defines a set of variables that the `hull.xcpcStatement` template will use to populate the document.
 
 ```typst
-// In document/statement/main.typ
+// In document/statement/en.typ
 
-// Get the path to the JSON file passed by Hull.
-#let hull-generated-json-path = get-input-or-default(
-  "hull-generated-json-path",
-  "hull-generated.example.json", // A fallback for local development
-)
-// Load and parse the JSON data.
-#let hull = json(hull-generated-json-path)
+#let description = [
+  You are given two integers $A$ and $B$. Your task is to calculate the sum of these two integers.
+]
 
-// Get the language from the `inputs` map in problem.nix.
-#let language = get-input-or-default("language", "en")
+#let input = [
+  The first line of the input contains two integers $A$ and $B$ ($-10^3 <= A, B <= 10^3$).
+]
 
-// Dynamically import the correct content and translation files.
-#import "problem/" + language + ".typ" as statement
-#import "translation/" + language + ".typ" as translation
+#let output = [
+  Output a single line contains a single integer, indicating the answer.
+]
 
-// Call a master function to render the entire document.
-#render-problem(hull, statement, translation, language)
+#let notes = none // Or provide content for the "Notes" section
 ```
 
-This modular design makes it straightforward to add support for new languages or to completely redesign the visual theme without altering the problem's core textual content.
+This modular design makes it straightforward to add support for new languages (by creating `{lang}.typ`) or to focus purely on the problem's content without worrying about visual presentation. For advanced customization, you can create your own document-generating function instead of using `hull.xcpcStatement`.
 
 == The `hull-generated.json` Data Structure
 
@@ -111,19 +103,18 @@ The `hull-generated.json` file is the bridge between your Nix configuration and 
       "traits": { "a_positive": true, "b_positive": true },
       "test-cases": [ "rand1", "hand1" ] // Names of test cases in this subtask
     },
-    {
-      "full-score": 0.5,
-      "traits": {},
-      "test-cases": [ "rand1", "rand2", "rand3", "hand1" ]
-    }
+    // ...
   ],
 
   // List of sample cases (from test cases in the "sample" group)
   "samples": [
     {
       "input": "1 2\n",
-      "outputs": {
-        "output": "3\n"
+      "outputs": { "output": "3\n" },
+      "input-validation": {
+        "status": "valid",
+        "reader-trace-tree": { /* ... detailed parse tree ... */ },
+        // ... other values
       }
     }
   ]
@@ -132,6 +123,25 @@ The `hull-generated.json` file is the bridge between your Nix configuration and 
 ```
 
 With this data, you can programmatically generate tables for subtasks, display sample cases, and ensure that all technical details in your problem statement are accurate and automatically updated.
+
+=== Automatic Visualization
+
+The `samples.#.input-validation.reader-trace-tree` object contains a detailed parse tree generated by the validator. This powerful feature allows the Typst template to understand the structure of your sample data.
+
+By attaching special tags within your validator code (using `cplib`), you can embed structured information directly into this tree. For example, for a graph problem, you can tag the nodes and edges.
+
+```cpp
+// In your problem's header file or validator.cpp
+// ... inside a cplib var::Reader scope ...
+
+in.attach_tag("hull/graph", cplib::json::Value(cplib::json::Map{
+  {"name", cplib::json::Value("graph")},
+  {"nodes", cplib::json::Value(/* vector of node name strings */)},
+  {"edges", cplib::json::Value(/* vector of edge objects */)},
+}));
+```
+
+The `hull.xcpcStatement` template automatically detects `hull/graph` tags and uses them to render a graph visualization for the corresponding sample case, right in the PDF. This provides a clear and helpful visual aid for contestants in problems involving graphs, trees, or other complex structures, with no extra effort required in the Typst file.
 
 == Generating Contest Booklets
 

@@ -158,9 +158,13 @@ Finally, you can define how to generate documents and package the final problem.
 ```nix
 {
   documents = {
-    "statement.en.pdf" = hull.document.mkProblemTypstDocument config {
-      src = ./document/statement;
-      inputs = { language = "en"; };
+    "statement.en.pdf" = {
+      src = hull.document.mkProblemTypstDocument config {
+        src = ./document/statement;
+        inputs = { language = "en"; };
+      };
+      displayLanguage = "en";
+      participantVisibility = true;
     };
   };
 
