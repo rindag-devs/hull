@@ -18,6 +18,7 @@
     ../problem/numberGuessing
     ../problem/recitePi
     ../problem/newYearGreeting
+    ../problem/mst
   ];
 
   targets = {

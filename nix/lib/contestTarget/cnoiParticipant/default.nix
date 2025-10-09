@@ -52,6 +52,12 @@
       compileArguments = "g++ -lm -O3 -std=c++23";
     }
   ],
+
+  # Extra typst packages for building statement.
+  extraTypstPackages ? [ ],
+
+  # Extra font paths for building statement.
+  extraFontPaths ? [ ],
 }:
 
 {
@@ -214,7 +220,13 @@
                 version = "0.1.1";
                 hash = "sha256-Z0okd0uGhUDpdLXWpS+GvKVk1LSs15CE7l0l7kZqWLo=";
               }
-            ];
+              {
+                name = "diagraph";
+                version = "0.3.6";
+                hash = "sha256-U/KxwlNyCIFHyMJKkjeQ4NDCYZhqNgM+oxJZ8Lov3nA=";
+              }
+            ]
+            ++ extraTypstPackages;
             fontPaths = [
               "${pkgs.source-han-sans}/share/fonts/opentype/source-han-sans"
               "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
@@ -226,7 +238,8 @@
                   "math"
                 ];
               })
-            ];
+            ]
+            ++ extraFontPaths;
           };
         in
         "cp ${statement} $out/statement_${displayLanguage}.pdf"

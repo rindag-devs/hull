@@ -112,12 +112,13 @@
         let
           drvs = lib.mapAttrs (
             tcName:
-            { data, ... }:
+            { data, groups, ... }:
             hull.validate.drv {
               problemName = config.name;
               testCaseName = tcName;
               validatorWasm = config.validator.cwasm;
               input = data.input;
+              readerTraceLevel = if builtins.elem "sample" groups then 2 else 1;
             }
           ) config.testCases;
           links = pkgs.linkFarm "hull-testCaseInputValidations-${config.name}" drvs;

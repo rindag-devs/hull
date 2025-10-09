@@ -132,6 +132,7 @@
               numberGuessing = hull.evalProblem ./nix/test/problem/numberGuessing;
               recitePi = hull.evalProblem ./nix/test/problem/recitePi;
               newYearGreeting = hull.evalProblem ./nix/test/problem/newYearGreeting;
+              mst = hull.evalProblem ./nix/test/problem/mst;
             };
           };
 

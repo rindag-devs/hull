@@ -86,10 +86,10 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
   # 1. Declare all possible traits
   traits = {
     n_is_small = {
-      description.en = "$N <= 100$.";
+      descriptions.en = "$N <= 100$.";
     };
     all_positive = {
-      description.en = "All numbers are positive.";
+      descriptions.en = "All numbers are positive.";
     };
   };
 
@@ -114,7 +114,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
 }
 ```
 
-- `traits`: An attribute set where you declare every trait your problem uses. Each trait can have a `description` for different languages.
+- `traits`: An attribute set where you declare every trait your problem uses. Each trait can have a `descriptions` for different languages.
 - `subtasks`: A list of subtask definitions. Hull automatically assigns test cases to a subtask if they satisfy its `traits` requirements.
   - `traits`: An attribute set specifying the required traits for this subtask.
   - `fullScore`: The score awarded for passing all test cases in this subtask. The total score of the problem is the sum of all subtask scores.

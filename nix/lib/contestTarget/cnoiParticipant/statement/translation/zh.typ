@@ -41,6 +41,8 @@
 #let sample-0-input(x) = "样例 " + str(x) + " 输入"
 #let sample-0-output(x) = "样例 " + str(x) + " 输出"
 #let sample-0-output-1(x, y) = [样例 #str(x) #y]
+#let sample-0-description(x) = "样例 " + str(x) + " 描述"
+#let sample-0-graph-visualization(x) = "样例 " + str(x) + " 图可视化"
 
 #let ticks(n) = {
   if n < 100000 {

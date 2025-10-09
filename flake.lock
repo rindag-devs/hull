@@ -3,11 +3,11 @@
     "cplib": {
       "flake": false,
       "locked": {
-        "lastModified": 1759738841,
-        "narHash": "sha256-xBvLC3gSjUGXAd+CFKMhVFpFh8Re3rLOe2euxbgLR2M=",
+        "lastModified": 1759889315,
+        "narHash": "sha256-2EX7ye1oqrVYiww3fmFSPeOCZtdNKI494WGDEtPU2OI=",
         "owner": "rindag-devs",
         "repo": "cplib",
-        "rev": "3c62435c2a8114d71ba74fbaefec0e2d9f28f674",
+        "rev": "fa3f2386e0cb4aaebb0269585c7d0f9a0fdba440",
         "type": "github"
       },
       "original": {
@@ -20,11 +20,11 @@
     "cplibInitializers": {
       "flake": false,
       "locked": {
-        "lastModified": 1759739474,
+        "lastModified": 1759889336,
         "narHash": "sha256-2wxyYmg8VpPa/2b7xPgAYP0vLGOL8AJcHvV2SpRSxi8=",
         "owner": "rindag-devs",
         "repo": "cplib-initializers",
-        "rev": "29886f74915f19aa41774c6a7a7b0a7035103899",
+        "rev": "7c2b37b1863aa63ff1d2da560039c0e02fa3619c",
         "type": "github"
       },
       "original": {
@@ -71,11 +71,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1759580034,
-        "narHash": "sha256-YWo57PL7mGZU7D4WeKFMiW4ex/O6ZolUS6UNBHTZfkI=",
+        "lastModified": 1759735786,
+        "narHash": "sha256-a0+h02lyP2KwSNrZz4wLJTu9ikujNsTWIC874Bv7IJ0=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "3bcc93c5f7a4b30335d31f21e2f1281cba68c318",
+        "rev": "20c4598c84a671783f741e02bf05cbfaf4907cff",
         "type": "github"
       },
       "original": {

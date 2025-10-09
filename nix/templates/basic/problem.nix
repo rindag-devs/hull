@@ -19,16 +19,7 @@
     ./include
   ];
 
-  checker = {
-    src = ./checker.20.cpp;
-    tests = {
-      ac = {
-        inputFile = builtins.toFile "ac.in" "1 2\n";
-        outputFile = builtins.toFile "ac.out" "\t3\t \t\t\n";
-        prediction = { status, ... }: status == "accepted";
-      };
-    };
-  };
+  generators.rand.src = ./generator/rand.20.cpp;
 
   validator = {
     src = ./validator.20.cpp;
@@ -60,14 +51,23 @@
     };
   };
 
-  generators.rand.src = ./generator/rand.20.cpp;
+  checker = {
+    src = ./checker.20.cpp;
+    tests = {
+      ac = {
+        inputFile = builtins.toFile "ac.in" "1 2\n";
+        outputFile = builtins.toFile "ac.out" "\t3\t \t\t\n";
+        prediction = { status, ... }: status == "accepted";
+      };
+    };
+  };
 
   traits = {
     a_positive = {
-      description.en = "$A > 0$.";
+      descriptions.en = "$A > 0$.";
     };
     b_positive = {
-      description.en = "$B > 0$.";
+      descriptions.en = "$B > 0$.";
     };
   };
 
@@ -157,11 +157,6 @@
                 name = "tablex";
                 version = "0.0.9";
                 hash = "sha256-yzg4LKpT1xfVUR5JyluDQy87zi2sU5GM27mThARx7ok=";
-              }
-              {
-                name = "oxifmt";
-                version = "1.0.0";
-                hash = "sha256-edTDK5F2xFYWypGpR0dWxwM7IiBd8hKGQ0KArkbpHvI=";
               }
             ];
           };

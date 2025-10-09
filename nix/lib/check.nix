@@ -70,7 +70,7 @@ let
           ;
       };
     in
-    pkgs.runCommandLocal "process-check-${name}" { } ''
+    pkgs.runCommandLocal "hull-check-${name}" { } ''
       ${checkScript}
       install -Tm644 check.json $out
     '';
