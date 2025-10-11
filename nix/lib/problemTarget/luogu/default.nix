@@ -81,16 +81,11 @@
     let
       includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
     in
-    "$CXX -x c++ program.code -o program.so -std=c++23 -O3 -fPIC -shared ${includeDirCmd}",
+    "$CXX -x c++ program.code -o program -std=c++23 -O3 -fPIC -shared ${includeDirCmd}",
 
   # This command needs to compile `program.code` into `program.so`, which is a dynamic link library
   # of x86-64-linux-gnu.
-  validatorCompileCommand ?
-    includes:
-    let
-      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
-    in
-    "$CXX -x c++ program.code -o program.so -std=c++23 -O3 -fPIC -shared ${includeDirCmd}",
+  validatorCompileCommand ? checkerCompileCommand,
 }:
 
 {
@@ -196,21 +191,13 @@
                 )
               );
         in
-        pkgs.pkgsCross.gnu64.stdenv.mkDerivation {
-          name = "hull-luoguCompiledShared-${problem.name}-${mode}";
-          unpackPhase = ''
-            cp ${patchedSrc} program.code
-          '';
-          buildPhase = ''
-            runHook preBuild
-            ${compileCommand includes}
-            runHook postBuild
-          '';
-          installPhase = ''
-            runHook preInstall
-            install -Dm644 program.so $out/lib/x86_64-linux-gnu/program.so
-            runHook postInstall
-          '';
+        hull.problemTarget.utils.compileNative {
+          problemName = problem.name;
+          programName = mode;
+          src = patchedSrc;
+          stdenv = pkgs.pkgsCross.gnu64.stdenv;
+          compileCommand = compileCommand includes;
+          installDest = "lib/x86_64-linux-gnu/program.so";
         };
 
       # Wrap a shared library into a C program by embedding it as a compressed,
@@ -218,7 +205,7 @@
       # standard workaround.
       wrapShared =
         wrapperName: shared:
-        pkgs.runCommandLocal "hull-luoguWrappedShared-${wrapperName}.cpp"
+        pkgs.runCommandLocal "hull-luoguWrappedShared-${problem.name}-${wrapperName}.cpp"
           {
             nativeBuildInputs = [
               pkgs.qpdf

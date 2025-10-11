@@ -110,7 +110,7 @@
             )
           );
 
-      compiledChecker = hull.problemTarget.utils.compileNativeExecutable {
+      compiledChecker = hull.problemTarget.utils.compileNative {
         problemName = problem.name;
         programName = "kattisChecker";
         src = patchedChecker;

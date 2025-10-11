@@ -220,7 +220,7 @@
           };
 
       # Compiled, static-linked checker executable
-      compiledChecker = hull.problemTarget.utils.compileNativeExecutable {
+      compiledChecker = hull.problemTarget.utils.compileNative {
         problemName = problem.name;
         programName = "lemonChecker";
         src = patchedChecker;
