@@ -183,18 +183,19 @@
           ) problem.samples
         );
 
-      # Compile the source code (usually C++) to a native executable file.
+      # Compile the source code (usually C++) to a native executable file or shared library file.
       # For platforms that require the checker etc. to be a binary executable file.
-      compileNativeExecutable =
+      compileNative =
         {
           problemName,
           programName,
           src,
           stdenv, # pkgsStatic.stdenv is recommended
           compileCommand, # Should compile `program.code` to `program`
+          installDest ? "bin/program",
         }:
         stdenv.mkDerivation {
-          name = "hull-nativeExecutable-${problemName}-${programName}";
+          name = "hull-nativeCompiled-${problemName}-${programName}";
           unpackPhase = ''
             cp ${src} program.code
           '';
@@ -205,10 +206,9 @@
           '';
           installPhase = ''
             runHook preInstall
-            install -Dm755 program $out/bin/program
+            install -Dm755 program $out/${installDest}
             runHook postInstall
           '';
         };
-
     };
 }

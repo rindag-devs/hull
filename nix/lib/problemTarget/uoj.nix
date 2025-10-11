@@ -87,6 +87,7 @@
       documents,
       generators,
       samples,
+      includes,
       ...
     }@problem:
     let
@@ -184,82 +185,86 @@
           ${subtaskTypeLines}
         '';
 
-      finalChecker =
-        if !patchCplibProgram then
-          checker.src
-        else if type == "stdioInteraction" then
-          hull.patchCplibProgram {
-            problemName = problem.name;
-            src = "${cplibInitializers}/include/testlib/checker_two_step.cpp";
-            includeReplacements = [
-              [
-                "^testlib/checker\\.hpp$"
-                "testlib_checker.hpp"
-              ]
-              [
-                "^"
-                "require/"
-              ]
-            ];
-          }
-        else
-          hull.patchCplibProgram {
-            problemName = problem.name;
-            src = checker.src;
-            checker = "::cplib_initializers::testlib::checker::Initializer(false)";
-            extraIncludes = [ "\"require/testlib_checker.hpp\"" ];
-            includeReplacements = [
-              [
-                "^"
-                "require/"
-              ]
-            ];
-          };
+      patchedSrc = {
+        checker =
+          if type == "stdioInteraction" then
+            hull.patchCplibProgram {
+              problemName = problem.name;
+              src = "${cplibInitializers}/include/testlib/checker_two_step.cpp";
+              includeReplacements = [
+                [
+                  "^testlib/checker\\.hpp$"
+                  "testlib_checker.hpp"
+                ]
+                [
+                  "^"
+                  "require/"
+                ]
+              ];
+            }
+          else if !patchCplibProgram then
+            checker.src
+          else
+            hull.patchCplibProgram {
+              problemName = problem.name;
+              src = checker.src;
+              checker = "::cplib_initializers::testlib::checker::Initializer(false)";
+              extraIncludes = [ "\"require/testlib_checker.hpp\"" ];
+              includeReplacements = [
+                [
+                  "^"
+                  "require/"
+                ]
+              ];
+            };
 
-      interactor =
-        if twoStepInteraction then
-          hull.patchCplibProgram {
-            problemName = problem.name;
-            src = checker.src;
-            interactor = "::cplib_initializers::testlib::interactor_two_step::Initializer()";
-            extraIncludes = [ "\"require/testlib_interactor_two_step.hpp\"" ];
-            includeReplacements = [
-              [
-                "^"
-                "require/"
-              ]
-            ];
-          }
-        else
-          hull.patchCplibProgram {
-            problemName = problem.name;
-            src = checker.src;
-            interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
-            extraIncludes = [ "\"require/testlib_interactor.hpp\"" ];
-            includeReplacements = [
-              [
-                "^"
-                "require/"
-              ]
-            ];
-          };
+        interactor =
+          if !patchCplibProgram then
+            checker.src
+          else if twoStepInteraction then
+            hull.patchCplibProgram {
+              problemName = problem.name;
+              src = checker.src;
+              interactor = "::cplib_initializers::testlib::interactor_two_step::Initializer()";
+              extraIncludes = [ "\"require/testlib_interactor_two_step.hpp\"" ];
+              includeReplacements = [
+                [
+                  "^"
+                  "require/"
+                ]
+              ];
+            }
+          else
+            hull.patchCplibProgram {
+              problemName = problem.name;
+              src = checker.src;
+              interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
+              extraIncludes = [ "\"require/testlib_interactor.hpp\"" ];
+              includeReplacements = [
+                [
+                  "^"
+                  "require/"
+                ]
+              ];
+            };
 
-      patchedValidator =
-        if !patchCplibProgram then
-          validator.src
-        else
-          hull.patchCplibProgram {
-            problemName = problem.name;
-            src = validator.src;
-            validator = "::cplib_initializers::testlib::validator::Initializer()";
-            extraIncludes = [ "\"require/testlib_validator.hpp\"" ];
-            includeReplacements = [
-              [
-                "^"
-                "require/"
-              ]
-            ];
-          };
+        validator =
+          if !patchCplibProgram then
+            validator.src
+          else
+            hull.patchCplibProgram {
+              problemName = problem.name;
+              src = validator.src;
+              validator = "::cplib_initializers::testlib::validator::Initializer()";
+              extraIncludes = [ "\"require/testlib_validator.hpp\"" ];
+              includeReplacements = [
+                [
+                  "^"
+                  "require/"
+                ]
+              ];
+            };
+      };
 
       # Helper function to create shell commands for copying files with subdirectories.
       mkCopyCommands =
@@ -274,6 +279,9 @@
             cp -f ${srcPath} ${destDir}/${lib.escapeShellArg destPath}
           ''
         ) files;
+
+      needChecker = type != "stdioInteraction" || twoStepInteraction;
+      needInteractor = type == "stdioInteraction";
 
     in
     pkgs.runCommandLocal
@@ -318,13 +326,9 @@
         }}
 
         # Copy judger programs (checker, validator, interactor, graders)
-        cp ${patchedValidator} $tmpdir/val${validatorSuffix}
-        ${lib.optionalString (
-          type != "stdioInteraction" || twoStepInteraction
-        ) "cp ${finalChecker} $tmpdir/chk${checkerSuffix}"}
-        ${lib.optionalString (
-          type == "stdioInteraction"
-        ) "cp ${interactor} $tmpdir/interactor${checkerSuffix}"}
+        cp ${patchedSrc.validator} $tmpdir/val${validatorSuffix}
+        ${lib.optionalString needChecker "cp ${patchedSrc.checker} $tmpdir/chk${checkerSuffix}"}
+        ${lib.optionalString needInteractor "cp ${patchedSrc.interactor} $tmpdir/interactor${checkerSuffix}"}
         ${lib.optionalString (graderSrcs != null) (
           lib.concatMapAttrsStringSep "\n" (
             lang: src: "cp ${src} $tmpdir/require/implementer.${lang}"
@@ -333,13 +337,14 @@
 
         # Copy require files
         cp ${cplib}/cplib.hpp $tmpdir/require/cplib.hpp
-        cp ${cplibInitializers}/include/testlib/checker.hpp $tmpdir/require/testlib_checker.hpp
-        ${lib.optionalString (type == "stdioInteraction") (
-          let
-            fileName = if twoStepInteraction then "interactor_two_step.hpp" else "interactor.hpp";
-          in
-          "cp ${cplibInitializers}/include/testlib/${fileName} $tmpdir/require/testlib_${fileName}"
-        )}
+        ${lib.optionalString needChecker "cp ${cplibInitializers}/include/testlib/checker.hpp $tmpdir/require/testlib_checker.hpp"}${
+          lib.optionalString needInteractor (
+            let
+              fileName = if twoStepInteraction then "interactor_two_step.hpp" else "interactor.hpp";
+            in
+            "cp ${cplibInitializers}/include/testlib/${fileName} $tmpdir/require/testlib_${fileName}"
+          )
+        }
         cp ${cplibInitializers}/include/testlib/validator.hpp $tmpdir/require/testlib_validator.hpp
         ${mkCopyCommands "$tmpdir/require" extraRequireFiles}
 
