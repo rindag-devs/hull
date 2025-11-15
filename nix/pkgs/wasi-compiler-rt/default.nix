@@ -19,7 +19,7 @@
 }:
 
 let
-  version = "26_judge";
+  version = "28_judge";
 in
 stdenvNoCC.mkDerivation {
   pname = "wasi-compiler-rt";
@@ -28,7 +28,7 @@ stdenvNoCC.mkDerivation {
 
   src = fetchurl {
     url = "https://github.com/aberter0x3f/wasi-sdk/releases/download/wasi-sdk-${version}/libclang_rt-${version}.0.tar.gz";
-    hash = "sha256-8t6MT6fd3zQ1EiqdlAqNPHmKKJqRrD+1BZHzdu0IC/I=";
+    hash = "sha256-D65ECDbH0MYLPbiF5F+Hr0CsY8imdDKsnSVIEsANPjM=";
   };
 
   installPhase = ''

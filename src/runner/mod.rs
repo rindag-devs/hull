@@ -196,6 +196,7 @@ fn create_engine(memory_limit: u64) -> Result<Engine> {
       .wasm_stack_switching(false)
       .wasm_tail_call(false)
       .wasm_wide_arithmetic(false)
+      .wasm_custom_page_sizes(true)
       .max_wasm_stack(memory_limit.try_into().unwrap())
       .strategy(wasmtime::Strategy::Cranelift)
       .profiler(wasmtime::ProfilingStrategy::None)

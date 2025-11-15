@@ -15,13 +15,16 @@
 
 {
   lib,
-  llvmPackages,
+  llvmPackages_21,
   stdenvNoCC,
   makeWrapper,
   wasi-sysroot,
   wasi-compiler-rt,
 }:
 
+let
+  llvmPackages = llvmPackages_21;
+in
 stdenvNoCC.mkDerivation {
   pname = "wasm-judge-clang";
   version = llvmPackages.clang.version;

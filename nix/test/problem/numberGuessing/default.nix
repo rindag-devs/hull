@@ -99,6 +99,9 @@
     };
     uoj = hull.problemTarget.uoj {
       type = "stdioInteraction";
+    };
+    qoj = hull.problemTarget.uoj {
+      type = "stdioInteraction";
       twoStepInteraction = true;
     };
     cms = hull.problemTarget.cms {
