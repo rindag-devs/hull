@@ -17,11 +17,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.25"
 tree-sitter-cpp = "0.23"
-wasi-common = "37"
-wiggle = "37"
+wasi-common = "38"
+wiggle = "38"
 
 [dependencies.wasmtime]
-version = "37"
+version = "38"
 default-features = false
 features = ["std", "cranelift", "runtime", "wat"]
 

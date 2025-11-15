@@ -19,7 +19,7 @@
 }:
 
 let
-  version = "26_judge";
+  version = "28_judge";
 in
 stdenvNoCC.mkDerivation {
   pname = "wasi-sysroot";
@@ -28,7 +28,7 @@ stdenvNoCC.mkDerivation {
 
   src = fetchurl {
     url = "https://github.com/aberter0x3f/wasi-sdk/releases/download/wasi-sdk-${version}/wasi-sysroot-${version}.0.tar.gz";
-    hash = "sha256-sXTI2dZHFXDlcL9aqmQuEct2tnGC38aVUUNC3o1Z1Us=";
+    hash = "sha256-E81m0RqE9MFr2VCMe8eV+yjx8+ScFwd3kCyovsY1lKU=";
   };
 
   installPhase = ''
