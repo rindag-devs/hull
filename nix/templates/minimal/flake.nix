@@ -49,7 +49,7 @@
             };
           };
 
-          hullProblems.default = hullLib.evalProblem ./problem.nix;
+          hullProblems.default = hullLib.evalProblem ./problem.nix { };
         }
       );
 

@@ -41,7 +41,6 @@
     problems = lib.mkOption {
       type = lib.types.listOf lib.types.anything;
       description = "Problems of the contest.";
-      apply = map hull.evalProblem;
     };
 
     targets = lib.mkOption {
