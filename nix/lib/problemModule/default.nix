@@ -31,6 +31,12 @@
       readOnly = true;
     };
 
+    extraSpecialArgs = lib.mkOption {
+      type = lib.types.raw;
+      description = "Extra special arguments passed in when evalProblem.";
+      readOnly = true;
+    };
+
     name = lib.mkOption {
       type = hull.types.nameStr;
       description = "The unique name of the problem, used in derivations and outputs.";

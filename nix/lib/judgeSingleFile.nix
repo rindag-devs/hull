@@ -24,7 +24,7 @@
 # Judges a single source file against a problem definition.
 # This function orchestrates the entire judging process within Nix
 # and produces a derivation containing the final JSON report.
-problemAttrs: srcPath:
+problemAttrs: extraSpecialArgs: srcPath:
 let
   # Define a module that injects the user's source file as a temporary solution.
   adhocSolutionModule =
@@ -48,7 +48,8 @@ let
         hullPkgs
         cplib
         ;
-    };
+    }
+    // extraSpecialArgs;
   };
 
   # Extract the results for our temporary solution.
