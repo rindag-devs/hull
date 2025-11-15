@@ -36,6 +36,7 @@ let
         { ... }:
         {
           config.problemAttrs = problemAttrs;
+          config.extraSpecialArgs = extraSpecialArgs;
         }
       )
     ];

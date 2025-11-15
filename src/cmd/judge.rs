@@ -211,9 +211,10 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
     {{ srcPath }}:
     let
       flake = builtins.getFlake "{final_flake_ref}";
+      problemConfig = flake.outputs.hullProblems.{system}.{problem}.config;
     in
     (flake.inputs.hull.lib or flake.outputs.lib).{system}.judgeSingleFile
-      flake.outputs.hullProblems.{system}.{problem}.config.problemAttrs (/. + srcPath)"#,
+      problemConfig.problemAttrs problemConfig.extraSpecialArgs (/. + srcPath)"#,
     problem = judge_opts.problem
   );
 
