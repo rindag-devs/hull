@@ -77,7 +77,7 @@ let
       gSizes =
         map
           (n: {
-            suffix = "s${toString n}G";
+            suffix = "s${toString n}g";
             bytes = n * g;
           })
           [

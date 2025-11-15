@@ -24,7 +24,7 @@
 # A helper function to evaluate a user's contest definition.
 # It takes a user-provided attribute set (the contest definition)
 # and evaluates it against our module system.
-contestAttrs:
+contestAttrs: extraSpecialArgs:
 let
   contest = pkgs.lib.evalModules {
     # The list of modules to evaluate.
@@ -41,7 +41,8 @@ let
         hullPkgs
         cplib
         ;
-    };
+    }
+    // extraSpecialArgs;
   };
 
   assertions = builtins.concatLists (map (p: p.config.assertions) contest.config.problems);

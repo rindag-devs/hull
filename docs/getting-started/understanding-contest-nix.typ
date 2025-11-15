@@ -24,7 +24,7 @@ Here is a complete example of a `contest.nix` file. It defines a contest with tw
 
   # A list of paths to the problems included in this contest.
   # Hull will evaluate the problem definition in each of these directories.
-  problems = [
+  problems = map (p: hull.evalProblem p { }) [
     ./problems/aPlusB
     ./problems/anotherProblem
   ];
@@ -56,11 +56,11 @@ These options define the fundamental properties of your contest.
 
 This is the most important part of the file, where you specify which problems are part of the contest.
 
-- `problems`: A list of paths. Each path should point to a directory containing a `default.nix` file (or directly to a `.nix` file). Hull will evaluate each of these problem definitions and include them in the contest.
+- `problems`: A list of evaluated problems.
 
 ```nix
 {
-  problems = [
+  problems = map (p: hull.evalProblem p { }) [
     ../problems/aPlusB  # Path to the 'aPlusB' problem directory
     ../problems/hello   # Path to the 'hello' problem directory
   ];

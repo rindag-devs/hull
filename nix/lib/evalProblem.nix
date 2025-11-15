@@ -24,7 +24,7 @@
 # A helper function to evaluate a user's problem definition.
 # It takes a user-provided attribute set (the problem definition)
 # and evaluates it against our module system.
-problemAttrs:
+problemAttrs: extraSpecialArgs:
 let
   problem = pkgs.lib.evalModules {
     # The list of modules to evaluate.
@@ -47,7 +47,8 @@ let
         hullPkgs
         cplib
         ;
-    };
+    }
+    // extraSpecialArgs;
   };
 
   problemAssertWarn =

@@ -127,17 +127,17 @@
 
           hullProblems = {
             test = {
-              aPlusB = hull.evalProblem ./nix/test/problem/aPlusB;
-              aPlusBGrader = hull.evalProblem ./nix/test/problem/aPlusBGrader;
-              numberGuessing = hull.evalProblem ./nix/test/problem/numberGuessing;
-              recitePi = hull.evalProblem ./nix/test/problem/recitePi;
-              newYearGreeting = hull.evalProblem ./nix/test/problem/newYearGreeting;
-              mst = hull.evalProblem ./nix/test/problem/mst;
+              aPlusB = hull.evalProblem ./nix/test/problem/aPlusB { };
+              aPlusBGrader = hull.evalProblem ./nix/test/problem/aPlusBGrader { };
+              numberGuessing = hull.evalProblem ./nix/test/problem/numberGuessing { };
+              recitePi = hull.evalProblem ./nix/test/problem/recitePi { };
+              newYearGreeting = hull.evalProblem ./nix/test/problem/newYearGreeting { };
+              mst = hull.evalProblem ./nix/test/problem/mst { };
             };
           };
 
           hullContests = {
-            test.allProblems = hull.evalContest ./nix/test/contest/allProblems.nix;
+            test.allProblems = hull.evalContest ./nix/test/contest/allProblems.nix { };
           };
         }
       );
