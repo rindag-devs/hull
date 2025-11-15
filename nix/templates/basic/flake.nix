@@ -1,5 +1,5 @@
 {
-  description = "A minimal hull problem";
+  description = "A basic hull problem";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
@@ -45,7 +45,7 @@
             ];
 
             env = {
-              CPLUS_INCLUDE_PATH = "${cplib}/include";
+              CPLUS_INCLUDE_PATH = toString cplib;
             };
           };
 
