@@ -198,9 +198,6 @@ fn create_engine(memory_limit: u64) -> Result<Engine> {
       .wasm_wide_arithmetic(false)
       .wasm_custom_page_sizes(true)
       .max_wasm_stack(memory_limit.try_into().unwrap())
-      .memory_reservation(0)
-      .memory_reservation_for_growth(0)
-      .memory_guard_size(0)
       .strategy(wasmtime::Strategy::Cranelift)
       .profiler(wasmtime::ProfilingStrategy::None)
       .cranelift_opt_level(wasmtime::OptLevel::Speed),
