@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
+async-trait = "0.1.89"
 cap-std = "3"
 clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
@@ -17,11 +18,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.25"
 tree-sitter-cpp = "0.23"
-wasi-common = "38"
-wiggle = "38"
+wasi-common = "39"
 
 [dependencies.wasmtime]
-version = "38"
+version = "39"
 default-features = false
 features = ["std", "cranelift", "runtime", "wat"]
 
