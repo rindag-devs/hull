@@ -190,6 +190,7 @@
 
     fullScore = lib.mkOption {
       type = lib.types.numbers.nonnegative;
+      readOnly = true;
       description = "Full score of this problem";
       default = builtins.foldl' builtins.add 0.0 (map ({ fullScore, ... }: fullScore) config.subtasks);
       defaultText = "The sum of the full score of all subtasks.";
