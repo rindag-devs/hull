@@ -45,7 +45,7 @@ pub struct JudgeDir {
   write_only_files: HashMap<String, cap_std::fs::File>,
 }
 
-#[wiggle::async_trait]
+#[async_trait::async_trait]
 impl WasiDir for JudgeDir {
   // Standard trait method to allow downcasting.
   fn as_any(&self) -> &dyn Any {
