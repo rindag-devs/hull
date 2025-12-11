@@ -41,6 +41,7 @@ fn main() -> Result<()> {
     cli::Command::CompileCwasm(opts) => cmd::compile_cwasm::run(opts),
     cli::Command::Judge(opts) => cmd::judge::run(opts),
     cli::Command::PatchIncludes(opts) => cmd::patch_includes::run(opts),
+    cli::Command::Run(opts) => cmd::run::run(opts),
     cli::Command::RunWasm(opts) => cmd::run_wasm::run(opts),
     cli::Command::Stress(opts) => cmd::stress::run(opts),
   }
