@@ -8,7 +8,7 @@ struct Input {
   std::string s;
 
   static auto read(cplib::var::Reader& in) -> Input {
-    auto s = in.read(cplib::var::Line("s"));
+    auto s = in.read(cplib::var::String("s", cplib::var::String::Mode::LINE));
     constexpr int N_DIGITS = 100000;
     if (s.size() != N_DIGITS + 2) {
       in.fail(cplib::format("Excepted {} digits after point, found {}", N_DIGITS, s.size() - 2));
@@ -21,7 +21,8 @@ struct Output {
   std::string s;
 
   static auto read(cplib::var::Reader& in, const Input&) -> Output {
-    auto s = in.read(cplib::var::Line("s", cplib::Pattern("3\\.[0-9]+")));
+    auto s = in.read(
+        cplib::var::String("s", cplib::var::String::Mode::LINE, cplib::Pattern("3\\.[0-9]+")));
     return {s};
   }
 

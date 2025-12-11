@@ -52,7 +52,8 @@ struct InputSecond {
 
   static auto read(cplib::var::Reader& in) -> InputSecond {
     auto [encoded, Q] =
-        in(cplib::var::Line("encoded", cplib::Pattern("[01]+")), cplib::var::i32("Q", 1, CNT));
+        in(cplib::var::String("encoded", cplib::var::String::Mode::LINE, cplib::Pattern("[01]+")),
+           cplib::var::i32("Q", 1, CNT));
     in.read(cplib::var::eoln);
     auto indexes = in.read(cplib::var::Vec(cplib::var::u32("indexes"), Q, cplib::var::eoln));
     in.read(cplib::var::eoln);
@@ -69,7 +70,8 @@ struct InputSecond {
 
 struct Input : std::variant<InputFirst, InputSecond> {
   static auto read(cplib::var::Reader& in) -> Input {
-    auto type = in.read(cplib::var::Line("type", cplib::Pattern("encode|decode")));
+    auto type = in.read(cplib::var::String("type", cplib::var::String::Mode::LINE,
+                                           cplib::Pattern("encode|decode")));
     if (type == "encode") {
       auto first = in.read(cplib::var::ExtVar<InputFirst>("first"));
       return {first};
