@@ -63,9 +63,10 @@
   checkerSuffix ? "20.cpp",
 
   # File suffix for validator.
-  # UOJ determines the language by file suffix.
-  # See https://github.com/vfleaking/uoj/blob/517134629ba066c45c7d8637cfc98b75acb560da/web/app/models/UOJLang.php#L32
   validatorSuffix ? "20.cpp",
+
+  # File suffix for main correct solution.
+  stdSuffix ? "20.cpp",
 
   # Enable integer mode for score. Usually applies to UOJ community edition.
   integerScore ? false,
@@ -88,6 +89,7 @@
       generators,
       samples,
       includes,
+      mainCorrectSolution,
       ...
     }@problem:
     let
@@ -325,10 +327,11 @@
             };
         }}
 
-        # Copy judger programs (checker, validator, interactor, graders)
+        # Copy judger programs (checker, validator, interactor, std, graders)
         cp ${patchedSrc.validator} $tmpdir/val${validatorSuffix}
         ${lib.optionalString needChecker "cp ${patchedSrc.checker} $tmpdir/chk${checkerSuffix}"}
         ${lib.optionalString needInteractor "cp ${patchedSrc.interactor} $tmpdir/interactor${checkerSuffix}"}
+        cp ${mainCorrectSolution.src} $tmpdir/std${validatorSuffix}
         ${lib.optionalString (graderSrcs != null) (
           lib.concatMapAttrsStringSep "\n" (
             lang: src: "cp ${src} $tmpdir/require/implementer.${lang}"
