@@ -2,9 +2,9 @@
   description = "A basic hull problem";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     cplib = {
-      url = "github:/rindag-devs/cplib/single-header-snapshot";
+      url = "github:rindag-devs/cplib/single-header-snapshot";
       flake = false;
     };
     hull = {
