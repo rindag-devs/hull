@@ -200,7 +200,14 @@
       type = lib.types.attrsOf lib.types.package;
       readOnly = true;
       description = "The final derivation outputs for each defined target.";
-      default = builtins.mapAttrs (targetName: target: target config) config.targets;
+      default =
+        let
+          # Check assertions before building any target.
+          # If assertions fail, evaluation stops here. If they pass, it returns `config`.
+          checkedConfig = pkgs.lib.asserts.checkAssertWarn config.assertions config.warnings config;
+        in
+        # Pass the checked configuration to each target's functor.
+        builtins.mapAttrs (targetName: target: target checkedConfig) config.targets;
       defaultText = lib.literalExpression "builtins.mapAttrs (targetName: target: target config) config.targets";
     };
   };

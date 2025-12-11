@@ -53,7 +53,15 @@
       type = lib.types.attrsOf lib.types.package;
       readOnly = true;
       description = "The final derivation outputs for each defined target.";
-      default = builtins.mapAttrs (targetName: target: target config) config.targets;
+      default =
+        let
+          # Collect assertions from all problems in the contest.
+          assertions = builtins.concatLists (map (p: p.config.assertions) config.problems);
+          warnings = builtins.concatLists (map (p: p.config.warnings) config.problems);
+          # Check assertions before building any contest target.
+          checkedConfig = lib.asserts.checkAssertWarn assertions warnings config;
+        in
+        builtins.mapAttrs (targetName: target: target checkedConfig) config.targets;
       defaultText = lib.literalExpression "builtins.mapAttrs (targetName: target: target config) config.targets";
     };
   };
