@@ -98,11 +98,10 @@ pub fn run(opts: &RunOpts) -> Result<()> {
         problem = flake.outputs.hullProblems.{system}.{problem_name}.config;
 
         langName = if languageName != null
-                  then languageName
-                  else hullLib.language.matchBaseName (builtins.baseNameOf srcPath) problem.languages;
+                   then languageName
+                   else hullLib.language.matchBaseName (builtins.baseNameOf srcPath) problem.languages;
 
-        _ = if langName == null then throw "Could not determine language for file: ${{srcPath}}" else null;
-        lang = problem.languages.${{langName}} or (throw "Language '" + langName + "' not found for problem '{problem_name}'");
+        lang = problem.languages.${{langName}} or (throw ("Language '" + langName + "' not found for problem '{problem_name}'"));
 
         wasm = lang.compile.executable {{
           name = "hull-run-${{builtins.baseNameOf srcPath}}";
