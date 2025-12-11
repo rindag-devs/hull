@@ -18,5 +18,6 @@ pub mod build_contest;
 pub mod compile_cwasm;
 pub mod judge;
 pub mod patch_includes;
+pub mod run;
 pub mod run_wasm;
 pub mod stress;
