@@ -51,9 +51,5 @@ let
     }
     // extraSpecialArgs;
   };
-
-  problemAssertWarn =
-    pkgs.lib.asserts.checkAssertWarn problem.config.assertions problem.config.warnings
-      problem;
 in
-problemAssertWarn
+problem

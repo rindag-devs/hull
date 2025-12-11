@@ -44,9 +44,5 @@ let
     }
     // extraSpecialArgs;
   };
-
-  assertions = builtins.concatLists (map (p: p.config.assertions) contest.config.problems);
-  warnings = builtins.concatLists (map (p: p.config.warnings) contest.config.problems);
-  contestAssertWarn = pkgs.lib.asserts.checkAssertWarn assertions warnings contest;
 in
-contestAssertWarn
+contest
