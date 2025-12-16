@@ -79,10 +79,10 @@ Stress testing (also known as fuzz testing or randomized testing) is a powerful 
 4. It uses the problem's checker to compare their outputs.
 5. If the outputs differ, it has found a "hack" (a failing test case) and reports it. Otherwise, it continues to the next round.
 
-For example, imagine you have a potentially buggy solution `wa.20.cpp` and a generator named `rand`. You can stress test it with the following command:
+For example, imagine you have a potentially buggy solution `wa` and a generator named `rand`. You can stress test it with the following command:
 
 ```bash
-hull stress --generator rand --solutions wa.20.cpp -- some parameters passed --to=generator
+hull stress --generator rand wa -- some parameters passed --to=generator
 ```
 
 If a failing test case is found, the process stops and prints a report, including the generator arguments that produced the failing case. This makes it easy to reproduce the failure and add it to your `problem.nix` for regression testing.

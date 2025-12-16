@@ -36,7 +36,7 @@ A typical problem directory looks like this:
 ├── generator/
 │   └── rand.20.cpp
 ├── include/
-│   └── problem.h
+│   └── problem.20.hpp
 ├── solution/
 │   ├── bf.20.cpp
 │   └── std.20.cpp
@@ -53,7 +53,7 @@ A typical problem directory looks like this:
 - `data/`: Manually created test case input files.
 - `document/`: Source files for generating problem statements (e.g., Typst files).
 - `generator/`: Source code for test data generators.
-- `include/`: Shared header files, like `problem.h`, used by other components.
+- `include/`: Shared header files, like `problem.20.hpp`, used by other components.
 - `solution/`: Source code for all solutions (correct, incorrect, suboptimal).
 - `checker.20.cpp`: The checker program.
 - `validator.20.cpp`: The validator program.
