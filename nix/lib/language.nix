@@ -49,7 +49,8 @@ let
     pkgs.runCommandLocal "hull-${namePrefix}-${name}.${extName}"
       { nativeBuildInputs = [ hullPkgs.wasm-judge-clang ]; }
       ''
-        wasm-judge-clang++ -x ${languageFlag} ${src} ${outputFlag} -o foo.wasm ${extraObjectsCmd} \
+        cp ${src} src.code
+        wasm-judge-clang++ -x ${languageFlag} src.code ${outputFlag} -o foo.wasm ${extraObjectsCmd} \
           ${includeDirCmd} -O3 -std=${std} ${linkerFlags}
         cp foo.wasm $out
       '';
