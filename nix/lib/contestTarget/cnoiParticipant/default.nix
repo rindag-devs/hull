@@ -242,7 +242,7 @@
             ++ statementExtraFontPaths;
           };
         in
-        "cp ${statement} $out/statement_${displayLanguage}.pdf"
+        "cp ${statement} $out/statement.${displayLanguage}.pdf"
       ) displayLanguages;
     in
     pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant" { } ''
