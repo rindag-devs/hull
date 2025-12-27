@@ -89,7 +89,7 @@
             tcName: result:
             let
               dirPrefix = "$out/solution/${solName}/test-case-result/${tcName}";
-              resultJSON = builtins.toJSON (builtins.removeAttrs result [ "output" ]);
+              resultJSON = builtins.toJSON (builtins.removeAttrs result [ "outputs" ]);
             in
             ''
               mkdir -p ${dirPrefix}
