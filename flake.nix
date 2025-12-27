@@ -109,7 +109,7 @@
 
           packages = import ./nix/pkgs { inherit pkgs; } // {
             default = craneLib.buildPackage {
-              src = craneLib.cleanCargoSource ./.;
+              src = craneLib.cleanCargoSource self;
               nativeBuildInputs = [
                 pkgs.makeBinaryWrapper
               ];
