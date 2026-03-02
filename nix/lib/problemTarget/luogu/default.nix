@@ -27,16 +27,16 @@
 # incompatibility that prevents direct compilation of these programs on Luogu.
 #
 # To solve this, this target employs a workaround:
-# 1. **Pre-compilation:** The C++ 20 program (e.g., checker) is first compiled
+# 1. Pre-compilation: The C++ 20 program (e.g., checker) is first compiled
 #    into a standard `x86_64-linux-gnu` shared library (.so file), since
 #    Luogu's environment is fixed and known.
-# 2. **Embedding:** The resulting .so file is compressed (using deflate) and
+# 2. Embedding: The resulting .so file is compressed (using deflate) and
 #    then base64-encoded to create a portable string. This reduces the size
 #    and makes it embeddable in source code.
-# 3. **Wrapping:** This string is embedded into a simple C wrapper program
+# 3. Wrapping: This string is embedded into a simple C wrapper program
 #    (`sharedWrapper.c`). This wrapper itself is C99 compliant and
 #    compiles fine on Luogu with its C++ 14 flags.
-# 4. **Runtime Execution:** When Luogu compiles and runs the wrapper, the
+# 4. Runtime Execution: When Luogu compiles and runs the wrapper, the
 #    wrapper decodes the base64 string, inflates the data back into the
 #    original .so binary in memory (using `memfd_create`), and then uses
 #    `dlopen`/`dlsym` to dynamically load and execute the `main` function
@@ -74,18 +74,14 @@
   # Grader source file, should be in C++.
   graderSrc ? null,
 
-  # This command needs to compile `program.code` into `program.so`, which is a dynamic link library
+  # This command needs to compile `program.code` into `program`, which is a dynamic link library
   # of x86-64-linux-gnu.
-  checkerCompileCommand ?
+  sharedLibraryCompileCommand ?
     includes:
     let
       includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
     in
     "$CXX -x c++ program.code -o program -std=c++23 -O3 -fPIC -shared ${includeDirCmd}",
-
-  # This command needs to compile `program.code` into `program.so`, which is a dynamic link library
-  # of x86-64-linux-gnu.
-  validatorCompileCommand ? checkerCompileCommand,
 }:
 
 {
@@ -152,7 +148,6 @@
       compileShared =
         {
           programSrc,
-          compileCommand,
           mode, # "checker" or "interactor" or "validator"
         }:
         let
@@ -196,7 +191,7 @@
           programName = mode;
           src = patchedSrc;
           stdenv = pkgs.pkgsCross.gnu64.stdenv;
-          compileCommand = compileCommand includes;
+          compileCommand = sharedLibraryCompileCommand includes;
           installDest = "lib/x86_64-linux-gnu/program.so";
         };
 
@@ -236,7 +231,6 @@
 
       wrappedChecker = wrapShared "checker" (compileShared {
         programSrc = checker.src;
-        compileCommand = checkerCompileCommand;
         mode =
           if type == "stdioInteraction" then
             "interactor"
@@ -248,7 +242,6 @@
 
       wrappedValidator = wrapShared "validator" (compileShared {
         programSrc = validator.src;
-        compileCommand = validatorCompileCommand;
         mode = "validator";
       });
 

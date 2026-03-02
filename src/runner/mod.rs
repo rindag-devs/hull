@@ -51,7 +51,7 @@ impl ResourceLimiter for MemoryLimiter {
     _current: usize,
     desired: usize,
     _maximum: Option<usize>,
-  ) -> Result<bool> {
+  ) -> std::result::Result<bool, wasmtime::Error> {
     self.memory_max_used_bytes = self.memory_max_used_bytes.max(desired);
     let allow = desired <= self.memory_bytes;
     if !allow {
@@ -65,7 +65,7 @@ impl ResourceLimiter for MemoryLimiter {
     _current: usize,
     desired: usize,
     maximum: Option<usize>,
-  ) -> Result<bool> {
+  ) -> std::result::Result<bool, wasmtime::Error> {
     let allow = !matches!(maximum, Some(max) if desired > max);
     Ok(allow)
   }
@@ -134,7 +134,7 @@ impl RunResult {
 
 pub fn compile(wasm: &[u8]) -> Result<Vec<u8>> {
   let engine = create_engine(512 * 1024)?;
-  engine.precompile_module(wasm)
+  Ok(engine.precompile_module(wasm)?)
 }
 
 pub fn run(
@@ -181,11 +181,11 @@ pub fn run(
 }
 
 fn create_engine(memory_limit: u64) -> Result<Engine> {
-  Engine::new(
+  Ok(Engine::new(
     Config::new()
       .consume_fuel(true)
       .wasm_bulk_memory(false)
-      .wasm_custom_page_sizes(false)
+      .wasm_component_model(false)
       .wasm_extended_const(false)
       .wasm_memory64(false)
       .wasm_multi_memory(false)
@@ -200,8 +200,9 @@ fn create_engine(memory_limit: u64) -> Result<Engine> {
       .max_wasm_stack(memory_limit.try_into().unwrap())
       .strategy(wasmtime::Strategy::Cranelift)
       .profiler(wasmtime::ProfilingStrategy::None)
-      .cranelift_opt_level(wasmtime::OptLevel::Speed),
-  )
+      .cranelift_opt_level(wasmtime::OptLevel::Speed)
+      .compiler_inlining(true),
+  )?)
 }
 
 fn setup_linker(engine: &Engine) -> Result<Linker<ApplicationState>> {
@@ -265,7 +266,7 @@ fn setup_instance(
 ) -> Result<wasmtime::TypedFunc<(), ()>> {
   let instance = linker.instantiate(&mut *store, main_module)?;
   linker.instance(&mut *store, "", instance)?;
-  linker.get_default(&mut *store, "")?.typed(store)
+  Ok(linker.get_default(&mut *store, "")?.typed(store)?)
 }
 
 fn execute_and_get_results(
@@ -278,7 +279,9 @@ fn execute_and_get_results(
   let tick = tick_limit
     - match store.get_fuel() {
       Ok(x) => x,
-      Err(err) => return RunResult::new_runtime_error(err.context("Unable to get the fuel")),
+      Err(err) => {
+        return RunResult::new_runtime_error(err.context("Unable to get the fuel").into());
+      }
     };
 
   let memory_limiter = store.data().memory_limiter.clone();
