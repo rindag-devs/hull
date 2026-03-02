@@ -13,7 +13,7 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use clap::{Parser, Subcommand, command};
+use clap::{Parser, Subcommand};
 
 use crate::cmd::{
   build::BuildOpts, build_contest::BuildContestOpts, compile_cwasm::CompileCwasmOpts,
