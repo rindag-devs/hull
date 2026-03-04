@@ -38,7 +38,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   ];
 
   cmakeFlags = [
-    "-G Ninja"
+    "-DCMAKE_SYSTEM_NAME=WASI"
+    "-DCMAKE_SYSTEM_VERSION=1"
+    "-DCMAKE_SYSTEM_PROCESSOR=wasm32"
     "-DCMAKE_SYSROOT=/var/empty"
     "-DCMAKE_C_COMPILER=clang"
     "-DCMAKE_CXX_COMPILER=clang++"
