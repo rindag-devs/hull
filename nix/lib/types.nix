@@ -95,7 +95,7 @@ let
             includes = problem.includes;
             extraObjects = [ ];
           };
-        defaultText = lib.literalExpression ''(problem.languages.''${config.language}).compile.executable { ... }'';
+        defaultText = lib.literalExpression "(problem.languages.\${config.language}).compile.executable { ... }";
       };
       cwasm = lib.mkOption {
         type = lib.types.package;
@@ -649,13 +649,43 @@ in
             default =
               let
                 drvs = lib.mapAttrs (tcName: tc: problem.judger.judge tc config) problem.testCases;
+                /*
+                  Instead of calling `lib.importJSON drv` directly for each test case, we aggregate
+                  all derivations into a `pkgs.linkFarm`.
+
+                  Why? Standard IFD (Import From Derivation) is sequential: Nix evaluates one,
+                  builds it, reads it, then moves to the next. For problems with hundreds of
+                  test cases, this is extremely slow.
+
+                  By using a linkFarm, Nix is forced to evaluate the farm's derivation first.
+                  Since the farm depends on all test case derivations, Nix builds them all
+                  IN PARALLEL (using available build slots) before returning to the evaluation
+                  phase to read the JSON reports from the farm.
+                */
                 links = pkgs.linkFarm "hull-testCaseResults-${problem.name}-${config.name}" drvs;
                 results = lib.mapAttrs (
-                  tcName: _:
+                  tcName: drv:
                   let
-                    outputs = links + "/${tcName}/outputs";
+                    /*
+                      In strict pure evaluation mode (default in Lix and some Nix versions),
+                      `builtins.readFile` (used by `lib.importJSON`) checks if the actual
+                      Store path being read is present in the string's "dependency context".
+
+                      Since `links` is a farm of SYMLINKS, the string `"${links}/${tcName}"`
+                      only has the context of the farm, not the target derivation. When
+                      the evaluator follows the symlink to the real test case output, it
+                      throws an "access to absolute path is forbidden" error.
+
+                      `builtins.substring 0 0 "${drv}"` returns an empty string but
+                      carries the "context" (the dependency on the derivation). By
+                      appending it, we "smuggle" the original derivation's context into
+                      the path string, satisfying the evaluator's security check.
+                    */
+                    contextSuffix = builtins.substring 0 0 "${drv}";
+                    outputs = "${links}/${tcName}/outputs" + contextSuffix;
+                    reportPath = "${links}/${tcName}/report.json" + contextSuffix;
                   in
-                  (lib.importJSON (links + "/${tcName}/report.json")) // { inherit outputs; }
+                  (lib.importJSON reportPath) // { inherit outputs; }
                 ) drvs;
               in
               results;
