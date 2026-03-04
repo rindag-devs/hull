@@ -127,8 +127,16 @@
               readerTraceLevel = if builtins.elem "sample" groups then 2 else 1;
             }
           ) config.testCases;
+          # Parallel IFD, see `nix/lib/types.nix`, under the `testCaseResults` option definition.
           links = pkgs.linkFarm "hull-testCaseInputValidations-${config.name}" drvs;
-          reports = lib.mapAttrs (tcName: _: lib.importJSON (links + "/${tcName}")) drvs;
+          reports = lib.mapAttrs (
+            tcName: drv:
+            let
+              contextSuffix = builtins.substring 0 0 "${drv}";
+              pathWithContext = "${links}/${tcName}" + contextSuffix;
+            in
+            lib.importJSON pathWithContext
+          ) drvs;
         in
         reports;
       defaultText = "Computed by runs the validator on the input file for all test cases.";
