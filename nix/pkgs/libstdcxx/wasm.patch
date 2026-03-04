@@ -1,0 +1,98 @@
+--- a/libstdc++-v3/configure.host
++++ b/libstdc++-v3/configure.host
+@@ -131,6 +131,9 @@
+   sparc* | ultrasparc)
+     try_cpu=sparc
+     ;;
++  wasm*)
++    try_cpu=generic
++    ;;
+   *)
+     if test -d ${glibcxx_srcdir}/config/cpu/${host_cpu}; then
+       try_cpu=${host_cpu}
+@@ -316,6 +319,9 @@
+   vxworks*)
+     os_include_dir="os/vxworks"
+     ;;
++  wasi*)
++    os_include_dir="os/generic"
++    ;;
+   *)
+     os_include_dir="os/generic"
+     ;;
+--- a/libstdc++-v3/crossconfig.m4
++++ b/libstdc++-v3/crossconfig.m4
+@@ -299,6 +299,12 @@
+ dnl # long_double_math_on_this_cpu in configure.ac, right after
+ dnl # the expansion of the present macro.
+     ;;
++  *-*-wasi*)
++    GLIBCXX_CHECK_COMPILER_FEATURES
++    GLIBCXX_CHECK_LINKER_FEATURES
++    GLIBCXX_CHECK_MATH_SUPPORT
++    GLIBCXX_CHECK_STDLIB_SUPPORT
++    ;;
+   *)
+     AC_MSG_ERROR([No support for this host/target combination.])
+    ;;
+--- a/libstdc++-v3/src/c++11/assert_fail.cc
++++ b/libstdc++-v3/src/c++11/assert_fail.cc
+@@ -28,7 +28,7 @@
+ #include <cstdio>	// for std::fprintf, stderr
+ namespace std
+ {
+-  [[__noreturn__]]
++  /* [[__noreturn__]] */
+   void
+   __glibcxx_assert_fail(const char* file, int line,
+ 			const char* function, const char* condition) noexcept
+--- a/libstdc++-v3/src/c++23/print.cc
++++ b/libstdc++-v3/src/c++23/print.cc
+@@ -103,9 +103,13 @@
+ #elif defined _GLIBCXX_HAVE_UNISTD_H && ! defined __AVR__
+     if (auto fb = dynamic_cast<filebuf*>(sb))
+       if (int fd = fb->native_handle(); fd >= 0 && ::isatty(fd))
++#ifdef __wasi__
++	return nullptr;
++#else
+ 	return ::fdopen(::dup(fd), "w"); // Caller must call fclose.
+ #endif
+ #endif
++#endif
+ #endif // ! _GLIBCXX_USE_STDIO_PURE
+ 
+     return nullptr;
+--- a/libstdc++-v3/libsupc++/eh_globals.cc
++++ b/libstdc++-v3/libsupc++/eh_globals.cc
+@@ -71,7 +71,7 @@
+ namespace
+ {
+   // Single-threaded fallback buffer.
+-  __constinit __cxa_eh_globals eh_globals;
++  __constinit __cxa_eh_globals eh_globals = {};
+ }
+ 
+ #if __GTHREADS
+--- a/libstdc++-v3/include/precompiled/stdc++.h
++++ b/libstdc++-v3/include/precompiled/stdc++.h
+@@ -35,7 +35,9 @@
+ #include <cctype>
+ #include <cfloat>
+ #include <climits>
++#ifndef __wasi__
+ #include <csetjmp>
++#endif
+ #include <cstdarg>
+ #include <cstddef>
+ #include <cstdlib>
+@@ -113,8 +115,10 @@
+ #include <climits>
+ #include <clocale>
+ #include <cmath>
++#ifndef __wasi__
+ #include <csetjmp>
+ #include <csignal>
++#endif
+ #include <cstdarg>
+ #include <cstddef>
+ #include <cstdio>

@@ -74,7 +74,7 @@ nix develop
 
 The `nix develop` command launches a new shell session that is specifically configured for your Hull project. Inside this shell:
 - The `hull` command-line interface (CLI) is available in your `PATH`.
-- All necessary compilers (e.g., `wasm-judge-clang++`) and tools are ready to use.
+- All necessary compilers (e.g., `wasm32-wasi-wasip1-clang++`) and tools are ready to use.
 - Environment variables are set up for seamless integration with libraries like `cplib`.
 
 This shell is a hermetic, isolated environment. The tools and their versions are precisely defined by the `flake.nix` file. This ensures that you and anyone else working on the problem are using the exact same versions of all tools, which is fundamental to Hull's guarantee of reproducibility.

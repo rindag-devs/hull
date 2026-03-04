@@ -15,18 +15,15 @@
 
 {
   lib,
-  llvmPackages_21,
+  llvmPackages,
   stdenvNoCC,
   makeWrapper,
-  wasi-sysroot,
-  wasi-compiler-rt,
+  sysroot,
+  compiler-rt,
 }:
 
-let
-  llvmPackages = llvmPackages_21;
-in
 stdenvNoCC.mkDerivation {
-  pname = "wasm-judge-clang";
+  pname = "wasm32-wasi-wasip1-clang";
   version = llvmPackages.clang.version;
 
   nativeBuildInputs = [
@@ -45,20 +42,24 @@ stdenvNoCC.mkDerivation {
     mkdir -p $out/resource-dir
 
     ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include $out/resource-dir/include
-    ln -s ${wasi-compiler-rt}/lib $out/resource-dir/lib
+    ln -s ${compiler-rt}/lib $out/resource-dir/lib
 
     local common_flags=(
       "--target=wasm32-wasi-wasip1"
       "-mcpu=mvp"
-      "--sysroot=${wasi-sysroot}"
+      "--sysroot=${sysroot}"
       "-resource-dir=$out/resource-dir"
     )
 
-    makeWrapper ${llvmPackages.clang-unwrapped}/bin/clang $out/bin/wasm-judge-clang \
+    makeWrapper ${llvmPackages.clang-unwrapped}/bin/clang $out/bin/wasm32-wasi-wasip1-clang \
       --add-flags "''${common_flags[*]}" \
       --prefix PATH : ${lib.makeBinPath [ llvmPackages.lld ]}
 
-    makeWrapper ${llvmPackages.clang-unwrapped}/bin/clang++ $out/bin/wasm-judge-clang++ \
+    makeWrapper ${llvmPackages.clang-unwrapped}/bin/clang++ $out/bin/wasm32-wasi-wasip1-clang++ \
+      --add-flags "-stdlib=libstdc++" \
+      --add-flags "-nostdlib++" \
+      --add-flags "-lstdc++" \
+      --add-flags "-lsupc++" \
       --add-flags "-fno-exceptions" \
       --add-flags "''${common_flags[*]}" \
       --prefix PATH : ${lib.makeBinPath [ llvmPackages.lld ]}
@@ -69,6 +70,6 @@ stdenvNoCC.mkDerivation {
   meta = {
     description = "Wrapper for clang / clang++ to compile for wasm judge";
     platforms = lib.platforms.all;
-    mainProgram = "wasm-judge-clang";
+    mainProgram = "wasm32-wasi-wasip1-clang";
   };
 }

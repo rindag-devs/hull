@@ -17,10 +17,24 @@
   pkgs,
 }:
 
-rec {
-  wasi-compiler-rt = pkgs.callPackage ./wasi-compiler-rt { };
-  wasi-sysroot = pkgs.callPackage ./wasi-sysroot { };
-  wasm-judge-clang = pkgs.callPackage ./wasm-judge-clang {
-    inherit wasi-compiler-rt wasi-sysroot;
+{
+  wasm32-wasi-wasip1 = rec {
+    compiler-rt = pkgs.callPackage ./compiler-rt.nix { };
+    libc = pkgs.callPackage ./libc {
+      inherit compiler-rt;
+    };
+    libstdcxx = pkgs.callPackage ./libstdcxx {
+      inherit compiler-rt libc;
+    };
+    sysroot = pkgs.symlinkJoin {
+      name = "wasm32-wasi-wasip1-sysroot";
+      paths = [
+        libc
+        libstdcxx
+      ];
+    };
+    clang = pkgs.callPackage ./clang.nix {
+      inherit compiler-rt sysroot;
+    };
   };
 }

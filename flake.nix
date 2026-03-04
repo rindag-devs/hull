@@ -86,7 +86,7 @@
               pkgs.cargo-watch
               pkgs.pkg-config
               pkgs.nix-output-monitor
-              packages.wasm-judge-clang
+              packages.wasm32-wasi-wasip1.clang
             ];
 
             env = {
