@@ -81,12 +81,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   env =
     let
-      commonFlags = "-O2 -fno-exceptions --target=wasm32-wasi-wasip1 -mcpu=mvp --sysroot=${libc} -resource-dir=/tmp/resource-dir";
+      targetFlags = "--target=wasm32-wasi-wasip1 -mcpu=mvp --sysroot=${libc} -resource-dir=/tmp/resource-dir";
+      commonFlags = "-O2 -g -fno-exceptions ${targetFlags}";
       cxxFlags = "${commonFlags} -nostdlib++ -nostdinc++ -Wno-init-priority-reserved -Wno-invalid-constexpr";
     in
     {
       CFLAGS = commonFlags;
       CXXFLAGS = cxxFlags;
+      CPPFLAGS = targetFlags;
     };
 
   enableParallelBuilding = true;
