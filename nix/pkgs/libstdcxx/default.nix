@@ -23,8 +23,16 @@
   libtool,
   libc,
   compiler-rt,
+  runCommand,
 }:
 
+let
+  wasmResourceDir = runCommand "wasm32-wasi-wasip1-resource-dir" { } ''
+    mkdir -p $out
+    ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include $out/include
+    ln -s ${compiler-rt}/lib $out/lib
+  '';
+in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "wasm32-wasi-wasip1-libstdcxx";
 
@@ -50,10 +58,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   configurePhase = ''
     mkdir -p build
     cd build
-
-    mkdir -p /tmp/resource-dir
-    ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include /tmp/resource-dir/include
-    ln -s ${compiler-rt}/lib /tmp/resource-dir/lib
 
     ../libstdc++-v3/configure \
       --build=${stdenvNoCC.buildPlatform.config} \
@@ -81,7 +85,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   env =
     let
-      targetFlags = "--target=wasm32-wasi-wasip1 -mcpu=mvp --sysroot=${libc} -resource-dir=/tmp/resource-dir";
+      targetFlags = "--target=wasm32-wasi-wasip1 -mcpu=mvp --sysroot=${libc} -resource-dir=/${wasmResourceDir}";
       commonFlags = "-O2 -g -fno-exceptions ${targetFlags}";
       cxxFlags = "${commonFlags} -nostdlib++ -nostdinc++ -Wno-init-priority-reserved -Wno-invalid-constexpr";
     in
