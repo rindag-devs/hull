@@ -19,6 +19,7 @@
   lib,
   cplib,
   cplibInitializers,
+  x86_64-linux-gnu217-cross,
   ...
 }:
 
@@ -81,13 +82,14 @@
       ;
   };
 
-  uoj = import ./uoj.nix {
+  uoj = import ./uoj {
     inherit
       lib
       hull
       pkgs
       cplib
       cplibInitializers
+      x86_64-linux-gnu217-cross
       ;
   };
 

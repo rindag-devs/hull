@@ -28,12 +28,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     cplib = {
-      url = "github:/rindag-devs/cplib/single-header-snapshot";
+      url = "github:rindag-devs/cplib/single-header-snapshot";
       flake = false;
     };
     cplibInitializers = {
-      url = "github:/rindag-devs/cplib-initializers";
+      url = "github:rindag-devs/cplib-initializers";
       flake = false;
+    };
+    x86_64-linux-gnu217-cross = {
+      url = "github:aberter0x3f/x86_64-linux-gnu2.17-cross";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -46,6 +50,7 @@
       typix,
       cplib,
       cplibInitializers,
+      x86_64-linux-gnu217-cross,
     }:
     let
       supportedSystems = [
@@ -103,6 +108,7 @@
               typixLib
               cplib
               cplibInitializers
+              x86_64-linux-gnu217-cross
               ;
             hullPkgs = packages;
           };

@@ -19,6 +19,7 @@
   pkgs,
   cplib,
   cplibInitializers,
+  x86_64-linux-gnu217-cross,
 }:
 
 {
@@ -73,6 +74,11 @@
 
   # Enable integer mode for time limit. Usually applies to UOJ community edition.
   integerTimeLimit ? false,
+
+  # Build checker/interactor/validator locally as x86_64-linux-gnu2.17 shared
+  # libraries, then wrap them into portable C++ payloads for old UOJ versions.
+  # This does not affect `std`.
+  oldJudgerWrapper ? false,
 }:
 
 {
@@ -163,6 +169,7 @@
         in
         ''
           use_builtin_judger on
+          chk_run_type compiler
           ${lib.optionalString (!integerScore) "score_type real-6"}
           ${lib.optionalString (graderSrcs != null) "with_implementer on"}
           ${lib.optionalString (type == "stdioInteraction") "interaction_mode on"}
@@ -285,6 +292,75 @@
       needChecker = type != "stdioInteraction" || twoStepInteraction;
       needInteractor = type == "stdioInteraction";
 
+      crossClang = x86_64-linux-gnu217-cross.packages.${pkgs.stdenv.hostPlatform.system}.clang;
+
+      wrapJudgerProgram =
+        programName: src:
+        pkgs.runCommandLocal "hull-uojWrappedProgram-${problem.name}-${programName}.cpp"
+          {
+            nativeBuildInputs = [
+              crossClang
+              pkgs.lz4
+            ];
+          }
+          ''
+            mkdir -p require
+            cp ${cplib}/cplib.hpp require/cplib.hpp
+            cp ${cplibInitializers}/include/testlib/checker.hpp require/testlib_checker.hpp
+            cp ${cplibInitializers}/include/testlib/interactor.hpp require/testlib_interactor.hpp
+            cp ${cplibInitializers}/include/testlib/interactor_two_step.hpp require/testlib_interactor_two_step.hpp
+            cp ${cplibInitializers}/include/testlib/validator.hpp require/testlib_validator.hpp
+            ${mkCopyCommands "require" extraRequireFiles}
+
+            cp ${src} program.code
+            x86_64-unknown-linux-gnu2.17-clang++ \
+              -x c++ \
+              program.code \
+              -o program.so \
+              -shared \
+              -fPIC \
+              -std=c++23 \
+              -O3 \
+              -fno-exceptions \
+              -static-libstdc++ \
+              -static-libgcc
+
+            raw_size=$(wc -c program.so | cut -d' ' -f1)
+            lz4 --best -z -f program.so program-lz4.bin
+            lz4_size=$(wc -c program-lz4.bin | cut -d' ' -f1)
+            base64 -w0 program-lz4.bin > b64-content.txt
+
+            awk \
+              -v raw_size="$raw_size" \
+              -v lz4_size="$lz4_size" \
+              '
+              BEGIN {
+                getline b64 < "b64-content.txt"
+              }
+              {
+                sub(/\/\* HULL_RAW_SIZE \*\//, raw_size);
+                sub(/\/\* HULL_LZ4_SIZE \*\//, lz4_size);
+                sub(/HULL_B64_STR/, b64);
+                print;
+              }
+              ' ${./wrapper.c} > $out
+          '';
+
+      judgerSrc = {
+        checker =
+          if oldJudgerWrapper then wrapJudgerProgram "checker" patchedSrc.checker else patchedSrc.checker;
+        interactor =
+          if oldJudgerWrapper then
+            wrapJudgerProgram "interactor" patchedSrc.interactor
+          else
+            patchedSrc.interactor;
+        validator =
+          if oldJudgerWrapper then
+            wrapJudgerProgram "validator" patchedSrc.validator
+          else
+            patchedSrc.validator;
+      };
+
     in
     pkgs.runCommandLocal
       ("hull-problemTargetOutput-${problem.name}-uoj" + (lib.optionalString zipped ".zip"))
@@ -328,10 +404,10 @@
         }}
 
         # Copy judger programs (checker, validator, interactor, std, graders)
-        cp ${patchedSrc.validator} $tmpdir/val${validatorSuffix}
-        ${lib.optionalString needChecker "cp ${patchedSrc.checker} $tmpdir/chk${checkerSuffix}"}
-        ${lib.optionalString needInteractor "cp ${patchedSrc.interactor} $tmpdir/interactor${checkerSuffix}"}
-        cp ${mainCorrectSolution.src} $tmpdir/std${validatorSuffix}
+        cp ${judgerSrc.validator} $tmpdir/val${validatorSuffix}
+        ${lib.optionalString needChecker "cp ${judgerSrc.checker} $tmpdir/chk${checkerSuffix}"}
+        ${lib.optionalString needInteractor "cp ${judgerSrc.interactor} $tmpdir/interactor${checkerSuffix}"}
+        cp ${mainCorrectSolution.src} $tmpdir/std${stdSuffix}
         ${lib.optionalString (graderSrcs != null) (
           lib.concatMapAttrsStringSep "\n" (
             lang: src: "cp ${src} $tmpdir/require/implementer.${lang}"

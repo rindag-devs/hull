@@ -231,6 +231,12 @@
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
     uoj = hull.problemTarget.uoj { };
+    uojOld = hull.problemTarget.uoj {
+      oldJudgerWrapper = true;
+      checkerSuffix = ".cpp";
+      validatorSuffix = ".cpp";
+      stdSuffix = ".cpp";
+    };
     cms = hull.problemTarget.cms {
       statements = {
         english = "statement.en.pdf";

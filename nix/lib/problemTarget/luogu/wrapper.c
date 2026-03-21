@@ -93,19 +93,20 @@ void lz4D(const uint8_t *src, uint8_t *dst, size_t *dlen) {
   *dlen = d - dst;
 }
 
-#define SO_OUT_BUF_LEN (/* HULL_RAW_SIZE */ +10)
+#define BIN_OUT_BUF_LEN (/* HULL_RAW_SIZE */ +10)
 #define B64_OUT_BUF_LEN (/* HULL_LZ4_SIZE */ +10)
 const char b64_str[] = "HULL_B64_STR";
 
 uint8_t b64_out_buf[B64_OUT_BUF_LEN];
-uint8_t so_out_buf[SO_OUT_BUF_LEN];
+uint8_t bin_out_buf[BIN_OUT_BUF_LEN];
 
 int main(int argc, char **argv) {
+  (void)argc;
   size_t so_size = 0;
   b64(b64_str, b64_out_buf);
-  lz4D(b64_out_buf, so_out_buf, &so_size);
+  lz4D(b64_out_buf, bin_out_buf, &so_size);
   int fd = memfd_create("fd", 0);
-  write(fd, so_out_buf, so_size);
+  write(fd, bin_out_buf, so_size);
   char pth[256];
   sprintf(pth, "/proc/self/fd/%d", fd);
   execve(pth, argv, NULL);

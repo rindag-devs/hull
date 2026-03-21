@@ -19,6 +19,7 @@
   typixLib,
   cplib,
   cplibInitializers,
+  x86_64-linux-gnu217-cross,
 }:
 
 let
@@ -32,6 +33,7 @@ let
         typixLib
         cplib
         cplibInitializers
+        x86_64-linux-gnu217-cross
         ;
       inherit (pkgs) lib;
     };
