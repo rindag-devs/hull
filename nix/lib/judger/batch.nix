@@ -53,15 +53,15 @@ let
     }
   ) extraObjects;
 
-  getRunScript =
-    {
-      data,
-      tickLimit,
-      memoryLimit,
-      ...
-    }:
-    solution: ensureAccepted:
+in
+{
+  _type = "hullJudger";
+
+  prepareSolution =
+    solution:
     let
+      # Batch-style packaged judgers execute a precompiled contestant program,
+      # so prepareSolution materializes the executable expected by the runner.
       wasm = hull.compile.executable {
         inherit languages;
         name = "${problem.name}-solution-${solution.name}";
@@ -69,79 +69,82 @@ let
         includes = problem.includes;
         extraObjects = compiledObjects;
       };
-      cwasm = hull.compile.cwasm {
+    in
+    {
+      src = solution.src;
+      executable = hull.compile.cwasm {
         name = "${problem.name}-solution-${solution.name}";
         inherit wasm;
       };
-    in
-    hull.runWasm.script {
-      wasm = cwasm;
-      stdin = data.input;
-      inherit tickLimit memoryLimit ensureAccepted;
     };
-in
-{
-  _type = "hullJudger";
 
-  generateOutputs =
-    testCase: std:
-    let
-      script = getRunScript testCase std true;
-    in
-    pkgs.runCommandLocal "hull-generateOutput-${problem.name}-${testCase.name}" { } ''
-      ${script}
-      mkdir $out
-      install -Tm644 stdout $out/output
+  generateOutputs = pkgs.writeShellApplication {
+    name = "hull-judger-batch-generateOutputs-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      ${hull.runWasm.script {
+        wasm = "$HULL_SOLUTION_EXECUTABLE";
+        stdin = "$HULL_INPUT_PATH";
+        tickLimit = "$HULL_TICK_LIMIT";
+        memoryLimit = "$HULL_MEMORY_LIMIT";
+        ensureAccepted = true;
+      }}
+      mkdir -p "$HULL_OUTPUTS_DIR"
+      install -Tm644 stdout "$HULL_OUTPUTS_DIR/output"
     '';
+  };
 
-  judge =
-    { data, ... }@testCase:
-    solution:
-    let
-      runScript = getRunScript testCase solution false;
-      checkScript = hull.check.script {
-        checkerWasm = problem.checker.cwasm;
-        input = data.input;
-        output = "$run_stdout";
-        answer = data.outputs + "/output";
-      };
-    in
-    pkgs.runCommandLocal "hull-judge-${problem.name}-${testCase.name}-${solution.name}"
-      { nativeBuildInputs = [ pkgs.jq ]; }
-      ''
-        mkdir -p $out/outputs
+  judge = pkgs.writeShellApplication {
+    name = "hull-judger-batch-judge-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      ${hull.runWasm.script {
+        wasm = "$HULL_SOLUTION_EXECUTABLE";
+        stdin = "$HULL_INPUT_PATH";
+        tickLimit = "$HULL_TICK_LIMIT";
+        memoryLimit = "$HULL_MEMORY_LIMIT";
+        ensureAccepted = false;
+      }}
+      run_status=$(jq -r .status report.json)
+      install -Tm644 stdout "$HULL_OUTPUTS_DIR/output"
+      run_stdout="$PWD/stdout"
 
-        ${runScript}
-        run_status=$(jq -r .status report.json)
-        run_message=$(jq -r .status report.json)
-        install -Tm644 stdout $out/outputs/output
-        run_stdout="$PWD/stdout"
+      tick=$(jq .tick report.json)
+      memory=$(jq .memory report.json)
+      final_message=$(jq -r .errorMessage report.json)
+      final_status="$run_status"
+      final_score=0.0
 
-        tick=$(jq .tick report.json)
-        memory=$(jq .memory report.json)
-        final_message=$(jq -r .errorMessage report.json)
-        final_status="$run_status"
-        final_score=0.0
+      if [ "$run_status" = "accepted" ]; then
+        ${hull.check.script {
+          checkerWasm = problem.checker.cwasm;
+          input = "$HULL_INPUT_PATH";
+          output = "$run_stdout";
+          answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
+        }}
+        final_status=$(jq -r .status check.json)
+        final_score=$(jq -r .score check.json)
+        final_message=$(jq -r .message check.json)
+      fi
 
-        if [ "$run_status" == "accepted" ]; then
-          ${checkScript}
-          final_status=$(jq -r .status check.json)
-          final_score=$(jq -r .score check.json)
-          final_message=$(jq -r .message check.json)
-        fi
-
-        ${lib.getExe pkgs.jq} -nc \
-          --arg status "$final_status" \
-          --argjson score "$final_score" \
-          --arg message "$final_message" \
-          --argjson tick "$tick" \
-          --argjson memory "$memory" \
-          '{
-            status: $status,
-            score: $score,
-            message: $message,
-            tick: $tick,
-            memory: $memory
-          }' > $out/report.json
-      '';
+      ${lib.getExe pkgs.jq} -nc \
+        --arg status "$final_status" \
+        --argjson score "$final_score" \
+        --arg message "$final_message" \
+        --argjson tick "$tick" \
+        --argjson memory "$memory" \
+        '{
+          status: $status,
+          score: $score,
+          message: $message,
+          tick: $tick,
+          memory: $memory
+        }' > "$HULL_REPORT_PATH"
+    '';
+  };
 }

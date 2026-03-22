@@ -23,48 +23,52 @@
 problem: {
   _type = "hullJudger";
 
-  generateOutputs =
-    testCase:
-    { src, ... }:
-    pkgs.runCommandLocal "hull-generateOutputs-${problem.name}-${testCase.name}" { } ''
-      mkdir $out
-      install -Tm644 ${src} $out/output
+  # Answer-only problems do not execute submissions; the runner only needs the
+  # submitted file itself.
+  prepareSolution = solution: { src = solution.src; };
+
+  generateOutputs = pkgs.writeShellApplication {
+    name = "hull-judger-answerOnly-generateOutputs-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      mkdir -p "$HULL_OUTPUTS_DIR"
+      install -Tm644 "$HULL_SOLUTION_SRC" "$HULL_OUTPUTS_DIR/output"
     '';
+  };
 
-  judge =
-    { data, ... }@testCase:
-    { src, ... }@solution:
-    let
-      # The "check" is real, comparing the submission against the answer.
-      checkScript = hull.check.script {
+  judge = pkgs.writeShellApplication {
+    name = "hull-judger-answerOnly-judge-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      ${hull.check.script {
         checkerWasm = problem.checker.cwasm;
-        input = data.input;
-        output = src;
-        answer = data.outputs + "/output";
-      };
-    in
-    pkgs.runCommandLocal "hull-judge-${problem.name}-${testCase.name}-${solution.name}"
-      { nativeBuildInputs = [ pkgs.jq ]; }
-      ''
-        ${checkScript}
-        mkdir -p $out/outputs
+        input = "$HULL_INPUT_PATH";
+        output = "$HULL_SOLUTION_SRC";
+        answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
+      }}
 
-        final_status=$(jq -r .status check.json)
-        final_score=$(jq -r .score check.json)
-        final_message=$(jq -r .message check.json)
+      final_status=$(jq -r .status check.json)
+      final_score=$(jq -r .score check.json)
+      final_message=$(jq -r .message check.json)
 
-        jq -nc \
-          --arg status "$final_status" \
-          --argjson score "$final_score" \
-          --arg message "$final_message" \
-          '{
-            status: $status,
-            score: $score,
-            message: $message,
-            tick: 0,
-            memory: 0
-          }' > $out/report.json
-          
-          install -Tm644 ${src} $out/outputs/output
-      '';
+      jq -nc \
+        --arg status "$final_status" \
+        --argjson score "$final_score" \
+        --arg message "$final_message" \
+        '{
+          status: $status,
+          score: $score,
+          message: $message,
+          tick: 0,
+          memory: 0
+        }' > "$HULL_REPORT_PATH"
+
+      install -Tm644 "$HULL_SOLUTION_SRC" "$HULL_OUTPUTS_DIR/output"
+    '';
+  };
 }

@@ -34,7 +34,7 @@ let
     generatedInput;
 
   outputs =
-    { judger, mainCorrectSolution, ... }: testCase: judger.generateOutputs testCase mainCorrectSolution;
+    problem: testCase: hull.judger.runGenerateOutputs problem testCase problem.mainCorrectSolution;
 in
 {
   inherit input outputs;

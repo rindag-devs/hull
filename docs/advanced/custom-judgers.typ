@@ -4,177 +4,302 @@
 
 = Custom Judgers
 
-While Hull's built-in judgers (`batch`, `stdioInteraction`, and `answerOnly`) cover a wide range of standard problem types, some problems require more complex evaluation logic. For these scenarios, Hull provides a powerful mechanism to define a completely custom judger directly within your `problem.nix`.
+While Hull's built-in judgers (`batch`, `stdioInteraction`, and `answerOnly`) cover many common problem types, some problems require a fully custom evaluation pipeline. For these scenarios, Hull lets you define a custom judger directly in your `problem.nix`.
+
+Custom judgers are expressed as *packaged runners*. A judger exposes executable derivations that Hull runs through a uniform environment contract. This keeps the interface compact and makes the whole judging workflow easy to package.
+
+The `newYearGreeting` problem in Hull's test suite is a complete example of this style.
 
 == When to Use a Custom Judger
 
-You should consider writing a custom judger when your problem's evaluation process does not fit the standard models. Common use cases include:
+You should consider writing a custom judger when your problem's evaluation process does not fit the built-in models. Common use cases include:
 
-- *Multi-stage Problems*: Problems where the evaluation involves multiple steps, such as an "encode" phase followed by a "decode" phase. The input for a later stage might depend on the output of an earlier one.
-- *Special Interaction*: Problems that require interaction but do not use standard input/output, perhaps involving communication over named pipes or files with a custom interactor.
-- *Complex Scoring*: Problems with scoring logic that cannot be expressed by simply summing or taking the minimum of test case scores within a subtask.
-- *Dynamic Test Cases*: Scenarios where the test case for a solution is generated or modified based on the output of a previous run (though this is a very advanced and rare case).
-
-The `newYearGreeting` problem in Hull's test suite is a perfect example of a multi-stage problem that requires a custom judger.
+- *Multi-stage Problems*: Problems where evaluation has multiple dependent phases, such as "encode first, then decode based on the first output".
+- *Special Interaction*: Problems that need custom communication over files, FIFOs, or a protocol that does not match the built-in interactive model.
+- *Complex Scoring*: Problems whose scoring logic is not naturally expressed by the standard checker result aggregation.
+- *Custom Workflow Packaging*: Problems where you want the whole judging workflow to be representable as a standalone judger runner.
 
 == The Judger Interface
 
-A judger in Hull is a Nix function that you assign to the `judger` option in `problem.nix`. This function receives the problem's configuration (`config`) as an argument and must return an attribute set containing two specific functions: `generateOutputs` and `judge`.
+A judger is an attribute set assigned to the `judger` option. It must contain `_type = "hullJudger"`, and it usually contains three fields:
 
-Here is the basic skeleton of a custom judger:
+- `prepareSolution`: Converts a solution into the artifacts that the runner needs, such as a compiled `cwasm` executable.
+- `generateOutputs`: An executable derivation that Hull runs to generate the official outputs for one test case.
+- `judge`: An executable derivation that Hull runs to judge one solution on one test case.
+
+Here is the basic skeleton:
 
 ```nix
-# In problem.nix
 {
-  # ... other problem options
+  judger =
+    let
+      helperWasm = hull.compile.executable {
+        inherit (config) languages includes;
+        src = ./helper.20.cpp;
+        name = "${config.name}-helper";
+        extraObjects = [ ];
+      };
+      helperCwasm = hull.compile.cwasm {
+        name = "${config.name}-helper";
+        wasm = helperWasm;
+      };
+    in
+    {
+      _type = "hullJudger";
 
-  judger = config: {
-    _type = "hullJudger"; # Internal type identifier
+      prepareSolution =
+        solution:
+        let
+          solutionWasm = hull.compile.executable {
+            inherit (config) languages includes;
+            src = solution.src;
+            name = "${config.name}-solution-${solution.name}";
+            extraObjects = [ ];
+          };
+        in
+        {
+          src = solution.src;
+          executable = hull.compile.cwasm {
+            name = "${config.name}-solution-${solution.name}";
+            wasm = solutionWasm;
+          };
+        };
 
-    /*
-      Generates the standard answer files for a given test case
-      using the main correct solution.
-    */
-    generateOutputs = testCase: stdSolution:
-      # This function must return a derivation.
-      pkgs.runCommandLocal "hull-generateOutputs-${config.name}-${testCase.name}" { } ''
-        # Script to generate answer files...
-        mkdir $out
-        # ...
-      '';
+      generateOutputs = pkgs.writeShellApplication {
+        name = "hull-judger-${config.name}-generateOutputs";
+        inheritPath = false;
+        runtimeInputs = [ pkgs.coreutils ];
+        text = ''
+          ${hull.runWasm.script {
+            wasm = "$HULL_SOLUTION_EXECUTABLE";
+            stdin = "$HULL_INPUT_PATH";
+            tickLimit = "$HULL_TICK_LIMIT";
+            memoryLimit = "$HULL_MEMORY_LIMIT";
+            ensureAccepted = true;
+          }}
 
-    /*
-      Judges a user's solution against a given test case.
-    */
-    judge = testCase: solution:
-      # This function must also return a derivation.
-      pkgs.runCommandLocal "hull-judge-${config.name}-${testCase.name}-${solution.name}" { } ''
-        # Script to judge the solution...
-        mkdir -p $out/outputs
-        echo '{ "status": "accepted", "score": 1.0, ... }' > $out/report.json
-        # ...
-      '';
-  };
+          mkdir -p "$HULL_OUTPUTS_DIR"
+          install -Tm644 stdout "$HULL_OUTPUTS_DIR/output"
+        '';
+      };
 
-  # ...
+      judge = pkgs.writeShellApplication {
+        name = "hull-judger-${config.name}-judge";
+        inheritPath = false;
+        runtimeInputs = [ pkgs.coreutils pkgs.jq ];
+        text = ''
+          ${hull.runWasm.script {
+            wasm = "$HULL_SOLUTION_EXECUTABLE";
+            stdin = "$HULL_INPUT_PATH";
+            tickLimit = "$HULL_TICK_LIMIT";
+            memoryLimit = "$HULL_MEMORY_LIMIT";
+            ensureAccepted = false;
+          }}
+
+          install -Tm644 stdout "$HULL_OUTPUTS_DIR/output"
+
+          jq -nc \
+            --arg status accepted \
+            --argjson score 1.0 \
+            --arg message "" \
+            --argjson tick "$(jq .tick report.json)" \
+            --argjson memory "$(jq .memory report.json)" \
+            '{
+              status: $status,
+              score: $score,
+              message: $message,
+              tick: $tick,
+              memory: $memory
+            }' > "$HULL_REPORT_PATH"
+        '';
+      };
+    };
 }
 ```
 
-Let's break down the two required functions.
+== `prepareSolution`
 
-=== Implementing `generateOutputs`
+`prepareSolution` is evaluated by Hull during judger setup. Its job is to translate a solution definition into the store artifacts that the runner expects.
 
-The `generateOutputs` function is responsible for creating the standard answer files for a single test case.
+Typical responsibilities:
 
-- *Signature*: It takes two arguments:
-  1. `testCase`: The attribute set for the test case being processed (from `config.testCases`).
-  2. `stdSolution`: The attribute set for the solution marked with `mainCorrectSolution = true`.
-- *Return Value*: It *must* return a Nix derivation. The output path of this derivation is expected to be a directory containing the standard answer files (e.g., `output`, `phase1.txt`).
+- Keep `src = solution.src` if the raw source file is needed by the runner.
+- Compile the solution to WASM and then to `cwasm` if the runner wants an executable.
+- Return an attribute set that may contain fields such as `src` and `executable`.
 
-=== Implementing `judge`
-
-The `judge` function is the core of the judger. It defines the process for evaluating a single solution against a single test case.
-
-- *Signature*: It takes two arguments:
-  1. `testCase`: The attribute set for the test case.
-  2. `solution`: The attribute set for the solution being judged.
-- *Return Value*: It *must* return a Nix derivation. The output path of this derivation must be a directory containing:
-  1. `report.json`: A JSON file detailing the judging result (status, score, tick, memory, message).
-  2. `outputs/`: A subdirectory containing all output files produced by the solution.
-
-== The Golden Rule: Avoiding "Import From Derivation" (IFD)
-
-When writing a custom judger, there is one principle that is absolutely critical to follow: *your `judge` and `generateOutputs` functions must not cause an Import From Derivation (IFD).*
-
-=== What is IFD and Why is it Harmful?
-
-In Nix, evaluation (parsing and interpreting Nix code to figure out *what* to build) and building (actually running compilers and scripts) are two distinct phases. Nix's power comes from its ability to evaluate the entire dependency graph first, and then build everything that's needed in parallel.
-
-An "Import From Derivation" occurs when the *evaluation* of a Nix expression depends on the *built output* of another derivation. When Nix encounters this, it has no choice but to pause the evaluation, build the required derivation, read its output, and only then resume evaluation.
-
-This is disastrous for performance in Hull. The Nix evaluator is sequential. If your `judge` function for test case #1 needs to build something to figure out what to do next, it completely blocks the evaluation of the `judge` functions for test cases #2, #3, and so on. Your parallel build process degenerates into a slow, sequential chain reaction, defeating one of the primary benefits of using Nix.
-
-As the official Nix manual states:
-#align(
-  left,
-  rect(
-    inset: 8pt,
-    stroke: 1pt + color.luma(128),
-    [
-      Passing an expression `expr` that evaluates to a store path to any built-in function which reads from the filesystem constitutes Import From Derivation (IFD): `import expr`, `builtins.readFile expr`, etc.
-
-      This has performance implications: Evaluation can only finish when all required store objects are realised. Since the Nix language evaluator is sequential, it only finds store paths to read from one at a time. While realisation is always parallel, in this case it cannot be done for all required store paths at once, and is therefore much slower than otherwise.
-    ],
-  ),
-)
-
-=== The Correct Pattern: Return a Derivation
-
-The `judge` and `generateOutputs` functions should be "pure" from an evaluation perspective. Their only job is to construct and return a derivation (typically using `pkgs.runCommandLocal`) that describes the entire workflow. All the actual work—compiling, running programs, reading outputs, and making decisions—must happen *inside the shell script* of that returned derivation.
-
-*Correct Example:*
+For example, a source-only problem may use:
 
 ```nix
-judge = testCase: solution:
-  pkgs.runCommandLocal "hull-judge-${config.name}-${testCase.name}-${solution.name}" { } ''
-    # Step 1: Run the solution. The path to the compiled WASM is already known.
-    # The `hull.runWasm.script` helper generates a script snippet.
+prepareSolution = solution: {
+  src = solution.src;
+};
+```
+
+while a runnable problem usually produces:
+
+```nix
+prepareSolution =
+  solution:
+  let
+    wasm = hull.compile.executable {
+      inherit (config) languages includes;
+      src = solution.src;
+      name = "${config.name}-solution-${solution.name}";
+      extraObjects = [ ];
+    };
+  in
+  {
+    src = solution.src;
+    executable = hull.compile.cwasm {
+      name = "${config.name}-solution-${solution.name}";
+      inherit wasm;
+    };
+  };
+```
+
+== `generateOutputs`
+
+`generateOutputs` is an executable derivation.
+
+Hull runs it once for each test case, using the solution marked with `mainCorrectSolution = true`. The runner must write all official output files into `$HULL_OUTPUTS_DIR`.
+
+During execution, Hull provides these environment variables:
+
+- `HULL_MODE`: `generateOutputs` or `judge`.
+- `HULL_TESTCASE_NAME`: the test case name.
+- `HULL_SOLUTION_NAME`: the solution name.
+- `HULL_INPUT_PATH`: the input file for this test case.
+- `HULL_TICK_LIMIT`: tick limit for this test case.
+- `HULL_MEMORY_LIMIT`: memory limit for this test case.
+- `HULL_SOLUTION_SRC`: source path returned by `prepareSolution`, or the original solution source.
+- `HULL_SOLUTION_EXECUTABLE`: executable path returned by `prepareSolution` when present.
+- `HULL_OUTPUTS_DIR`: directory where the runner must place generated outputs.
+
+In `generateOutputs` mode, `HULL_REPORT_PATH` is unset because no report file is expected.
+
+If a runner needs a deterministic salt derived from the test case name, it can compute one inside the script, for example:
+
+```sh
+testCaseNameHash=$(printf '%s' "$HULL_TESTCASE_NAME" | sha256sum | cut -d' ' -f1)
+```
+
+== `judge`
+
+`judge` is an executable derivation. Hull runs it once per `(testCase, solution)` pair.
+
+The runner must:
+
+- write all produced output files into `$HULL_OUTPUTS_DIR`
+- write the final judge report JSON to `$HULL_REPORT_PATH`
+
+Hull uses the following report format:
+
+```json
+{
+  "status": "accepted",
+  "score": 1.0,
+  "message": "",
+  "tick": 12345,
+  "memory": 1048576
+}
+```
+
+In `judge` mode, Hull additionally provides:
+
+- `HULL_OFFICIAL_OUTPUTS_DIR`: directory containing the official outputs generated for this test case
+
+This is the directory you should compare against when running a checker or implementing custom scoring logic.
+
+== Using Helper Scripts
+
+Inside a packaged runner, the most common helpers are:
+
+- `hull.runWasm.script` to execute a compiled WASM or CWASM program
+- `hull.check.script` to run the checker
+- `hull.validate.script` to run the validator
+
+For example:
+
+```nix
+${hull.check.script {
+  checkerWasm = config.checker.cwasm;
+  input = "$HULL_INPUT_PATH";
+  output = "$run_stdout";
+  answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
+}}
+```
+
+Because the actual work happens inside the shell script, you can describe arbitrarily complex judging pipelines while keeping Nix evaluation fast.
+
+== The Golden Rule: Avoiding Import From Derivation (IFD)
+
+The most important rule is: *do not perform Import From Derivation (IFD) during evaluation.*
+
+Evaluation should only assemble derivations and dependency graphs. All steps that inspect outputs, run programs, or branch on runtime data must happen inside the returned runner or inside a single `runCommandLocal` wrapper around that runner.
+
+=== Correct Pattern
+
+This is the correct pattern:
+
+```nix
+judge = pkgs.writeShellApplication {
+  name = "hull-judger-demo-judge";
+  inheritPath = false;
+  runtimeInputs = [ pkgs.coreutils pkgs.jq ];
+  text = ''
     ${hull.runWasm.script {
-      wasm = solution.cwasm;
-      stdin = testCase.data.input;
-      # ... other options
+      wasm = "$HULL_SOLUTION_EXECUTABLE";
+      stdin = "$HULL_INPUT_PATH";
+      tickLimit = "$HULL_TICK_LIMIT";
+      memoryLimit = "$HULL_MEMORY_LIMIT";
+      ensureAccepted = false;
     }}
 
-    # Step 2: Check the status from the run report.
     run_status=$(jq -r .status report.json)
 
-    # Step 3: If the run was successful, run the checker.
-    if [ "$run_status" == "accepted" ]; then
+    if [ "$run_status" = accepted ]; then
       ${hull.check.script {
         checkerWasm = config.checker.cwasm;
-        input = testCase.data.input;
-        output = "stdout"; # The output from the previous step
-        answer = testCase.data.outputs + "/output";
+        input = "$HULL_INPUT_PATH";
+        output = "$PWD/stdout";
+        answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
       }}
-      # ... process checker result ...
     fi
 
-    # Step 4: Construct the final report.json and outputs/ directory.
-    # ...
+    # produce $HULL_REPORT_PATH here
   '';
+};
 ```
-In this pattern, the `judge` function simply pieces together a shell script. Nix can evaluate this instantly without building anything. The complex, multi-step logic is deferred to the build phase, which Nix can then execute in parallel for all test cases.
 
-=== The Anti-Pattern: IFD in Action
+Nix evaluation only sees an executable derivation. The complicated logic happens later, during the build.
 
-Here is what you must *never* do. Do not attempt to run a derivation and read its output from within the `judge` function itself.
+=== Anti-Pattern
 
-*Incorrect Example (Causes IFD):*
+The following is wrong:
 
 ```nix
 # THIS IS WRONG! DO NOT DO THIS!
-judge = testCase: solution:
-  let
-    # First, we define a derivation to run the solution.
-    runDerivation = pkgs.runCommandLocal "run-solution" { } ''
-      # ... script to run the solution and write status to $out ...
-      ${hull.runWasm.script { /* ... */ }}
-      jq -r .status report.json > $out
-    '';
+let
+  runDerivation = pkgs.runCommandLocal "run-solution" { } ''
+    ${hull.runWasm.script {
+      wasm = someCompiledProgram;
+      stdin = someInput;
+    }}
+    jq -r .status report.json > $out
+  '';
 
-    # THIS IS THE IFD!
-    # Nix must stop and build `runDerivation` to read its content.
-    runStatus = builtins.readFile runDerivation;
-
-  in
-  # The rest of the logic depends on the result of the build.
-  if runStatus == "accepted" then
-    pkgs.runCommandLocal "check-derivation" { } ''
-      # ... script to run the checker ...
-    ''
-  else
-    pkgs.runCommandLocal "fail-derivation" { } ''
-      # ... script to create a failed report ...
-    '';
+  # This forces evaluation to wait for a build result.
+  runStatus = builtins.readFile runDerivation;
+in
+if runStatus == "accepted" then ... else ...
 ```
-This code forces Nix to build `runDerivation` during evaluation, which will serialize your entire judging process and make it extremely slow. Always encapsulate the full workflow within a single derivation returned by `judge`.
+
+This is IFD. It serializes evaluation and defeats Hull's parallelism.
+
+== Practical Advice
+
+- Set `inheritPath = false` on judger runners and declare all required tools in `runtimeInputs`.
+- Keep `prepareSolution` minimal and deterministic.
+- Use environment variables such as `HULL_OUTPUTS_DIR` and `HULL_REPORT_PATH` as the only output contract.
+- If a workflow needs multiple runtime steps, keep them in one shell script rather than branching in Nix evaluation.
+- Read `nix/test/problem/newYearGreeting/judger.nix` for a complete custom multi-stage example.

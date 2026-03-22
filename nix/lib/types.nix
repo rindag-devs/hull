@@ -216,7 +216,7 @@ let
                 inherit (problem) tickLimit memoryLimit;
                 data.input = input;
               };
-              generatedOutputs = problem.judger.generateOutputs fakeTestCase sol;
+              generatedOutputs = hull.judger.runGenerateOutputs problem fakeTestCase sol;
             in
             "${generatedOutputs}/${config.outputFile}"
           else
@@ -231,7 +231,7 @@ let
               tickLimit = problem.tickLimit;
               memoryLimit = problem.memoryLimit;
             };
-            generatedOutputs = problem.judger.generateOutputs fakeTestCase problem.mainCorrectSolution;
+            generatedOutputs = hull.judger.runGenerateOutputs problem fakeTestCase problem.mainCorrectSolution;
           in
           "${generatedOutputs}/${config.outputName}";
 
@@ -648,7 +648,7 @@ in
             description = "The collected results of running and checking this solution against all test cases.";
             default =
               let
-                drvs = lib.mapAttrs (tcName: tc: problem.judger.judge tc config) problem.testCases;
+                drvs = lib.mapAttrs (tcName: tc: hull.judger.runJudge problem tc config) problem.testCases;
                 /*
                   Instead of calling `lib.importJSON drv` directly for each test case, we aggregate
                   all derivations into a `pkgs.linkFarm`.

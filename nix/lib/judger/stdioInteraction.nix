@@ -42,10 +42,15 @@ let
         && (builtins.elem n solutionSpecificLanguages)
       ) problem.languages;
 
-  judge =
-    testCase: solution:
+in
+{
+  _type = "hullJudger";
+
+  prepareSolution =
+    solution:
     let
-      # Compile solution
+      # The interactive runner launches the prepared solution executable and the
+      # interactor in a custom shell workflow, so the executable is prepared up front.
       solWasm = hull.compile.executable {
         inherit languages;
         name = "${problem.name}-solution-${solution.name}";
@@ -53,124 +58,122 @@ let
         includes = problem.includes;
         extraObjects = [ ];
       };
-      solCwasm = hull.compile.cwasm {
+    in
+    {
+      src = solution.src;
+      executable = hull.compile.cwasm {
         name = "${problem.name}-solution-${solution.name}";
         wasm = solWasm;
       };
+    };
 
-      # The interactor is the checker program.
-      checkerCwasm = problem.checker.cwasm;
-
-    in
-    pkgs.runCommandLocal "hull-interact-${problem.name}-${testCase.name}-${solution.name}"
-      {
-        nativeBuildInputs = [
-          hullPkgs.default
-          pkgs.jq
-        ];
+  judge = pkgs.writeShellApplication {
+    name = "hull-judger-stdioInteraction-judge-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [
+      hullPkgs.default
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      workdir=$(mktemp -d)
+      cleanup() {
+        rm -rf "$workdir"
       }
-      ''
-        mkdir -p $out/outputs
+      trap cleanup EXIT
+      cd "$workdir"
 
-        (
-          workdir=$(mktemp -d)
-          cleanup() {
-            rm -rf "$workdir"
-          }
-          trap cleanup EXIT
-          cd "$workdir"
+      sol_to_intr=sol_to_intr
+      intr_to_sol=intr_to_sol
+      interactor_json=interactor.json
+      run_json=run.json
+      sol_cwasm=sol.cwasm
+      interactor_cwasm=interactor.cwasm
+      input_path=input
 
-          sol_to_intr=sol_to_intr
-          intr_to_sol=intr_to_sol
-          interactor_json=interactor.json
-          run_json=run.json
-          sol_cwasm=sol.cwasm
-          interactor_cwasm=interactor.cwasm
-          input_path=input
+      mkfifo "$sol_to_intr" "$intr_to_sol"
+      cp "$HULL_SOLUTION_EXECUTABLE" "$sol_cwasm"
+      cp ${problem.checker.cwasm} "$interactor_cwasm"
+      cp "$HULL_INPUT_PATH" "$input_path"
 
-          mkfifo "$sol_to_intr" "$intr_to_sol"
-          cp ${solCwasm} "$sol_cwasm"
-          cp ${checkerCwasm} "$interactor_cwasm"
-          cp ${testCase.data.input} "$input_path"
+      hull run-wasm "$interactor_cwasm" \
+        --stdin-path="$sol_to_intr" \
+        --stdout-path="$intr_to_sol" \
+        --stderr-path="$interactor_json" \
+        --read-file input \
+        -- input &
+      intr_pid=$!
 
-          # Start interactor (no resource limits)
-          hull run-wasm "$interactor_cwasm" \
-            --stdin-path="$sol_to_intr" \
-            --stdout-path="$intr_to_sol" \
-            --stderr-path="$interactor_json" \
-            --read-file input \
-            -- input &
-          intr_pid=$!
+      timeout ${toString realTimeLimitSeconds}s hull run-wasm "$sol_cwasm" \
+        --stdin-path="$intr_to_sol" \
+        --stdout-path="$sol_to_intr" \
+        --tick-limit="$HULL_TICK_LIMIT" \
+        --memory-limit="$HULL_MEMORY_LIMIT" \
+        > "$run_json" &
+      sol_pid=$!
 
-          # Start solution (with resource limits)
-          timeout ${toString realTimeLimitSeconds}s hull run-wasm "$sol_cwasm" \
-            --stdin-path="$intr_to_sol" \
-            --stdout-path="$sol_to_intr" \
-            --tick-limit=${builtins.toString testCase.tickLimit} \
-            --memory-limit=${builtins.toString testCase.memoryLimit} \
-            > "$run_json" &
-          sol_pid=$!
+      set +e
+      wait $sol_pid
+      sol_exit_code=$?
+      set -e
 
-          set +e
-          wait $sol_pid
-          sol_exit_code=$?
-          set -e
+      TLE_RUN_JSON=$(jq -nc \
+        --arg status "time_limit_exceeded" \
+        --argjson tick "$HULL_TICK_LIMIT" \
+        --argjson memory 0 \
+        --argjson exitCode -1 \
+        --arg errorMessage "Real-time limit exceeded (killed after ${toString realTimeLimitSeconds}s)" \
+        '{
+          status: $status,
+          tick: $tick,
+          memory: $memory,
+          exitCode: $exitCode,
+          errorMessage: $errorMessage
+        }')
 
-          TLE_RUN_JSON=$(jq -nc \
-            --arg status "time_limit_exceeded" \
-            --argjson tick ${builtins.toString testCase.tickLimit} \
-            --argjson memory 0 \
-            --argjson exitCode -1 \
-            --arg errorMessage "Real-time limit exceeded (killed after ${toString realTimeLimitSeconds}s)" \
-            '{
-              status: $status,
-              tick: $tick,
-              memory: $memory,
-              exitCode: $exitCode,
-              errorMessage: $errorMessage
-            }')
+      if [ "$sol_exit_code" -eq 124 ] || [ "$sol_exit_code" -eq 137 ]; then
+        printf '%s\n' "$TLE_RUN_JSON" > "$run_json"
+      fi
 
-          if [ "$sol_exit_code" -eq 124 ] || [ "$sol_exit_code" -eq 137 ]; then
-            echo "Solution timed out (real time), exit code $sol_exit_code. Generating TLE report."
-            echo "$TLE_RUN_JSON" > "$run_json"
-          fi
+      wait $intr_pid || true
 
-          wait $intr_pid || true
+      run_status=$(jq -r .status "$run_json")
 
-          run_status=$(jq -r .status "$run_json")
+      if [ "$run_status" = "accepted" ]; then
+        final_status=$(jq -r .status "$interactor_json")
+        final_score=$(jq -r .score "$interactor_json")
+        final_message=$(jq -r .message "$interactor_json")
+      else
+        final_status=$run_status
+        final_score=0.0
+        final_message=$(jq -r .errorMessage "$run_json")
+      fi
 
-          if [ "$run_status" == "accepted" ]; then
-            final_status=$(jq -r .status "$interactor_json")
-            final_score=$(jq -r .score "$interactor_json")
-            final_message=$(jq -r .message "$interactor_json")
-          else
-            final_status=$run_status
-            final_score=0.0
-            final_message=$(jq -r .errorMessage "$run_json")
-          fi
+      tick=$(jq .tick "$run_json")
+      memory=$(jq .memory "$run_json")
 
-          tick=$(jq .tick "$run_json")
-          memory=$(jq .memory "$run_json")
+      jq -nc \
+        --arg status "$final_status" \
+        --argjson score "$final_score" \
+        --arg message "$final_message" \
+        --argjson tick "$tick" \
+        --argjson memory "$memory" \
+        '{
+          status: $status,
+          score: $score,
+          message: $message,
+          tick: $tick,
+          memory: $memory
+        }' > "$HULL_REPORT_PATH"
+    '';
+  };
 
-          jq -nc \
-            --arg status "$final_status" \
-            --argjson score "$final_score" \
-            --arg message "$final_message" \
-            --argjson tick "$tick" \
-            --argjson memory "$memory" \
-            '{
-              status: $status,
-              score: $score,
-              message: $message,
-              tick: $tick,
-              memory: $memory
-            }' > $out/report.json
-        )
-      '';
-in
-{
-  _type = "hullJudger";
-
-  inherit judge;
-  generateOutputs = testCase: std: pkgs.emptyDirectory;
+  generateOutputs = pkgs.writeShellApplication {
+    name = "hull-judger-stdioInteraction-generateOutputs-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [ pkgs.coreutils ];
+    text = ''
+      mkdir -p "$HULL_OUTPUTS_DIR"
+    '';
+  };
 }

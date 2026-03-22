@@ -73,14 +73,14 @@ let
       };
 
       fakeTestCase = lib.recursiveUpdate fakeTestCase0 {
-        data.outputs = problem.judger.generateOutputs fakeTestCase0 stdSol;
+        data.outputs = hull.judger.runGenerateOutputs problem fakeTestCase0 stdSol;
       };
     in
     {
       inherit args;
       testSolutions = map (sol: {
         name = sol.name;
-        reportDrv = problem.judger.judge fakeTestCase sol;
+        reportDrv = hull.judger.runJudge problem fakeTestCase sol;
       }) testSols;
     }
   ) generatorArgs;

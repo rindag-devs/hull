@@ -19,7 +19,7 @@ Visit the [documentation home page][docs] to learn more.
 
 - **Declarative Problem Configuration:** Define every aspect of your problem — test cases, subtasks, solutions, checkers, validators, and documents — in a single, comprehensive Nix file.
 - **Integrated Toolchain:** Built-in support for validators, checkers, test data generators, and solution analysis.
-- **Flexible Judging Logic:** Supports batch problems, interactive problems (via stdio or grader), and answer-only tasks. You can also use a custom judger to implement more flexible judging logic.
+- **Flexible Judging Logic:** Supports batch problems, interactive problems (via stdio or grader), and answer-only tasks. You can also package a custom judger runner to implement more flexible judging logic and workflows.
 - **Automated Sanity Checks:** The framework automatically validates test data, verifies that solution performance matches predictions, and runs tests on your checker and validator to ensure correctness.
 - **High-Quality Document Generation:** Uses [Typst](https://typst.app/) to produce professional-grade PDF problem statements from your problem data.
 
