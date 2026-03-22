@@ -144,6 +144,10 @@
       { nativeBuildInputs = [ pkgs.zip ]; }
       ''
         tmpdir=$(mktemp -d)
+        cleanup() {
+          rm -rf "$tmpdir"
+        }
+        trap cleanup EXIT
 
         # Create metadata files
         echo ${lib.escapeShellArg iniContent} > $tmpdir/domjudge-problem.ini
@@ -196,13 +200,12 @@
         ${
           if zipped then
             ''
-              (cd $tmpdir && zip -r ../output.zip .)
-              mv $tmpdir/../output.zip $out
+              (cd "$tmpdir" && zip -r "$out" .)
             ''
           else
             ''
               mkdir $out
-              mv $tmpdir/* $out/
+              cp -r "$tmpdir"/. $out/
             ''
         }
       '';

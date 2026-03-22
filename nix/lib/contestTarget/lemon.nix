@@ -39,6 +39,12 @@
       numTasks = builtins.length problems;
     in
     pkgs.runCommandLocal "hull-contestTargetOutput-${name}-lemon" { } ''
+      tmp_cdf=$(mktemp)
+      cleanup() {
+        rm -f "$tmp_cdf"
+      }
+      trap cleanup EXIT
+
       # Create the basic directory structure for the contest.
       mkdir -p $out/data $out/source
 
@@ -74,7 +80,8 @@
       for cdf_path in ${lib.concatStringsSep " " problemCdfPaths}; do
         ${lib.getExe pkgs.jq} -c --slurpfile prob_cdf "$cdf_path" \
           '.tasks += $prob_cdf[0].tasks' \
-          $out/${name}.cdf > tmp.json && mv tmp.json $out/${name}.cdf
+          $out/${name}.cdf > "$tmp_cdf"
+        mv "$tmp_cdf" $out/${name}.cdf
       done
 
       # Get the list of all unique contestant names from the merged 'source' directory.
@@ -113,7 +120,8 @@
             judgingTime_time: 0,
             judgingTime_timespec: 0
           }]' \
-          $out/${name}.cdf > tmp.json && mv tmp.json $out/${name}.cdf
+          $out/${name}.cdf > "$tmp_cdf"
+        mv "$tmp_cdf" $out/${name}.cdf
       done
     '';
 }

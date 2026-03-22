@@ -44,12 +44,10 @@ let
       };
     in
     ''
-      pushd $(mktemp -d) > /dev/null
       ${runChecker}
       ${lib.getExe pkgs.jq} -c \
         '{ status: .status, score: .score, message: .message, readerTraceStacks: (.reader_trace_stacks // []), evaluatorTraceStacks: (.evaluator_trace_stacks // []) }' \
-        stderr > "''${DIRSTACK[1]}/check.json"
-      popd > /dev/null
+        stderr > check.json
     '';
 
   drv =

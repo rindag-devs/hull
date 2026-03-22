@@ -313,6 +313,10 @@
       ''
         mkdir $out
         data_dir=$(mktemp -d)
+        cleanup() {
+          rm -rf "$data_dir"
+        }
+        trap cleanup EXIT
 
         echo ${lib.escapeShellArg (builtins.toJSON configYamlContent)} > $data_dir/config.yml
 
@@ -323,7 +327,7 @@
         ${copyTestCasesCommand}
 
         # Luogu's zip size limit is 50 MiB, so `-9` is needed to compress better.
-        (cd $data_dir && zip -9 -r $out/data.zip .)
+        (cd "$data_dir" && zip -9 -r "$out/data.zip" .)
 
         echo ${lib.escapeShellArg scoringScriptContent} > $out/scoring-script.txt
         echo ${lib.escapeShellArg (builtins.toJSON requiredTags)} > $out/required-tags.json

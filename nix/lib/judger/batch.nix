@@ -111,7 +111,6 @@ in
       ''
         mkdir -p $out/outputs
 
-        pushd $(mktemp -d) > /dev/null
         ${runScript}
         run_status=$(jq -r .status report.json)
         run_message=$(jq -r .status report.json)
@@ -123,15 +122,12 @@ in
         final_message=$(jq -r .errorMessage report.json)
         final_status="$run_status"
         final_score=0.0
-        popd > /dev/null
 
         if [ "$run_status" == "accepted" ]; then
-          pushd $(mktemp -d) > /dev/null
           ${checkScript}
           final_status=$(jq -r .status check.json)
           final_score=$(jq -r .score check.json)
           final_message=$(jq -r .message check.json)
-          popd > /dev/null
         fi
 
         ${lib.getExe pkgs.jq} -nc \

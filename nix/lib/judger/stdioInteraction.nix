@@ -72,80 +72,100 @@ let
       ''
         mkdir -p $out/outputs
 
-        mkfifo sol_to_intr intr_to_sol
-        cp ${solCwasm} solCwasm
-        cp ${checkerCwasm} interactorCwasm
-        cp ${testCase.data.input} input
+        (
+          workdir=$(mktemp -d)
+          cleanup() {
+            rm -rf "$workdir"
+          }
+          trap cleanup EXIT
+          cd "$workdir"
 
-        # Start interactor (no resource limits)
-        hull run-wasm interactorCwasm \
-          --stdin-path=sol_to_intr \
-          --stdout-path=intr_to_sol \
-          --stderr-path=interactor.json \
-          --read-file input \
-          -- input &
-        intr_pid=$!
+          sol_to_intr=sol_to_intr
+          intr_to_sol=intr_to_sol
+          interactor_json=interactor.json
+          run_json=run.json
+          sol_cwasm=sol.cwasm
+          interactor_cwasm=interactor.cwasm
+          input_path=input
 
-        # Start solution (with resource limits)
-        timeout ${toString realTimeLimitSeconds}s hull run-wasm solCwasm \
-          --stdin-path=intr_to_sol \
-          --stdout-path=sol_to_intr \
-          --tick-limit=${builtins.toString testCase.tickLimit} \
-          --memory-limit=${builtins.toString testCase.memoryLimit} \
-          > run.json &
-        sol_pid=$!
+          mkfifo "$sol_to_intr" "$intr_to_sol"
+          cp ${solCwasm} "$sol_cwasm"
+          cp ${checkerCwasm} "$interactor_cwasm"
+          cp ${testCase.data.input} "$input_path"
 
-        set +e
-        wait $sol_pid
-        sol_exit_code=$?
-        set -e
+          # Start interactor (no resource limits)
+          hull run-wasm "$interactor_cwasm" \
+            --stdin-path="$sol_to_intr" \
+            --stdout-path="$intr_to_sol" \
+            --stderr-path="$interactor_json" \
+            --read-file input \
+            -- input &
+          intr_pid=$!
 
-        TLE_RUN_JSON=$(cat <<EOF
-        {
-          "status": "time_limit_exceeded",
-          "tick": ${builtins.toString testCase.tickLimit},
-          "memory": 0,
-          "exitCode": -1,
-          "errorMessage": "Real-time limit exceeded (killed after ${toString realTimeLimitSeconds}s)"
-        }
-        EOF
+          # Start solution (with resource limits)
+          timeout ${toString realTimeLimitSeconds}s hull run-wasm "$sol_cwasm" \
+            --stdin-path="$intr_to_sol" \
+            --stdout-path="$sol_to_intr" \
+            --tick-limit=${builtins.toString testCase.tickLimit} \
+            --memory-limit=${builtins.toString testCase.memoryLimit} \
+            > "$run_json" &
+          sol_pid=$!
+
+          set +e
+          wait $sol_pid
+          sol_exit_code=$?
+          set -e
+
+          TLE_RUN_JSON=$(jq -nc \
+            --arg status "time_limit_exceeded" \
+            --argjson tick ${builtins.toString testCase.tickLimit} \
+            --argjson memory 0 \
+            --argjson exitCode -1 \
+            --arg errorMessage "Real-time limit exceeded (killed after ${toString realTimeLimitSeconds}s)" \
+            '{
+              status: $status,
+              tick: $tick,
+              memory: $memory,
+              exitCode: $exitCode,
+              errorMessage: $errorMessage
+            }')
+
+          if [ "$sol_exit_code" -eq 124 ] || [ "$sol_exit_code" -eq 137 ]; then
+            echo "Solution timed out (real time), exit code $sol_exit_code. Generating TLE report."
+            echo "$TLE_RUN_JSON" > "$run_json"
+          fi
+
+          wait $intr_pid || true
+
+          run_status=$(jq -r .status "$run_json")
+
+          if [ "$run_status" == "accepted" ]; then
+            final_status=$(jq -r .status "$interactor_json")
+            final_score=$(jq -r .score "$interactor_json")
+            final_message=$(jq -r .message "$interactor_json")
+          else
+            final_status=$run_status
+            final_score=0.0
+            final_message=$(jq -r .errorMessage "$run_json")
+          fi
+
+          tick=$(jq .tick "$run_json")
+          memory=$(jq .memory "$run_json")
+
+          jq -nc \
+            --arg status "$final_status" \
+            --argjson score "$final_score" \
+            --arg message "$final_message" \
+            --argjson tick "$tick" \
+            --argjson memory "$memory" \
+            '{
+              status: $status,
+              score: $score,
+              message: $message,
+              tick: $tick,
+              memory: $memory
+            }' > $out/report.json
         )
-
-        if [ "$sol_exit_code" -eq 124 ] || [ "$sol_exit_code" -eq 137 ]; then
-          echo "Solution timed out (real time), exit code $sol_exit_code. Generating TLE report."
-          echo "$TLE_RUN_JSON" > run.json
-        fi
-
-        wait $intr_pid || true
-
-        run_status=$(jq -r .status run.json)
-
-        if [ "$run_status" == "accepted" ]; then
-          final_status=$(jq -r .status interactor.json)
-          final_score=$(jq -r .score interactor.json)
-          final_message=$(jq -r .message interactor.json)
-        else
-          final_status=$run_status
-          final_score=0.0
-          final_message=$(jq -r .errorMessage run.json)
-        fi
-
-        tick=$(jq .tick run.json)
-        memory=$(jq .memory run.json)
-
-        jq -nc \
-          --arg status "$final_status" \
-          --argjson score "$final_score" \
-          --arg message "$final_message" \
-          --argjson tick "$tick" \
-          --argjson memory "$memory" \
-          '{
-            status: $status,
-            score: $score,
-            message: $message,
-            tick: $tick,
-            memory: $memory
-          }' > $out/report.json
       '';
 in
 {

@@ -51,7 +51,7 @@ let
       ) inputFiles;
 
       copyOutputFilesCommand = lib.concatMapStringsSep "\n" (
-        name: "cp ${lib.escapeShellArg name} \${DIRSTACK[1]}/outputFiles/"
+        name: "cp ${lib.escapeShellArg name} \"$output_dir/outputFiles/\""
       ) outputFiles;
 
       # --read-file a.txt --read-file b.txt ...
@@ -63,19 +63,27 @@ let
       ensureAcceptedArg = lib.optionalString ensureAccepted "--ensure-accepted";
     in
     ''
-      mkdir outputFiles
-      pushd $(mktemp -d) > /dev/null
+      (
+        output_dir=$PWD
+        workdir=$(mktemp -d)
+        cleanup() {
+          rm -rf "$workdir"
+        }
+        trap cleanup EXIT
 
-      ${copyInputFilesCommand}
+        mkdir -p "$output_dir/outputFiles"
+        cd "$workdir"
 
-      ${lib.getExe hullPkgs.default} run-wasm ${wasm} \
-        ${stdinArg} --stdout-path="''${DIRSTACK[1]}/stdout" --stderr-path="''${DIRSTACK[1]}/stderr" \
-        ${tickLimitArg} ${memoryLimitArg} ${inputFileArg} ${outputFileArg} ${ensureAcceptedArg} \
-        --report-path="''${DIRSTACK[1]}/report.json" \
-        -- ${lib.escapeShellArgs arguments}
-        
-      ${copyOutputFilesCommand}
-      popd > /dev/null
+        ${copyInputFilesCommand}
+
+        ${lib.getExe hullPkgs.default} run-wasm ${wasm} \
+          ${stdinArg} --stdout-path="$output_dir/stdout" --stderr-path="$output_dir/stderr" \
+          ${tickLimitArg} ${memoryLimitArg} ${inputFileArg} ${outputFileArg} ${ensureAcceptedArg} \
+          --report-path="$output_dir/report.json" \
+          -- ${lib.escapeShellArgs arguments}
+
+        ${copyOutputFilesCommand}
+      )
     '';
 
   drv =

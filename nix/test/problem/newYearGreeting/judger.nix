@@ -43,52 +43,38 @@
         in
         pkgs.runCommandLocal "hull-generateOutputs-${config.name}-${testCase.name}" { } ''
           # --- Phase 1: Run solution to get encoded output ---
-          (
-            pushd $(mktemp -d) > /dev/null
-            ${hull.runWasm.script {
-              wasm = solutionCwasm;
-              stdin = testCase.data.input;
-              tickLimit = testCase.tickLimit;
-              memoryLimit = testCase.memoryLimit;
-              ensureAccepted = true;
-            }}
-            cp stdout ../run_stdout1.txt
-            popd > /dev/null
-          )
+          ${hull.runWasm.script {
+            wasm = solutionCwasm;
+            stdin = testCase.data.input;
+            tickLimit = testCase.tickLimit;
+            memoryLimit = testCase.memoryLimit;
+            ensureAccepted = true;
+          }}
+          cp stdout run_stdout1.txt
           echo "0" > firstOut.txt
           cat run_stdout1.txt >> firstOut.txt
 
           # --- Transform: Generate input for phase 2 ---
-          (
-            pushd $(mktemp -d) > /dev/null
-            # The transform script needs firstOut.txt from the parent directory.
-            # We pass its path to the script helper.
-            ${hull.runWasm.script {
-              wasm = transformCwasm;
-              arguments = [ "--salt=${builtins.hashString "sha256" testCase.name}" ];
-              stdin = testCase.data.input;
-              inputFiles = {
-                firstOut = "../firstOut.txt";
-              };
-              ensureAccepted = true;
-            }}
-            cp stdout ../secondIn.txt
-            popd > /dev/null
-          )
+          ${hull.runWasm.script {
+            wasm = transformCwasm;
+            arguments = [ "--salt=${builtins.hashString "sha256" testCase.name}" ];
+            stdin = testCase.data.input;
+            inputFiles = {
+              firstOut = "$output_dir/firstOut.txt";
+            };
+            ensureAccepted = true;
+          }}
+          cp stdout secondIn.txt
 
           # --- Phase 2: Run solution to get decoded output ---
-          (
-            pushd $(mktemp -d) > /dev/null
-            ${hull.runWasm.script {
-              wasm = solutionCwasm;
-              stdin = "../secondIn.txt";
-              tickLimit = testCase.tickLimit;
-              memoryLimit = testCase.memoryLimit;
-              ensureAccepted = true;
-            }}
-            cp stdout ../run_stdout2.txt
-            popd > /dev/null
-          )
+          ${hull.runWasm.script {
+            wasm = solutionCwasm;
+            stdin = "$output_dir/secondIn.txt";
+            tickLimit = testCase.tickLimit;
+            memoryLimit = testCase.memoryLimit;
+            ensureAccepted = true;
+          }}
+          cp stdout run_stdout2.txt
           echo "1" > secondOut.txt
           cat run_stdout2.txt >> secondOut.txt
 
@@ -126,19 +112,15 @@
             mkdir -p $out/outputs
 
             # --- Phase 1: Run ---
-            (
-              pushd $(mktemp -d) > /dev/null
-              ${hull.runWasm.script {
-                wasm = solutionCwasm;
-                stdin = testCase.data.input;
-                tickLimit = testCase.tickLimit;
-                memoryLimit = testCase.memoryLimit;
-                ensureAccepted = false;
-              }}
-              cp report.json ../run_report1.json
-              cp stdout ../run_stdout1.txt
-              popd > /dev/null
-            )
+            ${hull.runWasm.script {
+              wasm = solutionCwasm;
+              stdin = testCase.data.input;
+              tickLimit = testCase.tickLimit;
+              memoryLimit = testCase.memoryLimit;
+              ensureAccepted = false;
+            }}
+            cp report.json run_report1.json
+            cp stdout run_stdout1.txt
             run_report1_path=$PWD/run_report1.json
             run_stdout1_path=$PWD/run_stdout1.txt
             run_status1=$(jq -r .status "$run_report1_path")
@@ -157,17 +139,13 @@
             install -Dm644 firstOut.txt $out/outputs/first
 
             # --- Phase 1: Check ---
-            (
-              pushd $(mktemp -d) > /dev/null
-              ${hull.check.script {
-                checkerWasm = config.checker.cwasm;
-                input = testCase.data.input;
-                output = "../firstOut.txt";
-                answer = testCase.data.outputs + "/first";
-              }}
-              cp check.json ../check_report1.json
-              popd > /dev/null
-            )
+            ${hull.check.script {
+              checkerWasm = config.checker.cwasm;
+              input = testCase.data.input;
+              output = "$output_dir/firstOut.txt";
+              answer = testCase.data.outputs + "/first";
+            }}
+            cp check.json check_report1.json
             check_report1_path=$PWD/check_report1.json
             check_score1=$(jq -r .score "$check_report1_path")
             if [ "$(echo "$check_score1 == 0.0" | bc)" -eq 1 ]; then
@@ -182,31 +160,23 @@
             fi
 
             # --- Transform ---
-            (
-              pushd $(mktemp -d) > /dev/null
-              ${hull.runWasm.script {
-                wasm = transformCwasm;
-                arguments = [ "--salt=${builtins.hashString "sha256" testCase.name}" ];
-                stdin = testCase.data.input;
-                inputFiles = {
-                  firstOut = "../firstOut.txt";
-                };
-                ensureAccepted = true;
-              }}
-              cp stdout ../secondIn.txt
-              popd > /dev/null
-            )
+            ${hull.runWasm.script {
+              wasm = transformCwasm;
+              arguments = [ "--salt=${builtins.hashString "sha256" testCase.name}" ];
+              stdin = testCase.data.input;
+              inputFiles = {
+                firstOut = "$output_dir/firstOut.txt";
+              };
+              ensureAccepted = true;
+            }}
+            cp stdout secondIn.txt
 
             # --- Validate ---
-            (
-              pushd $(mktemp -d) > /dev/null
-              ${hull.validate.script {
-                validatorWasm = config.validator.cwasm;
-                input = "../secondIn.txt";
-              }}
-              cp validation.json ../validation_report.json
-              popd > /dev/null
-            )
+            ${hull.validate.script {
+              validatorWasm = config.validator.cwasm;
+              input = "$output_dir/secondIn.txt";
+            }}
+            cp validation.json validation_report.json
             validation_report_path=$PWD/validation_report.json
             validation_status=$(jq -r .status "$validation_report_path")
             if [ "$validation_status" != "valid" ]; then
@@ -215,19 +185,15 @@
             fi
 
             # --- Phase 2: Run ---
-            (
-              pushd $(mktemp -d) > /dev/null
-              ${hull.runWasm.script {
-                wasm = solutionCwasm;
-                stdin = "../secondIn.txt";
-                tickLimit = testCase.tickLimit;
-                memoryLimit = testCase.memoryLimit;
-                ensureAccepted = false;
-              }}
-              cp report.json ../run_report2.json
-              cp stdout ../run_stdout2.txt
-              popd > /dev/null
-            )
+            ${hull.runWasm.script {
+              wasm = solutionCwasm;
+              stdin = "$output_dir/secondIn.txt";
+              tickLimit = testCase.tickLimit;
+              memoryLimit = testCase.memoryLimit;
+              ensureAccepted = false;
+            }}
+            cp report.json run_report2.json
+            cp stdout run_stdout2.txt
             run_report2_path=$PWD/run_report2.json
             run_stdout2_path=$PWD/run_stdout2.txt
             run_status2=$(jq -r .status "$run_report2_path")
@@ -246,17 +212,13 @@
             install -Dm644 secondOut.txt $out/outputs/second
 
             # --- Phase 2: Check ---
-            (
-              pushd $(mktemp -d) > /dev/null
-              ${hull.check.script {
-                checkerWasm = config.checker.cwasm;
-                input = "../secondIn.txt";
-                output = "../secondOut.txt";
-                answer = testCase.data.outputs + "/second";
-              }}
-              cp check.json ../check_report2.json
-              popd > /dev/null
-            )
+            ${hull.check.script {
+              checkerWasm = config.checker.cwasm;
+              input = "$output_dir/secondIn.txt";
+              output = "$output_dir/secondOut.txt";
+              answer = testCase.data.outputs + "/second";
+            }}
+            cp check.json check_report2.json
             check_report2_path=$PWD/check_report2.json
             check_score2=$(jq -r .score "$check_report2_path")
             if [ "$(echo "$check_score2 == 0.0" | bc)" -eq 1 ]; then

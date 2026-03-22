@@ -300,6 +300,10 @@
       }
       ''
         tmpdir=$(mktemp -d)
+        cleanup() {
+          rm -rf "$tmpdir"
+        }
+        trap cleanup EXIT
 
         # Create directory structure
         mkdir -p $tmpdir/additional_file $tmpdir/testdata
@@ -355,9 +359,14 @@
         # Zip the result
         ${
           if zipped then
-            "(cd $tmpdir && zip -r ../output.zip .) && mv $tmpdir/../output.zip $out"
+            ''
+              (cd "$tmpdir" && zip -r "$out" .)
+            ''
           else
-            "mkdir $out && mv $tmpdir/* $out/"
+            ''
+              mkdir $out
+              cp -r "$tmpdir"/. $out/
+            ''
         }
       '';
 }
