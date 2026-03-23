@@ -262,11 +262,22 @@ impl JudgeDir {
   /// This function will attempt to open (for read-only) or create (for write-only)
   /// all specified files. It returns an error if any file operation fails.
   pub fn new(read_only_paths: &[String], write_only_paths: &[String]) -> Result<Self> {
+    let mappings: Vec<_> = read_only_paths
+      .iter()
+      .map(|path| (PathBuf::from(path), path.clone()))
+      .collect();
+    Self::from_mappings(&mappings, write_only_paths)
+  }
+
+  pub fn from_mappings(
+    read_only_files_with_names: &[(PathBuf, String)],
+    write_only_paths: &[String],
+  ) -> Result<Self> {
     let mut read_only_files = HashMap::new();
-    for path in read_only_paths {
-      let file = std::fs::File::open(path)
-        .with_context(|| format!("Failed to open read-only file: {}", path))?;
-      read_only_files.insert(path.clone(), cap_std::fs::File::from_std(file));
+    for (src_path, exposed_name) in read_only_files_with_names {
+      let file = std::fs::File::open(src_path)
+        .with_context(|| format!("Failed to open read-only file: {}", src_path.display()))?;
+      read_only_files.insert(exposed_name.clone(), cap_std::fs::File::from_std(file));
     }
 
     let mut write_only_files = HashMap::new();

@@ -17,7 +17,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use tracing::info;
 
-use crate::nix::{BuildCommand, get_current_system};
+use crate::nix::{get_current_system, BuildCommand};
 
 #[derive(Parser)]
 pub struct BuildContestOpts {

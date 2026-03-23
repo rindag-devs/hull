@@ -111,35 +111,44 @@
       defaultText = "A filtered list of `problem.testCases` with `sample` or `sampleLarge` group.";
     };
 
+    runtimeData = lib.mkOption {
+      type = lib.types.attrs;
+      description = "Aggregated runtime analysis data injected before packaging and reporting.";
+      default = { };
+      defaultText = "Runtime analysis data loaded by the Hull CLI.";
+    };
+
     testCaseInputValidations = lib.mkOption {
       type = lib.types.attrsOf hull.types.inputValidationReport;
       description = "An attribute set describing the input validation report for all test cases.";
       default =
-        let
-          drvs = lib.mapAttrs (
-            tcName:
-            { data, groups, ... }:
-            hull.validate.drv {
-              problemName = config.name;
-              testCaseName = tcName;
-              validatorWasm = config.validator.cwasm;
-              input = data.input;
-              readerTraceLevel = if builtins.elem "sample" groups then 2 else 1;
-            }
-          ) config.testCases;
-          # Parallel IFD, see `nix/lib/types.nix`, under the `testCaseResults` option definition.
-          links = pkgs.linkFarm "hull-testCaseInputValidations-${config.name}" drvs;
-          reports = lib.mapAttrs (
-            tcName: drv:
-            let
-              contextSuffix = builtins.substring 0 0 "${drv}";
-              pathWithContext = "${links}/${tcName}" + contextSuffix;
-            in
-            lib.importJSON pathWithContext
-          ) drvs;
-        in
-        reports;
-      defaultText = "Computed by runs the validator on the input file for all test cases.";
+        if config.runtimeData ? testCases then
+          lib.mapAttrs (_: value: value.inputValidation) config.runtimeData.testCases
+        else
+          let
+            drvs = lib.mapAttrs (
+              tcName:
+              { data, groups, ... }:
+              hull.validate.drv {
+                problemName = config.name;
+                testCaseName = tcName;
+                validatorWasm = config.validator.cwasm;
+                input = data.input;
+                readerTraceLevel = if builtins.elem "sample" groups then 2 else 1;
+              }
+            ) config.testCases;
+            links = pkgs.linkFarm "hull-testCaseInputValidations-${config.name}" drvs;
+            reports = lib.mapAttrs (
+              tcName: drv:
+              let
+                contextSuffix = builtins.substring 0 0 "${drv}";
+                pathWithContext = "${links}/${tcName}" + contextSuffix;
+              in
+              lib.importJSON pathWithContext
+            ) drvs;
+          in
+          reports;
+      defaultText = "Loaded from runtime analysis data or computed during evaluation.";
     };
 
     tickLimit = lib.mkOption {

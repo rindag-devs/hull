@@ -13,11 +13,10 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
-use tracing::info;
 
-use crate::nix::{BuildCommand, get_current_system};
+use crate::runtime;
 
 #[derive(Parser)]
 pub struct BuildOpts {
@@ -47,28 +46,14 @@ pub struct BuildOpts {
 }
 
 pub fn run(build_opts: &BuildOpts) -> Result<()> {
-  let system = build_opts.system.clone().unwrap_or(
-    get_current_system().context("Failed to determine current system using `nix eval`")?,
+  let _ = (
+    &build_opts.system,
+    build_opts.submodules,
+    &build_opts.extra_args,
   );
-
-  let submodule_arg = if build_opts.submodules {
-    "?submodules=1"
-  } else {
-    ""
-  };
-
-  let flake_attr = format!(
-    ".{}#hullProblems.{}.{}.config.targetOutputs.{}",
-    submodule_arg, system, build_opts.problem, build_opts.target
-  );
-
-  info!("Building target: {}", flake_attr);
-
-  BuildCommand::new()
-    .installable(&flake_attr)
-    .out_link(&build_opts.out_link)
-    .extra_args(&build_opts.extra_args)
-    .run()?;
-
-  Ok(())
+  runtime::build_problem(
+    &build_opts.problem,
+    &build_opts.target,
+    &build_opts.out_link,
+  )
 }

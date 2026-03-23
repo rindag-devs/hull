@@ -13,16 +13,18 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::{fs, path::Path};
+use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use clap::Parser;
 use rand::Rng;
-use serde::Deserialize;
 use tracing::info;
 
 use crate::{
-  nix::{BuildCommand, get_current_system, get_flake_url},
+  runtime::{
+    analyze_problem, load_problem_spec, run_wasm_for_stdio, ProblemSpec, RuntimeWorkspace,
+    SubtaskSpec, TestCaseSpec,
+  },
   utils::{format_size, format_tick},
 };
 
@@ -77,23 +79,14 @@ pub struct StressOpts {
   args: Vec<String>,
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct StressReport {
-  outcome: String,
-  failing_test_case: Option<FailingTestCase>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 struct FailingTestCase {
   args: Vec<String>,
   failing_solution_name: String,
   report: JudgeRunResult,
 }
 
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 struct JudgeRunResult {
   status: String,
   score: f64,
@@ -103,8 +96,9 @@ struct JudgeRunResult {
 }
 
 pub fn run(opts: &StressOpts) -> Result<()> {
+  let _ = (&opts.system, opts.submodules);
+
   let mut generator_args: Vec<String> = Vec::new();
-  let mut extra_nix_args: Vec<String> = Vec::new();
   let mut args_iter = opts.args.iter();
   for arg in args_iter.by_ref() {
     if arg == "--" {
@@ -112,9 +106,25 @@ pub fn run(opts: &StressOpts) -> Result<()> {
     }
     generator_args.push(arg.clone());
   }
-  extra_nix_args.extend(args_iter.cloned());
 
   let batch_size = opts.batch_size.unwrap_or_else(|| 4 * num_cpus::get());
+
+  let mut problem = load_problem_spec(&opts.problem)?;
+  if let Some(std_name) = &opts.std {
+    problem.main_correct_solution = std_name.clone();
+  }
+
+  let solutions_to_test = opts.solutions.clone();
+  problem.solutions.retain(|solution| {
+    solution.name == problem.main_correct_solution || solutions_to_test.contains(&solution.name)
+  });
+
+  let generator_cwasm = problem
+    .generators
+    .get(&opts.generator)
+    .and_then(|program| program.cwasm.as_ref())
+    .with_context(|| format!("Generator '{}' is missing `cwasm` metadata", opts.generator))?
+    .clone();
 
   let mut round = 1;
   loop {
@@ -150,75 +160,20 @@ pub fn run(opts: &StressOpts) -> Result<()> {
       all_generator_args.push(current_args);
     }
 
-    let generator_args_json = serde_json::to_string(&all_generator_args)
-      .context("Failed to serialize generator arguments to JSON")?;
-    let test_solutions_json = serde_json::to_string(&opts.solutions)
-      .context("Failed to serialize solution names to JSON")?;
-    let std_name_json =
-      serde_json::to_string(&opts.std).context("Failed to serialize std name to JSON")?;
-    let tick_limit = opts
-      .tick_limit
-      .map(|x| x.to_string())
-      .unwrap_or("null".to_string());
-    let memory_limit = opts
-      .memory_limit
-      .map(|x| x.to_string())
-      .unwrap_or("null".to_string());
-
-    let system = opts
-      .system
-      .clone()
-      .unwrap_or(get_current_system().context("Failed to determine current system")?);
-    let flake_url = get_flake_url().context("Could not determine flake URL")?;
-    let submodule_query = if opts.submodules { "?submodules=1" } else { "" };
-    let final_flake_ref = format!("{}{}", flake_url, submodule_query);
-
-    let nix_expr = format!(
-      r#"
-      {{ generatorArgsJSON, testSolutionsJSON, stdNameJSON, generatorName }}:
-      let
-        flake = builtins.getFlake "{final_flake_ref}";
-        hullLib = (flake.inputs.hull.lib or flake.outputs.lib).{system};
-        problemConfig = flake.outputs.hullProblems.{system}.{problem}.config;
-      in
-      hullLib.stress problemConfig {{
-        testSolNames = builtins.fromJSON testSolutionsJSON;
-        generatorArgs = builtins.fromJSON generatorArgsJSON;
-        stdName = builtins.fromJSON stdNameJSON;
-        tickLimit = {tick_limit};
-        memoryLimit = {memory_limit};
-        inherit generatorName;
-      }}
-      "#,
-      problem = opts.problem,
-    );
-
-    info!("Starting Nix build for stress test batch...");
-    let report_path_str = BuildCommand::new()
-      .impure(true)
-      .expr(&nix_expr)
-      .argstr("generatorArgsJSON", &generator_args_json)
-      .argstr("testSolutionsJSON", &test_solutions_json)
-      .argstr("stdNameJSON", &std_name_json)
-      .argstr("generatorName", &opts.generator)
-      .print_out_paths(true)
-      .no_link(true)
-      .extra_args(&extra_nix_args)
-      .run_and_capture_stdout()
-      .context("Failed to execute `nix build` for stress testing")?;
-
-    let report_path = Path::new(&report_path_str);
-    let report_content = fs::read_to_string(report_path)
-      .with_context(|| format!("Failed to read report from {}", report_path.display()))?;
-
-    let report: StressReport =
-      serde_json::from_str(&report_content).context("Failed to parse stress report JSON")?;
+    let hacked_case = run_stress_round(
+      &problem,
+      &crate::runtime::realize_artifact(&generator_cwasm)?,
+      &all_generator_args,
+      &opts.generator,
+      opts.tick_limit,
+      opts.memory_limit,
+      round,
+    )?;
 
     info!("Stress test batch finished.");
-    match report.outcome.as_str() {
-      "hacked" => {
+    match hacked_case {
+      Some(case) => {
         println!("\nHacked! Found a failing test case.");
-        let case = report.failing_test_case.unwrap();
         let report = case.report;
         println!(
           "  Solution '{}' failed with status: {}, score: {:.3}, tick: {}, memory: {}",
@@ -243,7 +198,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
         println!();
         return Ok(());
       }
-      "not_hacked" => {
+      None => {
         if let Some(max_rounds) = opts.rounds {
           info!(
             "Round {}/{} finished. Not hacked. All solutions passed {} test cases.",
@@ -256,12 +211,99 @@ pub fn run(opts: &StressOpts) -> Result<()> {
           );
         }
       }
-      _ => {
-        bail!("Unknown outcome from stress test: {}", report.outcome);
-      }
     }
+
     round += 1;
   }
 
   Ok(())
+}
+
+fn run_stress_round(
+  problem: &ProblemSpec,
+  generator_cwasm: &str,
+  generator_args_list: &[Vec<String>],
+  generator_name: &str,
+  tick_limit_override: Option<u64>,
+  memory_limit_override: Option<u64>,
+  round: u64,
+) -> Result<Option<FailingTestCase>> {
+  for (case_index, generator_args) in generator_args_list.iter().enumerate() {
+    let test_case_name = format!("stress-round-{round}-case-{case_index}");
+    let generated_input = generate_input(generator_cwasm, generator_args, &test_case_name)?;
+    let mut dynamic_problem = problem.clone();
+    dynamic_problem.test_cases = vec![TestCaseSpec {
+      name: test_case_name.clone(),
+      input_file: Some(generated_input.to_string_lossy().into_owned()),
+      tick_limit: tick_limit_override.unwrap_or(problem.tick_limit),
+      memory_limit: memory_limit_override.unwrap_or(problem.memory_limit),
+      groups: Vec::new(),
+      traits: BTreeMap::new(),
+      generator: Some(generator_name.to_string()),
+      arguments: Some(generator_args.clone()),
+    }];
+    dynamic_problem.validator_tests = Vec::new();
+    dynamic_problem.checker_tests = Vec::new();
+    dynamic_problem.subtasks = vec![SubtaskSpec {
+      full_score: 1.0,
+      scoring_method: "min".to_string(),
+      test_cases: vec![test_case_name.clone()],
+    }];
+
+    let workspace = RuntimeWorkspace::new(
+      std::env::temp_dir().join(format!("hull-stress-{round}-{case_index}")),
+    )?;
+    let runtime = analyze_problem(&dynamic_problem, &workspace)?;
+
+    for solution in dynamic_problem
+      .solutions
+      .iter()
+      .filter(|solution| solution.name != dynamic_problem.main_correct_solution)
+    {
+      let solution_report = runtime
+        .solutions
+        .get(&solution.name)
+        .and_then(|solution_runtime| solution_runtime.test_case_results.get(&test_case_name))
+        .with_context(|| {
+          format!(
+            "Missing stress result for solution '{}' and test case '{}'",
+            solution.name, test_case_name
+          )
+        })?;
+      if solution_report.status != "accepted" {
+        return Ok(Some(FailingTestCase {
+          args: generator_args.clone(),
+          failing_solution_name: solution.name.clone(),
+          report: JudgeRunResult {
+            status: solution_report.status.clone(),
+            score: solution_report.score,
+            tick: solution_report.tick,
+            memory: solution_report.memory,
+            message: solution_report.message.clone(),
+          },
+        }));
+      }
+    }
+  }
+
+  Ok(None)
+}
+
+fn generate_input(
+  generator_cwasm: &str,
+  arguments: &[String],
+  test_case_name: &str,
+) -> Result<std::path::PathBuf> {
+  let result = run_wasm_for_stdio(
+    generator_cwasm,
+    None,
+    arguments,
+    u64::MAX,
+    u32::MAX as u64,
+    &[],
+  )?;
+  let path = std::env::temp_dir().join(format!("hull-stress-input-{test_case_name}.txt"));
+  std::fs::write(&path, result.stdout)
+    .with_context(|| format!("Failed to write generated stress input {}", path.display()))?;
+  Ok(path)
 }

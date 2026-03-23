@@ -174,14 +174,15 @@ let
     };
   };
 
+  coerceStorePath = path: if builtins.isPath path then path else builtins.storePath path;
+
   # Type for a single checker test case.
   checkerTest =
     problem:
     lib.types.submodule (
       { config, name, ... }:
       let
-        # 1. Determine input file path.
-        input =
+        inputPath =
           if config.inputFile != null then
             config.inputFile
           else if config.generator != null then
@@ -200,8 +201,7 @@ let
           else
             throw "Checker test `${name}` must have either inputFile or generator specified.";
 
-        # 2. Determine user output file path.
-        output =
+        outputPath =
           if config.outputFile != null then
             config.outputFile
           else if config.solution != null then
@@ -214,20 +214,19 @@ let
               fakeTestCase = {
                 name = "checkerTestOutput-${name}";
                 inherit (problem) tickLimit memoryLimit;
-                data.input = input;
+                data.input = inputPath;
               };
               generatedOutputs = hull.judger.runGenerateOutputs problem fakeTestCase sol;
             in
-            "${generatedOutputs}/${config.outputFile}"
+            "${generatedOutputs}/${config.outputName}"
           else
             throw "Checker test `${name}` must have either outputFile or solution specified.";
 
-        # 3. Determine standard answer file path.
-        answer =
+        answerPath =
           let
             fakeTestCase = {
               name = "checkerTestAnswer-${name}";
-              data.input = input;
+              data.input = inputPath;
               tickLimit = problem.tickLimit;
               memoryLimit = problem.memoryLimit;
             };
@@ -274,9 +273,33 @@ let
             default = null;
             description = "A store path to a manually provided output file.";
           };
+          inputPath = lib.mkOption {
+            type = lib.types.pathInStore;
+            readOnly = true;
+            description = "The fully resolved input file used by this checker test.";
+            default = inputPath;
+          };
+          outputPath = lib.mkOption {
+            type = lib.types.nullOr lib.types.pathInStore;
+            readOnly = true;
+            description = "The fully resolved output file when this checker test uses a static output file.";
+            default = config.outputFile;
+          };
+          outputSolution = lib.mkOption {
+            type = lib.types.nullOr lib.types.nonEmptyStr;
+            readOnly = true;
+            description = "The solution name used to generate the output file when `outputFile` is not provided.";
+            default = config.solution;
+          };
           prediction = lib.mkOption {
             type = lib.types.functionTo lib.types.bool;
             description = "A function that takes the check report and returns true if the test passes.";
+          };
+          result = lib.mkOption {
+            type = checkReport;
+            description = "The result of this test.";
+            readOnly = true;
+            default = problem.checker.testResults.${config.name};
           };
           resultDrv = lib.mkOption {
             type = lib.types.pathInStore;
@@ -285,15 +308,11 @@ let
             default = hull.check.drv {
               name = "${problem.name}-checkerTest-${name}";
               checkerWasm = problem.checker.cwasm;
-              inherit input output answer;
+              input = inputPath;
+              output = outputPath;
+              answer = answerPath;
             };
             defaultText = "The derivation of the result of running the checker on this test case.";
-          };
-          result = lib.mkOption {
-            type = checkReport;
-            description = "The result of this test.";
-            readOnly = true;
-            default = problem.checker.testResults.${config.name};
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
@@ -312,7 +331,7 @@ let
     lib.types.submodule (
       { config, name, ... }:
       let
-        input =
+        inputPath =
           if config.inputFile != null then
             config.inputFile
           else if config.generator != null then
@@ -354,9 +373,21 @@ let
             default = null;
             description = "A store path to a manually provided input file.";
           };
+          inputPath = lib.mkOption {
+            type = lib.types.pathInStore;
+            readOnly = true;
+            description = "The fully resolved input file used by this validator test.";
+            default = inputPath;
+          };
           prediction = lib.mkOption {
             type = lib.types.functionTo lib.types.bool;
             description = "A function that takes the validation report and returns true if the test passes.";
+          };
+          result = lib.mkOption {
+            type = inputValidationReport;
+            description = "The result of this test.";
+            readOnly = true;
+            default = problem.validator.testResults.${config.name};
           };
           resultDrv = lib.mkOption {
             type = lib.types.pathInStore;
@@ -366,15 +397,9 @@ let
               problemName = problem.name;
               testCaseName = "validatorTest-${name}";
               validatorWasm = problem.validator.cwasm;
-              inherit input;
+              input = inputPath;
             };
             defaultText = "The result of running the validator on this test case.";
-          };
-          result = lib.mkOption {
-            type = inputValidationReport;
-            description = "The result of this test.";
-            readOnly = true;
-            default = problem.validator.testResults.${config.name};
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
@@ -547,8 +572,12 @@ in
                   type = pathInStore;
                   readOnly = true;
                   description = "A nix store path generated by running `mainCorrectSolution`. Each file in this directory is a correct output data file.";
-                  default = hull.generate.outputs problem config;
-                  defaultText = lib.literalExpression "hull.generate.outputs problem config";
+                  default =
+                    if problem.runtimeData ? testCases then
+                      coerceStorePath problem.runtimeData.testCases.${config.name}.data.outputs
+                    else
+                      hull.generate.outputs problem config;
+                  defaultText = "Loaded from runtime analysis data or generated during evaluation.";
                 };
               };
             };
@@ -561,7 +590,7 @@ in
             readOnly = true;
             description = "The result of running the validator on the test case's input data.";
             default = problem.testCaseInputValidations.${config.name};
-            defaultText = "Running `problem.validator` on this test case produces the result.";
+            defaultText = "Loaded from runtime analysis data.";
           };
         };
       }
@@ -593,10 +622,9 @@ in
             description = "A list of test cases that match the traits defined for this subtask.";
             default = builtins.filter (
               tc:
-              builtins.all (
-                { name, value }:
-                builtins.hasAttr name tc.inputValidation.traits && tc.inputValidation.traits.${name} == value
-              ) (lib.attrsToList config.traits)
+              builtins.all ({ name, value }: builtins.hasAttr name tc.traits && tc.traits.${name} == value) (
+                lib.attrsToList config.traits
+              )
             ) (builtins.attrValues problem.testCases);
             defaultText = "A filtered list of `problem.testCases` matching the subtask's traits.";
           };
@@ -647,49 +675,30 @@ in
             readOnly = true;
             description = "The collected results of running and checking this solution against all test cases.";
             default =
-              let
-                drvs = lib.mapAttrs (tcName: tc: hull.judger.runJudge problem tc config) problem.testCases;
-                /*
-                  Instead of calling `lib.importJSON drv` directly for each test case, we aggregate
-                  all derivations into a `pkgs.linkFarm`.
-
-                  Why? Standard IFD (Import From Derivation) is sequential: Nix evaluates one,
-                  builds it, reads it, then moves to the next. For problems with hundreds of
-                  test cases, this is extremely slow.
-
-                  By using a linkFarm, Nix is forced to evaluate the farm's derivation first.
-                  Since the farm depends on all test case derivations, Nix builds them all
-                  IN PARALLEL (using available build slots) before returning to the evaluation
-                  phase to read the JSON reports from the farm.
-                */
-                links = pkgs.linkFarm "hull-testCaseResults-${problem.name}-${config.name}" drvs;
-                results = lib.mapAttrs (
-                  tcName: drv:
-                  let
-                    /*
-                      In strict pure evaluation mode (default in Lix and some Nix versions),
-                      `builtins.readFile` (used by `lib.importJSON`) checks if the actual
-                      Store path being read is present in the string's "dependency context".
-
-                      Since `links` is a farm of SYMLINKS, the string `"${links}/${tcName}"`
-                      only has the context of the farm, not the target derivation. When
-                      the evaluator follows the symlink to the real test case output, it
-                      throws an "access to absolute path is forbidden" error.
-
-                      `builtins.substring 0 0 "${drv}"` returns an empty string but
-                      carries the "context" (the dependency on the derivation). By
-                      appending it, we "smuggle" the original derivation's context into
-                      the path string, satisfying the evaluator's security check.
-                    */
-                    contextSuffix = builtins.substring 0 0 "${drv}";
-                    outputs = "${links}/${tcName}/outputs" + contextSuffix;
-                    reportPath = "${links}/${tcName}/report.json" + contextSuffix;
-                  in
-                  (lib.importJSON reportPath) // { inherit outputs; }
-                ) drvs;
-              in
-              results;
-            defaultText = "Computed by the problem's configured judger for every test case.";
+              if problem.runtimeData ? solutions && problem.runtimeData.solutions ? "${config.name}" then
+                lib.mapAttrs (
+                  _: result:
+                  result
+                  // lib.optionalAttrs (result ? outputs) {
+                    outputs = coerceStorePath result.outputs;
+                  }
+                ) problem.runtimeData.solutions.${config.name}.testCaseResults
+              else
+                let
+                  drvs = lib.mapAttrs (tcName: tc: hull.judger.runJudge problem tc config) problem.testCases;
+                  links = pkgs.linkFarm "hull-testCaseResults-${problem.name}-${config.name}" drvs;
+                  results = lib.mapAttrs (
+                    tcName: drv:
+                    let
+                      contextSuffix = builtins.substring 0 0 "${drv}";
+                      outputs = "${links}/${tcName}/outputs" + contextSuffix;
+                      reportPath = "${links}/${tcName}/report.json" + contextSuffix;
+                    in
+                    (lib.importJSON reportPath) // { inherit outputs; }
+                  ) drvs;
+                in
+                results;
+            defaultText = "Loaded from runtime analysis data or computed by the configured judger.";
           };
           subtaskResults = lib.mkOption {
             type = listOf (submodule {
@@ -716,50 +725,65 @@ in
             });
             readOnly = true;
             description = "The collected results of this solution against all subtasks.";
-            default = map (
-              st:
-              let
-                testCases = builtins.listToAttrs (
-                  map (tc: {
-                    name = tc.name;
-                    value = config.testCaseResults.${tc.name};
-                  }) st.testCases
-                );
-                statuses = lib.unique (
-                  builtins.sort builtins.lessThan (lib.map ({ status, ... }: status) (builtins.attrValues testCases))
-                );
-                rawScore =
-                  if st.scoringMethod == "min" then
-                    builtins.foldl' lib.min 1.0 (map (tc: tc.score) (builtins.attrValues testCases))
-                  else if st.scoringMethod == "sum" then
-                    (builtins.foldl' builtins.add 0.0 (map (tc: tc.score) (builtins.attrValues testCases)))
-                    / (builtins.length (builtins.attrNames testCases))
-                  else
-                    throw "Invalid subtask scoring method: ${st.scoringMethod}";
-                scaledScore = rawScore * st.fullScore;
-              in
-              {
-                inherit
-                  testCases
-                  statuses
-                  rawScore
-                  scaledScore
-                  ;
-              }
-            ) problem.subtasks;
-            defaultText = "Computed by running and checking the solution against every test case in `problem.subtask.{name}.testCases";
+            default =
+              if problem.runtimeData ? solutions && problem.runtimeData.solutions ? "${config.name}" then
+                map (
+                  result:
+                  result
+                  // {
+                    testCases = lib.mapAttrs (
+                      _: testCaseResult:
+                      testCaseResult
+                      // lib.optionalAttrs (testCaseResult ? outputs) {
+                        outputs = coerceStorePath testCaseResult.outputs;
+                      }
+                    ) result.testCases;
+                  }
+                ) problem.runtimeData.solutions.${config.name}.subtaskResults
+              else
+                map (
+                  st:
+                  let
+                    testCases = builtins.listToAttrs (
+                      map (tc: {
+                        name = tc.name;
+                        value = config.testCaseResults.${tc.name};
+                      }) st.testCases
+                    );
+                    statuses = lib.unique (
+                      builtins.sort builtins.lessThan (lib.map ({ status, ... }: status) (builtins.attrValues testCases))
+                    );
+                    rawScore =
+                      if st.scoringMethod == "min" then
+                        builtins.foldl' lib.min 1.0 (map (tc: tc.score) (builtins.attrValues testCases))
+                      else if st.scoringMethod == "sum" then
+                        (builtins.foldl' builtins.add 0.0 (map (tc: tc.score) (builtins.attrValues testCases)))
+                        / (builtins.length (builtins.attrNames testCases))
+                      else
+                        throw "Invalid subtask scoring method: ${st.scoringMethod}";
+                    scaledScore = rawScore * st.fullScore;
+                  in
+                  {
+                    inherit
+                      testCases
+                      statuses
+                      rawScore
+                      scaledScore
+                      ;
+                  }
+                ) problem.subtasks;
+            defaultText = "Loaded from runtime analysis data or derived from test-case results.";
           };
           score = lib.mkOption {
             type = float;
             readOnly = true;
             description = "This final score of the entire problem for this solution.";
-            default = builtins.foldl' builtins.add 0.0 (
-              map ({ scaledScore, ... }: scaledScore) config.subtaskResults
-            );
-            defaultText = lib.literalExpression ''
-              builtins.foldl' builtins.add 0.0 (
-                lib.mapAttrs (stName: st: st.score) config.subtaskResults
-              )'';
+            default =
+              if problem.runtimeData ? solutions && problem.runtimeData.solutions ? "${config.name}" then
+                problem.runtimeData.solutions.${config.name}.score
+              else
+                builtins.foldl' builtins.add 0.0 (map ({ scaledScore, ... }: scaledScore) config.subtaskResults);
+            defaultText = "Loaded from runtime analysis data or derived from subtask results.";
           };
         };
       }
@@ -779,12 +803,15 @@ in
           description = "The result of tests.";
           readOnly = true;
           default =
-            let
-              drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.checker.tests;
-              results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
-            in
-            results;
-          defaultText = "Computed by running the checker on every test case in `problem.checker.tests";
+            if problem.runtimeData ? checker && problem.runtimeData.checker ? testResults then
+              problem.runtimeData.checker.testResults
+            else
+              let
+                drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.checker.tests;
+                results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
+              in
+              results;
+          defaultText = "Loaded from runtime analysis data or computed during evaluation.";
         };
       };
     });
@@ -803,12 +830,15 @@ in
           description = "The result of tests.";
           readOnly = true;
           default =
-            let
-              drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.validator.tests;
-              results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
-            in
-            results;
-          defaultText = "Computed by running the validator on every test case in `problem.validator.tests";
+            if problem.runtimeData ? validator && problem.runtimeData.validator ? testResults then
+              problem.runtimeData.validator.testResults
+            else
+              let
+                drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.validator.tests;
+                results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
+              in
+              results;
+          defaultText = "Loaded from runtime analysis data or computed during evaluation.";
         };
       };
     });

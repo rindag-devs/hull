@@ -45,7 +45,7 @@ let
       problem.judger.prepareSolution solution
     else
       throw ''
-        Judger `${problem.name}` uses the packaged runner interface but does not define `prepareSolution`.
+        Judger `${problem.name}` must define `prepareSolution`.
       '';
 
   runPackagedRunner =
@@ -57,9 +57,6 @@ let
       mode,
     }:
     let
-      # Packaged judgers expose executable derivations. Hull injects a uniform
-      # environment contract so every judger can be run the same way, regardless
-      # of its internal workflow.
       runnerExe =
         if builtins.isString runner || builtins.isPath runner then runner else lib.getExe runner;
       preparedSolution = getPreparedSolution problem solution;

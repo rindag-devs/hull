@@ -123,7 +123,7 @@
           tc:
           let
             unmatchedTraits = lib.filterAttrs (
-              n: v: (!builtins.hasAttr n tc.inputValidation.traits) || (tc.inputValidation.traits.${n} != v)
+              n: v: (!builtins.hasAttr n tc.traits) || (tc.traits.${n} != v)
             ) tc.traits;
           in
           unmatchedTraits != { }
@@ -136,7 +136,7 @@
                 - ${getTestCaseName tc}:
                     The traits you defined do not match the traits returned by the validator.
                     - Defined in test case: ${builtins.toJSON tc.traits}
-                    - Returned by validator: ${builtins.toJSON tc.inputValidation.traits}
+                    - Runtime traits: ${builtins.toJSON tc.inputValidation.traits}
               '') casesWithMismatchedTraits;
             in
             ''

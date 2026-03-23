@@ -14,17 +14,15 @@
 */
 
 use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Table};
-use serde::Deserialize;
-use tracing::info;
+use serde::{Deserialize, Serialize};
 
-use crate::nix::{BuildCommand, get_current_system, get_flake_url};
+use crate::runtime::{analyze_problem, load_ad_hoc_problem_spec, RuntimeWorkspace};
 use crate::utils::{format_size, format_tick};
 
 #[derive(Parser)]
@@ -53,7 +51,7 @@ pub struct JudgeOpts {
   extra_args: Vec<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct JudgeReport {
   score: f64,
@@ -62,7 +60,7 @@ struct JudgeReport {
   test_case_results: HashMap<String, TestCaseResult>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct SubtaskResult {
   full_score: f64,
@@ -70,7 +68,7 @@ struct SubtaskResult {
   statuses: Vec<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct TestCaseResult {
   status: String,
@@ -182,71 +180,52 @@ fn print_human_readable_report(report: &JudgeReport) {
 }
 
 pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
-  let system = judge_opts.system.clone().unwrap_or(
-    get_current_system().context("Failed to determine current system using `nix eval`")?,
-  );
-
-  // Get the flake URL dynamically instead of assuming a git repository.
-  let flake_url =
-    get_flake_url().context("Could not determine the flake URL for the current project")?;
-
-  // The submodule argument is now a URL query parameter.
-  let submodule_query = if judge_opts.submodules {
-    "?submodules=1"
-  } else {
-    ""
-  };
-
-  let src_path_abs = Path::new(&judge_opts.src_path)
+  let src_path_abs = PathBuf::from(&judge_opts.src_path)
     .canonicalize()
     .with_context(|| format!("Failed to find source file: {}", judge_opts.src_path))?;
 
-  // Construct the final flake reference and the Nix expression.
-  let final_flake_ref = format!("{}{}", flake_url, submodule_query);
+  let problem = load_ad_hoc_problem_spec(&judge_opts.problem, &src_path_abs)?;
+  let ad_hoc_name = "__hullAdHoc".to_string();
 
-  info!("Flake reference: {}", &final_flake_ref);
-
-  let nix_expr = format!(
-    r#"
-    {{ srcPath }}:
-    let
-      flake = builtins.getFlake "{final_flake_ref}";
-      problemConfig = flake.outputs.hullProblems.{system}.{problem}.config;
-    in
-    (flake.inputs.hull.lib or flake.outputs.lib).{system}.judgeSingleFile
-      problemConfig.problemAttrs problemConfig.extraSpecialArgs (/. + srcPath)"#,
-    problem = judge_opts.problem
-  );
-
-  let src_path_str = src_path_abs.to_str().with_context(|| {
-    format!(
-      "Path '{}' contains non-UTF8 characters and cannot be processed.",
-      src_path_abs.display()
-    )
-  })?;
-
-  // Execute the nix build command to get the path to the report
-  let report_path_str = BuildCommand::new()
-    .impure(true)
-    .expr(&nix_expr)
-    .argstr("srcPath", src_path_str)
-    .print_out_paths(true)
-    .no_link(true)
-    .extra_args(&judge_opts.extra_args)
-    .run_and_capture_stdout()
-    .context("Failed to execute `nix build` for judging")?;
-
-  let report_path = Path::new(&report_path_str);
-
-  let report_content = fs::read_to_string(report_path)
-    .with_context(|| format!("Failed to read report from {}", report_path.display()))?;
+  let workspace = RuntimeWorkspace::new(std::env::temp_dir().join("hull-judge-runtime"))?;
+  let runtime = analyze_problem(&problem, &workspace)?;
+  let solution = runtime
+    .solutions
+    .get(&ad_hoc_name)
+    .context("Ad-hoc judged solution was not produced by runtime analysis")?;
+  let report = JudgeReport {
+    score: solution.score,
+    full_score: problem.full_score,
+    subtask_results: solution
+      .subtask_results
+      .iter()
+      .zip(problem.subtasks.iter())
+      .map(|(result, subtask)| SubtaskResult {
+        full_score: subtask.full_score,
+        scaled_score: result.scaled_score,
+        statuses: result.statuses.clone(),
+      })
+      .collect(),
+    test_case_results: solution
+      .test_case_results
+      .iter()
+      .map(|(name, result)| {
+        (
+          name.clone(),
+          TestCaseResult {
+            status: result.status.clone(),
+            score: result.score,
+            tick: result.tick,
+            memory: result.memory,
+          },
+        )
+      })
+      .collect(),
+  };
 
   if judge_opts.json {
-    let parsed_json: serde_json::Value = serde_json::from_str(&report_content)?;
-    println!("{}", serde_json::to_string(&parsed_json)?);
+    println!("{}", serde_json::to_string(&report)?);
   } else {
-    let report: JudgeReport =
-      serde_json::from_str(&report_content).context("Failed to parse judge report JSON")?;
     print_human_readable_report(&report);
   }
 

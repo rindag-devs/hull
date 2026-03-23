@@ -22,6 +22,7 @@ pub mod cli;
 pub mod cmd;
 pub mod nix;
 pub mod runner;
+pub mod runtime;
 pub mod utils;
 
 fn main() -> Result<()> {
