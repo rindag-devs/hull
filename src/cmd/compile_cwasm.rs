@@ -20,8 +20,8 @@ use crate::runner::compile;
 
 #[derive(Parser)]
 pub struct CompileCwasmOpts {
-  wasm_path: String,
-  out_path: String,
+  pub wasm_path: String,
+  pub out_path: String,
 }
 
 pub fn run(compile_cwasm_opts: &CompileCwasmOpts) -> Result<()> {

@@ -20,6 +20,9 @@
   ...
 }:
 
+let
+  normalizeProblem = problem: if problem ? config then problem else hull.evalProblem problem { };
+in
 {
   options = {
     name = lib.mkOption {
@@ -41,6 +44,8 @@
     problems = lib.mkOption {
       type = lib.types.listOf lib.types.anything;
       description = "Problems of the contest.";
+      default = [ ];
+      apply = map normalizeProblem;
     };
 
     targets = lib.mkOption {

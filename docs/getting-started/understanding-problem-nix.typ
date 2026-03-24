@@ -42,7 +42,7 @@ Hull relies on several key programs to manage the problem's lifecycle. You provi
 
 - `checker`: The program responsible for comparing a solution's output against the standard answer to determine correctness. It can award partial scores.
 - `validator`: The program that reads a test case input file and verifies that it conforms to the problem's specified format and constraints. This is a critical step to ensure all test data is valid.
-- `generators`: An attribute set of programs used to generate test case inputs. Each attribute in the set defines a new generator (e.g., `generators.rand`).
+- `generators`: An attribute set of programs used to generate test case inputs. Each attribute in the set defines a generator (e.g., `generators.rand`).
 
 == Test Data
 
@@ -66,7 +66,7 @@ The `testCases` attribute set is where you define every test case for your probl
 }
 ```
 
-Each attribute in `testCases` defines a new test case. The name of the attribute (e.g., `manual-1`) becomes the unique name of the test case.
+Each attribute in `testCases` defines a test case. The name of the attribute (e.g., `manual-1`) becomes the unique name of the test case.
 
 - `inputFile`: Use this to specify a path to a manually created input file.
 - `generator`: Use this to specify the name of a generator (from the `generators` set) to create the input file.
@@ -149,7 +149,7 @@ The `solutions` set is where you list all known implementations for the problem,
 ```
 
 - `mainCorrectSolution`: A boolean flag that *must be set to `true` for exactly one solution*. This solution is considered the canonical one and is used to generate the standard answer files for all test cases.
-- `subtaskPredictions`: This is a powerful validation feature. It's an attribute set where keys are subtask indices (as strings, e.g., `"0"`, `"1"`) and values are Nix functions. Each function takes a result (containing `score` and `statuses`) and returns `true` if the solution's performance matches your expectation. When you run `hull build`, the framework automatically judges all solutions and verifies that these predictions hold, catching inconsistencies early.
+- `subtaskPredictions`: This is a powerful validation feature. It's an attribute set where keys are subtask indices (as strings, e.g., `"0"`, `"1"`) and values are Nix functions. Each function takes a result (containing `score` and `statuses`) and returns `true` if the solution's performance matches your expectation. When you run `hull build`, Hull analyzes all solutions through its runtime and verifies that these predictions hold, catching inconsistencies early.
 
 == Documents & Targets
 

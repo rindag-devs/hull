@@ -229,13 +229,13 @@ ${hull.check.script {
 }}
 ```
 
-Because the actual work happens inside the shell script, you can describe arbitrarily complex judging pipelines while keeping Nix evaluation fast.
+Because the actual work happens inside the shell script, you can describe arbitrarily complex judging pipelines while keeping Nix evaluation declarative.
 
-== The Golden Rule: Avoiding Import From Derivation (IFD)
+== The Golden Rule
 
-The most important rule is: *do not perform Import From Derivation (IFD) during evaluation.*
+Keep Nix evaluation declarative.
 
-Evaluation should only assemble derivations and dependency graphs. All steps that inspect outputs, run programs, or branch on runtime data must happen inside the returned runner or inside a single `runCommandLocal` wrapper around that runner.
+Evaluation should only assemble derivations and dependency graphs. All steps that inspect outputs, run programs, or branch on runtime data must happen inside the returned runner.
 
 === Correct Pattern
 
@@ -271,7 +271,7 @@ judge = pkgs.writeShellApplication {
 };
 ```
 
-Nix evaluation only sees an executable derivation. The complicated logic happens later, during the build.
+Nix evaluation only sees an executable derivation. The operational logic stays inside the runner.
 
 === Anti-Pattern
 
@@ -294,7 +294,7 @@ in
 if runStatus == "accepted" then ... else ...
 ```
 
-This is IFD. It serializes evaluation and defeats Hull's parallelism.
+This forces evaluation to depend on build results and defeats Hull's runtime orchestration model.
 
 == Practical Advice
 

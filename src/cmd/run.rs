@@ -34,34 +34,34 @@ use crate::{
 pub struct RunOpts {
   /// The problem context to use for compilation.
   #[arg(long, short, default_value = "default")]
-  problem: String,
+  pub problem: String,
 
   /// The language name (e.g., "cpp.20"). Auto-detected if not provided.
   #[arg(long, short)]
-  language: Option<String>,
+  pub language: Option<String>,
 
   /// Override the tick limit for this run.
   #[arg(long, short)]
-  tick_limit: Option<u64>,
+  pub tick_limit: Option<u64>,
 
   /// Override the memory limit (in bytes) for this run.
   #[arg(long, short)]
-  memory_limit: Option<u64>,
+  pub memory_limit: Option<u64>,
 
   /// Show a report of the execution status (tick, memory, etc.) on stderr.
   #[arg(long)]
-  show_status: bool,
+  pub show_status: bool,
 
   /// Whether to let nix resolve git submodules.
   #[arg(long)]
-  submodules: bool,
+  pub submodules: bool,
 
   /// Path to the source file to run.
-  src_path: String,
+  pub src_path: String,
 
   /// Arguments to pass to the executed program.
   #[arg(trailing_var_arg = true)]
-  args: Vec<String>,
+  pub args: Vec<String>,
 }
 
 pub fn run(opts: &RunOpts) -> Result<()> {

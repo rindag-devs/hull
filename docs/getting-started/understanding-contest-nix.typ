@@ -20,11 +20,11 @@ Here is a complete example of a `contest.nix` file. It defines a contest with tw
 {
   # Basic metadata for the contest
   name = "myFirstContest";
-  displayName.en = "My First Contest";
+  displayName.en = "my first contest";
 
   # A list of paths to the problems included in this contest.
   # Hull will evaluate the problem definition in each of these directories.
-  problems = map (p: hull.evalProblem p { }) [
+  problems = [
     ./problems/aPlusB
     ./problems/anotherProblem
   ];
@@ -56,11 +56,11 @@ These options define the fundamental properties of your contest.
 
 This is the most important part of the file, where you specify which problems are part of the contest.
 
-- `problems`: A list of evaluated problems.
+- `problems`: A list of problems.
 
 ```nix
 {
-  problems = map (p: hull.evalProblem p { }) [
+  problems = [
     ../problems/aPlusB  # Path to the 'aPlusB' problem directory
     ../problems/hello   # Path to the 'hello' problem directory
   ];
@@ -71,7 +71,7 @@ This is the most important part of the file, where you specify which problems ar
 
 Similar to `problem.nix`, the `targets` attribute set defines different packaging formats for the contest. A contest target specifies how to structure the final output directory, combining the outputs of all included problems.
 
-- `targets`: An attribute set where each attribute defines a new packaging target. The `default` target is special, as it's the one built by the `hull build-contest` command without additional arguments. Hull provides built-in contest targets like `common`, `lemon` and `cnoiParticipant`.
+- `targets`: An attribute set where each attribute defines a packaging target. The `default` target is special, as it's the one built by the `hull build-contest` command without additional arguments and is evaluated after runtime analysis for each problem. Hull provides built-in contest targets like `common`, `lemon` and `cnoiParticipant`.
 
 == Building the Contest
 
@@ -120,10 +120,12 @@ targets.default = hull.contestTarget.common {
 
 When you run `hull build-contest`, the following happens:
 
-1. Hull starts building the contest's `default` target.
-2. This target (`hull.contestTarget.common`) knows it needs to process each problem in the `problems` list.
-3. For each problem (e.g., `aPlusB`), it looks into its `problem.nix` file for the target specified by `problemTarget` (in this case, the `default` problem target).
-4. It builds that problem target.
-5. Finally, it copies the entire output of the problem target into a subdirectory named after the problem (`result/aPlusB/`).
+1. Hull loads the contest metadata and resolves the list of problems in the contest.
+2. It analyzes each problem through the Rust runtime, including validator checks, official output generation, and solution judging.
+3. It injects the analyzed runtime data into each problem configuration.
+4. It builds the selected problem target for every problem.
+5. It evaluates the contest target and combines the packaged problem outputs into the final contest directory.
+
+Use `-j` / `--jobs` to control how many problems Hull analyzes in parallel. Arguments after `--` are forwarded to the final `nix build`, so debugging flags like `--show-trace` remain available.
 
 This powerful mechanism allows you to create complex contest packages by composing pre-defined problem packages, ensuring consistency and modularity.

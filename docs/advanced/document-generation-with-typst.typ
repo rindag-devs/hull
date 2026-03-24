@@ -35,13 +35,13 @@ The core of Hull's document generation system is the declarative definition with
   }
   ```
 
-2. *Data Serialization*: When you run `hull build`, Hull first evaluates your complete `problem.nix`. It then gathers all relevant data—such as `name`, `displayName`, `tickLimit`, `memoryLimit`, `subtasks`, and sample test cases—and serializes it into a structured JSON file named `hull-generated.json`.
+2. *Data Serialization*: When you run `hull build`, Hull evaluates your complete `problem.nix`, runs the required runtime analysis, then gathers the resulting metadata—such as `name`, `displayName`, `tickLimit`, `memoryLimit`, `subtasks`, and sample test cases—and serializes it into a structured JSON file named `hull-generated.json`.
 
-3. *Typst Compilation*: Hull invokes the Typst compiler with a pre-configured template (provided by `hull.xcpcStatement`). Crucially, it passes the path to the newly created `hull-generated.json` as an input to the template.
+3. *Typst Compilation*: Hull invokes the Typst compiler with a pre-configured template (provided by `hull.xcpcStatement`). It passes the path to the generated `hull-generated.json` as an input to the template.
 
 4. *Rendering*: The Typst template reads the `hull-generated.json` file and uses the data within it to dynamically render the final PDF, combining technical data with the narrative content you provided.
 
-This workflow guarantees that your problem statement is a direct reflection of its technical definition. If you change a subtask score or a memory limit in `problem.nix`, the PDF will be automatically updated with the new values on the next build, eliminating any possibility of inconsistency.
+This workflow guarantees that your problem statement is a direct reflection of its technical definition. If you change a subtask score or a memory limit in `problem.nix`, the PDF will be updated with the generated values on the next build, eliminating any possibility of inconsistency.
 
 == Customizing the Template
 
@@ -75,7 +75,7 @@ The `en.typ` file does not contain any layout logic. It simply defines a set of 
 #let notes = none // Or provide content for the "Notes" section
 ```
 
-This modular design makes it straightforward to add support for new languages (by creating `{lang}.typ`) or to focus purely on the problem's content without worrying about visual presentation. For advanced customization, you can create your own document-generating function instead of using `hull.xcpcStatement`.
+This modular design makes it straightforward to add support for additional languages (by creating `{lang}.typ`) or to focus purely on the problem's content without worrying about visual presentation. For advanced customization, you can create your own document-generating function instead of using `hull.xcpcStatement`.
 
 == The `hull-generated.json` Data Structure
 

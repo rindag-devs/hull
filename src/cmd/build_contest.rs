@@ -13,62 +13,40 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
-use tracing::info;
 
-use crate::nix::{get_current_system, BuildCommand};
+use crate::runtime::{self, RuntimeOptions};
 
 #[derive(Parser)]
 pub struct BuildContestOpts {
   /// The contest to build, e.g., "day1".
   #[arg(long, short, default_value = "default")]
-  contest: String,
+  pub contest: String,
 
   /// The target to build, e.g., "default".
   #[arg(long, short, default_value = "default")]
-  target: String,
-
-  /// The system to build, e.g., "x86_64-linux".
-  #[arg(long)]
-  system: Option<String>,
+  pub target: String,
 
   /// Path to save the result link.
   #[arg(long, short, default_value = "result")]
-  out_link: String,
+  pub out_link: String,
 
-  /// Whether to let nix resolve git submodules.
-  #[arg(long)]
-  submodules: bool,
+  /// Number of parallel jobs used by the Rust runtime.
+  #[arg(short = 'j', long = "jobs")]
+  pub jobs: Option<usize>,
 
-  /// Extra arguments passed to nix build.
+  /// Extra arguments passed through to the final `nix build` invocation.
   #[arg(trailing_var_arg = true)]
-  extra_args: Vec<String>,
+  pub nix_args: Vec<String>,
 }
 
 pub fn run(build_opts: &BuildContestOpts) -> Result<()> {
-  let system = build_opts.system.clone().unwrap_or(
-    get_current_system().context("Failed to determine current system using `nix eval`")?,
-  );
-
-  let submodule_arg = if build_opts.submodules {
-    "?submodules=1"
-  } else {
-    ""
-  };
-
-  let flake_attr = format!(
-    ".{}#hullContests.{}.{}.config.targetOutputs.{}",
-    submodule_arg, system, build_opts.contest, build_opts.target
-  );
-
-  info!("Building target: {}", flake_attr);
-
-  BuildCommand::new()
-    .installable(&flake_attr)
-    .out_link(&build_opts.out_link)
-    .extra_args(&build_opts.extra_args)
-    .run()?;
-
-  Ok(())
+  runtime::build_contest(
+    &build_opts.contest,
+    &build_opts.target,
+    &build_opts.out_link,
+    RuntimeOptions::new(build_opts.jobs),
+    &build_opts.nix_args,
+  )
 }

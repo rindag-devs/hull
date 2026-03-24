@@ -11,6 +11,7 @@ clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
 num_cpus = "1"
 rand = "0.8"
+rayon = "1"
 regex = "1"
 serde = "1"
 serde_json = "1"

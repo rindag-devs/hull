@@ -16,44 +16,37 @@
 use anyhow::Result;
 use clap::Parser;
 
-use crate::runtime;
+use crate::runtime::{self, RuntimeOptions};
 
 #[derive(Parser)]
 pub struct BuildOpts {
   /// The problem to build, e.g., "aPlusB".
   #[arg(long, short, default_value = "default")]
-  problem: String,
+  pub problem: String,
 
   /// The target to build, e.g., "default".
   #[arg(long, short, default_value = "default")]
-  target: String,
-
-  /// The system to build, e.g., "x86_64-linux".
-  #[arg(long)]
-  system: Option<String>,
+  pub target: String,
 
   /// Path to save the result link.
   #[arg(long, short, default_value = "result")]
-  out_link: String,
+  pub out_link: String,
 
-  /// Whether to let nix resolve git submodules.
-  #[arg(long)]
-  submodules: bool,
+  /// Number of parallel jobs used by the Rust runtime.
+  #[arg(short = 'j', long = "jobs")]
+  pub jobs: Option<usize>,
 
-  /// Extra arguments passed to nix build.
+  /// Extra arguments passed through to the final `nix build` invocation.
   #[arg(trailing_var_arg = true)]
-  extra_args: Vec<String>,
+  pub nix_args: Vec<String>,
 }
 
 pub fn run(build_opts: &BuildOpts) -> Result<()> {
-  let _ = (
-    &build_opts.system,
-    build_opts.submodules,
-    &build_opts.extra_args,
-  );
   runtime::build_problem(
     &build_opts.problem,
     &build_opts.target,
     &build_opts.out_link,
+    RuntimeOptions::new(build_opts.jobs),
+    &build_opts.nix_args,
   )
 }

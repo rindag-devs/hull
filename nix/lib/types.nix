@@ -16,7 +16,6 @@
 {
   lib,
   hull,
-  pkgs,
   ...
 }:
 
@@ -181,60 +180,6 @@ let
     problem:
     lib.types.submodule (
       { config, name, ... }:
-      let
-        inputPath =
-          if config.inputFile != null then
-            config.inputFile
-          else if config.generator != null then
-            let
-              generatorCwasm =
-                if builtins.hasAttr config.generator problem.generators then
-                  problem.generators.${config.generator}.cwasm
-                else
-                  throw "In checker test `${name}`, generator `${config.generator}` not found in problem.generators";
-            in
-            hull.generate.input problem {
-              inherit generatorCwasm;
-              arguments = config.arguments or [ ];
-              name = "${problem.name}-checkerTestInput-${name}";
-            }
-          else
-            throw "Checker test `${name}` must have either inputFile or generator specified.";
-
-        outputPath =
-          if config.outputFile != null then
-            config.outputFile
-          else if config.solution != null then
-            let
-              sol =
-                if builtins.hasAttr config.solution problem.solutions then
-                  problem.solutions.${config.solution}
-                else
-                  throw "In checker test `${name}`, solution `${config.solution}` not found in problem.solutions";
-              fakeTestCase = {
-                name = "checkerTestOutput-${name}";
-                inherit (problem) tickLimit memoryLimit;
-                data.input = inputPath;
-              };
-              generatedOutputs = hull.judger.runGenerateOutputs problem fakeTestCase sol;
-            in
-            "${generatedOutputs}/${config.outputName}"
-          else
-            throw "Checker test `${name}` must have either outputFile or solution specified.";
-
-        answerPath =
-          let
-            fakeTestCase = {
-              name = "checkerTestAnswer-${name}";
-              data.input = inputPath;
-              tickLimit = problem.tickLimit;
-              memoryLimit = problem.memoryLimit;
-            };
-            generatedOutputs = hull.judger.runGenerateOutputs problem fakeTestCase problem.mainCorrectSolution;
-          in
-          "${generatedOutputs}/${config.outputName}";
-
-      in
       {
         options = {
           name = lib.mkOption {
@@ -277,7 +222,7 @@ let
             type = lib.types.pathInStore;
             readOnly = true;
             description = "The fully resolved input file used by this checker test.";
-            default = inputPath;
+            default = coerceStorePath problem.runtimeData.checker.testInputs.${config.name};
           };
           outputPath = lib.mkOption {
             type = lib.types.nullOr lib.types.pathInStore;
@@ -301,19 +246,6 @@ let
             readOnly = true;
             default = problem.checker.testResults.${config.name};
           };
-          resultDrv = lib.mkOption {
-            type = lib.types.pathInStore;
-            readOnly = true;
-            description = "A derivation of the report of running the checker on this test case.";
-            default = hull.check.drv {
-              name = "${problem.name}-checkerTest-${name}";
-              checkerWasm = problem.checker.cwasm;
-              input = inputPath;
-              output = outputPath;
-              answer = answerPath;
-            };
-            defaultText = "The derivation of the result of running the checker on this test case.";
-          };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
             readOnly = true;
@@ -330,26 +262,6 @@ let
     problem:
     lib.types.submodule (
       { config, name, ... }:
-      let
-        inputPath =
-          if config.inputFile != null then
-            config.inputFile
-          else if config.generator != null then
-            let
-              generatorCwasm =
-                if builtins.hasAttr config.generator problem.generators then
-                  problem.generators.${config.generator}.cwasm
-                else
-                  throw "In validator test `${name}`, generator `${config.generator}` not found in problem.generators";
-            in
-            hull.generate.input problem {
-              inherit generatorCwasm;
-              arguments = config.arguments or [ ];
-              name = "validator-test-input-${name}";
-            }
-          else
-            throw "Validator test `${name}` must have either inputFile or generator specified.";
-      in
       {
         options = {
           name = lib.mkOption {
@@ -377,7 +289,7 @@ let
             type = lib.types.pathInStore;
             readOnly = true;
             description = "The fully resolved input file used by this validator test.";
-            default = inputPath;
+            default = coerceStorePath problem.runtimeData.validator.testInputs.${config.name};
           };
           prediction = lib.mkOption {
             type = lib.types.functionTo lib.types.bool;
@@ -388,18 +300,6 @@ let
             description = "The result of this test.";
             readOnly = true;
             default = problem.validator.testResults.${config.name};
-          };
-          resultDrv = lib.mkOption {
-            type = lib.types.pathInStore;
-            readOnly = true;
-            description = "The derivation of the result of running the validator on this test case.";
-            default = hull.validate.drv {
-              problemName = problem.name;
-              testCaseName = "validatorTest-${name}";
-              validatorWasm = problem.validator.cwasm;
-              input = inputPath;
-            };
-            defaultText = "The result of running the validator on this test case.";
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
@@ -559,25 +459,15 @@ in
                   type = pathInStore;
                   readOnly = true;
                   description = "The store path to the input data file. It's either taken from `inputFile` or generated by `generator`.";
-                  default =
-                    if config.inputFile != null then
-                      config.inputFile
-                    else if config.generator != null then
-                      hull.generate.input problem config
-                    else
-                      throw "In test case `${config.name}`, `generator` and `inputFile` are both null";
-                  defaultText = "Derived from `inputFile` or `generator`.";
+                  default = coerceStorePath problem.runtimeData.testCases.${config.name}.data.input;
+                  defaultText = "Loaded from runtime analysis data.";
                 };
                 outputs = lib.mkOption {
                   type = pathInStore;
                   readOnly = true;
                   description = "A nix store path generated by running `mainCorrectSolution`. Each file in this directory is a correct output data file.";
-                  default =
-                    if problem.runtimeData ? testCases then
-                      coerceStorePath problem.runtimeData.testCases.${config.name}.data.outputs
-                    else
-                      hull.generate.outputs problem config;
-                  defaultText = "Loaded from runtime analysis data or generated during evaluation.";
+                  default = coerceStorePath problem.runtimeData.testCases.${config.name}.data.outputs;
+                  defaultText = "Loaded from runtime analysis data.";
                 };
               };
             };
@@ -589,7 +479,7 @@ in
             type = inputValidationReport;
             readOnly = true;
             description = "The result of running the validator on the test case's input data.";
-            default = problem.testCaseInputValidations.${config.name};
+            default = problem.runtimeData.testCases.${config.name}.inputValidation;
             defaultText = "Loaded from runtime analysis data.";
           };
         };
@@ -674,31 +564,14 @@ in
             type = attrsOf testCaseResult;
             readOnly = true;
             description = "The collected results of running and checking this solution against all test cases.";
-            default =
-              if problem.runtimeData ? solutions && problem.runtimeData.solutions ? "${config.name}" then
-                lib.mapAttrs (
-                  _: result:
-                  result
-                  // lib.optionalAttrs (result ? outputs) {
-                    outputs = coerceStorePath result.outputs;
-                  }
-                ) problem.runtimeData.solutions.${config.name}.testCaseResults
-              else
-                let
-                  drvs = lib.mapAttrs (tcName: tc: hull.judger.runJudge problem tc config) problem.testCases;
-                  links = pkgs.linkFarm "hull-testCaseResults-${problem.name}-${config.name}" drvs;
-                  results = lib.mapAttrs (
-                    tcName: drv:
-                    let
-                      contextSuffix = builtins.substring 0 0 "${drv}";
-                      outputs = "${links}/${tcName}/outputs" + contextSuffix;
-                      reportPath = "${links}/${tcName}/report.json" + contextSuffix;
-                    in
-                    (lib.importJSON reportPath) // { inherit outputs; }
-                  ) drvs;
-                in
-                results;
-            defaultText = "Loaded from runtime analysis data or computed by the configured judger.";
+            default = lib.mapAttrs (
+              _: result:
+              result
+              // lib.optionalAttrs (result ? outputs) {
+                outputs = coerceStorePath result.outputs;
+              }
+            ) problem.runtimeData.solutions.${config.name}.testCaseResults;
+            defaultText = "Loaded from runtime analysis data.";
           };
           subtaskResults = lib.mkOption {
             type = listOf (submodule {
@@ -725,65 +598,27 @@ in
             });
             readOnly = true;
             description = "The collected results of this solution against all subtasks.";
-            default =
-              if problem.runtimeData ? solutions && problem.runtimeData.solutions ? "${config.name}" then
-                map (
-                  result:
-                  result
-                  // {
-                    testCases = lib.mapAttrs (
-                      _: testCaseResult:
-                      testCaseResult
-                      // lib.optionalAttrs (testCaseResult ? outputs) {
-                        outputs = coerceStorePath testCaseResult.outputs;
-                      }
-                    ) result.testCases;
+            default = map (
+              result:
+              result
+              // {
+                testCases = lib.mapAttrs (
+                  _: testCaseResult:
+                  testCaseResult
+                  // lib.optionalAttrs (testCaseResult ? outputs) {
+                    outputs = coerceStorePath testCaseResult.outputs;
                   }
-                ) problem.runtimeData.solutions.${config.name}.subtaskResults
-              else
-                map (
-                  st:
-                  let
-                    testCases = builtins.listToAttrs (
-                      map (tc: {
-                        name = tc.name;
-                        value = config.testCaseResults.${tc.name};
-                      }) st.testCases
-                    );
-                    statuses = lib.unique (
-                      builtins.sort builtins.lessThan (lib.map ({ status, ... }: status) (builtins.attrValues testCases))
-                    );
-                    rawScore =
-                      if st.scoringMethod == "min" then
-                        builtins.foldl' lib.min 1.0 (map (tc: tc.score) (builtins.attrValues testCases))
-                      else if st.scoringMethod == "sum" then
-                        (builtins.foldl' builtins.add 0.0 (map (tc: tc.score) (builtins.attrValues testCases)))
-                        / (builtins.length (builtins.attrNames testCases))
-                      else
-                        throw "Invalid subtask scoring method: ${st.scoringMethod}";
-                    scaledScore = rawScore * st.fullScore;
-                  in
-                  {
-                    inherit
-                      testCases
-                      statuses
-                      rawScore
-                      scaledScore
-                      ;
-                  }
-                ) problem.subtasks;
-            defaultText = "Loaded from runtime analysis data or derived from test-case results.";
+                ) result.testCases;
+              }
+            ) problem.runtimeData.solutions.${config.name}.subtaskResults;
+            defaultText = "Loaded from runtime analysis data.";
           };
           score = lib.mkOption {
             type = float;
             readOnly = true;
             description = "This final score of the entire problem for this solution.";
-            default =
-              if problem.runtimeData ? solutions && problem.runtimeData.solutions ? "${config.name}" then
-                problem.runtimeData.solutions.${config.name}.score
-              else
-                builtins.foldl' builtins.add 0.0 (map ({ scaledScore, ... }: scaledScore) config.subtaskResults);
-            defaultText = "Loaded from runtime analysis data or derived from subtask results.";
+            default = problem.runtimeData.solutions.${config.name}.score;
+            defaultText = "Loaded from runtime analysis data.";
           };
         };
       }
@@ -802,16 +637,8 @@ in
           type = attrsOf checkReport;
           description = "The result of tests.";
           readOnly = true;
-          default =
-            if problem.runtimeData ? checker && problem.runtimeData.checker ? testResults then
-              problem.runtimeData.checker.testResults
-            else
-              let
-                drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.checker.tests;
-                results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
-              in
-              results;
-          defaultText = "Loaded from runtime analysis data or computed during evaluation.";
+          default = problem.runtimeData.checker.testResults;
+          defaultText = "Loaded from runtime analysis data.";
         };
       };
     });
@@ -829,16 +656,8 @@ in
           type = attrsOf inputValidationReport;
           description = "The result of tests.";
           readOnly = true;
-          default =
-            if problem.runtimeData ? validator && problem.runtimeData.validator ? testResults then
-              problem.runtimeData.validator.testResults
-            else
-              let
-                drvs = lib.mapAttrs (_: { resultDrv, ... }: resultDrv) problem.validator.tests;
-                results = lib.mapAttrs (_: drv: lib.importJSON drv) drvs;
-              in
-              results;
-          defaultText = "Loaded from runtime analysis data or computed during evaluation.";
+          default = problem.runtimeData.validator.testResults;
+          defaultText = "Loaded from runtime analysis data.";
         };
       };
     });

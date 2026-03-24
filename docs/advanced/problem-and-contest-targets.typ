@@ -10,7 +10,7 @@ This mechanism makes Hull problems highly portable. You can define a problem onc
 
 == Introduction to Targets
 
-Targets are defined within the `targets` attribute set in your `problem.nix` or `contest.nix` file. The `default` target is special; it's the one built when you run `hull build` or `hull build-contest` without specifying a target name.
+Targets are defined within the `targets` attribute set in your `problem.nix` or `contest.nix` file. The `default` target is special; it's the one built when you run `hull build` or `hull build-contest` without specifying a target name, after Hull has finished the runtime analysis needed by that package.
 
 ```nix
 # In problem.nix

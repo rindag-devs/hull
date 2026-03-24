@@ -12,7 +12,7 @@
     zh = "所有题目";
   };
 
-  problems = map (p: hull.evalProblem p { }) [
+  problems = [
     ../problem/aPlusB
     ../problem/aPlusBGrader
     ../problem/numberGuessing

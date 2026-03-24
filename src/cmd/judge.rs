@@ -22,33 +22,21 @@ use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Table};
 use serde::{Deserialize, Serialize};
 
-use crate::runtime::{analyze_problem, load_ad_hoc_problem_spec, RuntimeWorkspace};
+use crate::runtime::{RuntimeOptions, RuntimeWorkspace, analyze_problem, load_ad_hoc_problem_spec};
 use crate::utils::{format_size, format_tick};
 
 #[derive(Parser)]
 pub struct JudgeOpts {
   /// Path to the source file to judge.
-  src_path: String,
+  pub src_path: String,
 
   /// The problem to build, e.g., "aPlusB".
   #[arg(long, short, default_value = "default")]
-  problem: String,
-
-  /// The system to build, e.g., "x86_64-linux".
-  #[arg(long)]
-  system: Option<String>,
-
-  /// Whether to let nix resolve git submodules.
-  #[arg(long)]
-  submodules: bool,
+  pub problem: String,
 
   /// Output the result in JSON format.
   #[arg(long)]
-  json: bool,
-
-  /// Extra arguments passed to nix build.
-  #[arg(trailing_var_arg = true)]
-  extra_args: Vec<String>,
+  pub json: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -188,7 +176,7 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   let ad_hoc_name = "__hullAdHoc".to_string();
 
   let workspace = RuntimeWorkspace::new(std::env::temp_dir().join("hull-judge-runtime"))?;
-  let runtime = analyze_problem(&problem, &workspace)?;
+  let runtime = analyze_problem(&problem, &workspace, RuntimeOptions::new(None))?;
   let solution = runtime
     .solutions
     .get(&ad_hoc_name)

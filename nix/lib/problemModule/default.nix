@@ -114,41 +114,78 @@
     runtimeData = lib.mkOption {
       type = lib.types.attrs;
       description = "Aggregated runtime analysis data injected before packaging and reporting.";
-      default = { };
-      defaultText = "Runtime analysis data loaded by the Hull CLI.";
-    };
-
-    testCaseInputValidations = lib.mkOption {
-      type = lib.types.attrsOf hull.types.inputValidationReport;
-      description = "An attribute set describing the input validation report for all test cases.";
       default =
-        if config.runtimeData ? testCases then
-          lib.mapAttrs (_: value: value.inputValidation) config.runtimeData.testCases
-        else
-          let
-            drvs = lib.mapAttrs (
-              tcName:
-              { data, groups, ... }:
-              hull.validate.drv {
-                problemName = config.name;
-                testCaseName = tcName;
-                validatorWasm = config.validator.cwasm;
-                input = data.input;
-                readerTraceLevel = if builtins.elem "sample" groups then 2 else 1;
-              }
-            ) config.testCases;
-            links = pkgs.linkFarm "hull-testCaseInputValidations-${config.name}" drvs;
-            reports = lib.mapAttrs (
-              tcName: drv:
-              let
-                contextSuffix = builtins.substring 0 0 "${drv}";
-                pathWithContext = "${links}/${tcName}" + contextSuffix;
-              in
-              lib.importJSON pathWithContext
-            ) drvs;
-          in
-          reports;
-      defaultText = "Loaded from runtime analysis data or computed during evaluation.";
+        let
+          emptyDir = pkgs.runCommandLocal "hull-runtimePlaceholderDir-${config.name}" { } ''
+            mkdir -p $out
+          '';
+          emptyFile = builtins.toFile "hull-runtimePlaceholder-${config.name}.txt" "";
+          placeholderJudgeResult = {
+            status = "internal_error";
+            score = 0.0;
+            message = "runtime data missing";
+            tick = 0;
+            memory = 0;
+            outputs = emptyDir;
+          };
+        in
+        {
+          checker = {
+            testInputs = lib.mapAttrs (_: _: emptyFile) config.checker.tests;
+            testResults = lib.mapAttrs (_: _: {
+              status = "internal_error";
+              message = "runtime data missing";
+              score = 0.0;
+              readerTraceStacks = [ ];
+              evaluatorTraceStacks = [ ];
+            }) config.checker.tests;
+          };
+          validator = {
+            testInputs = lib.mapAttrs (_: _: emptyFile) config.validator.tests;
+            testResults = lib.mapAttrs (_: _: {
+              status = "internal_error";
+              message = "runtime data missing";
+              readerTraceStacks = [ ];
+              readerTraceTree = { };
+              traits = { };
+            }) config.validator.tests;
+          };
+          testCases = lib.mapAttrs (_: tc: {
+            data = {
+              input = if tc.inputFile != null then tc.inputFile else emptyFile;
+              outputs = emptyDir;
+            };
+            inputValidation = {
+              status = "internal_error";
+              message = "runtime data missing";
+              readerTraceStacks = [ ];
+              readerTraceTree = { };
+              traits = tc.traits;
+            };
+          }) config.testCases;
+          solutions = lib.mapAttrs (
+            _: _:
+            let
+              testCaseResults = lib.mapAttrs (_: _: placeholderJudgeResult) config.testCases;
+            in
+            {
+              inherit testCaseResults;
+              subtaskResults = map (st: {
+                testCases = builtins.listToAttrs (
+                  map (tc: {
+                    name = tc.name;
+                    value = testCaseResults.${tc.name};
+                  }) st.testCases
+                );
+                statuses = [ "internal_error" ];
+                rawScore = 0.0;
+                scaledScore = 0.0;
+              }) config.subtasks;
+              score = 0.0;
+            }
+          ) config.solutions;
+        };
+      defaultText = "Runtime analysis data loaded by the Hull CLI.";
     };
 
     tickLimit = lib.mkOption {

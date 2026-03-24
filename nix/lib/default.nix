@@ -46,16 +46,13 @@ let
     document = callSubLib ./document.nix;
     evalContest = callSubLib ./evalContest.nix;
     evalProblem = callSubLib ./evalProblem.nix;
-    generate = callSubLib ./generate.nix;
     judger = callSubLib ./judger;
-    judgeSingleFile = callSubLib ./judgeSingleFile.nix;
     language = callSubLib ./language.nix;
     overview = callSubLib ./overview;
     patchCplibProgram = callSubLib ./patchCplibProgram.nix;
     problemTarget = callSubLib ./problemTarget;
     runWasm = callSubLib ./runWasm.nix;
     runtime = callSubLib ./runtime.nix;
-    stress = callSubLib ./stress.nix;
     types = callSubLib ./types.nix;
     validate = callSubLib ./validate.nix;
     xcpcStatement = callSubLib ./xcpcStatement;

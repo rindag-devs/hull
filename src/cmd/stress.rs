@@ -18,12 +18,13 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use clap::Parser;
 use rand::Rng;
+use rayon::{ThreadPoolBuilder, prelude::*};
 use tracing::info;
 
 use crate::{
   runtime::{
-    analyze_problem, load_problem_spec, run_wasm_for_stdio, ProblemSpec, RuntimeWorkspace,
-    SubtaskSpec, TestCaseSpec,
+    ProblemSpec, RuntimeOptions, RuntimeWorkspace, SubtaskSpec, TestCaseSpec, analyze_problem,
+    load_problem_spec, run_wasm_for_stdio,
   },
   utils::{format_size, format_tick},
 };
@@ -32,51 +33,43 @@ use crate::{
 pub struct StressOpts {
   /// Name of the standard solution. If not provided, the problem's mainCorrectSolution will be used.
   #[arg(long, short)]
-  std: Option<String>,
+  pub std: Option<String>,
 
   /// Names of the solutions to test.
   #[arg(required = true)]
-  solutions: Vec<String>,
+  pub solutions: Vec<String>,
 
   /// Name of the generator to use.
   #[arg(long, short)]
-  generator: String,
+  pub generator: String,
 
   /// The problem to build, e.g., "aPlusB".
   #[arg(long, short, default_value = "default")]
-  problem: String,
+  pub problem: String,
 
-  /// The system to build, e.g., "x86_64-linux".
-  #[arg(long)]
-  system: Option<String>,
-
-  /// Number of test cases to run in parallel in a single batch.
-  #[arg(long, short)]
-  batch_size: Option<usize>,
+  /// Number of parallel jobs used for stress testing.
+  #[arg(short = 'j', long = "jobs")]
+  pub jobs: Option<usize>,
 
   /// Number of rounds to run. If not set, runs indefinitely.
   #[arg(long, short)]
-  rounds: Option<u64>,
+  pub rounds: Option<u64>,
 
   /// The name of the argument used to pass a random salt to the generator.
   #[arg(long, default_value = "salt")]
-  salt_arg: String,
+  pub salt_arg: String,
 
   /// Override the tick limit for this run.
   #[arg(long, short)]
-  tick_limit: Option<u64>,
+  pub tick_limit: Option<u64>,
 
   /// Override the memory limit (in bytes) for this run.
   #[arg(long, short)]
-  memory_limit: Option<u64>,
+  pub memory_limit: Option<u64>,
 
-  /// Whether to let nix resolve git submodules.
-  #[arg(long)]
-  submodules: bool,
-
-  /// Arguments for the generator, followed by '--' and then extra arguments for nix build.
+  /// Arguments for the generator, followed by '--'.
   #[arg(allow_hyphen_values = true, last = true)]
-  args: Vec<String>,
+  pub args: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -96,8 +89,6 @@ struct JudgeRunResult {
 }
 
 pub fn run(opts: &StressOpts) -> Result<()> {
-  let _ = (&opts.system, opts.submodules);
-
   let mut generator_args: Vec<String> = Vec::new();
   let mut args_iter = opts.args.iter();
   for arg in args_iter.by_ref() {
@@ -107,7 +98,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
     generator_args.push(arg.clone());
   }
 
-  let batch_size = opts.batch_size.unwrap_or_else(|| 4 * num_cpus::get());
+  let jobs = opts.jobs.unwrap_or_else(num_cpus::get).max(1);
 
   let mut problem = load_problem_spec(&opts.problem)?;
   if let Some(std_name) = &opts.std {
@@ -134,20 +125,17 @@ pub fn run(opts: &StressOpts) -> Result<()> {
         break;
       }
       info!(
-        "Starting stress test round {}/{} with batch size {}...",
-        round, max_rounds, batch_size
+        "Starting stress test round {}/{} with {} jobs...",
+        round, max_rounds, jobs
       );
     } else {
-      info!(
-        "Starting stress test round {} with batch size {}...",
-        round, batch_size
-      );
+      info!("Starting stress test round {} with {} jobs...", round, jobs);
     }
 
     let mut all_generator_args = Vec::new();
     let mut rng = rand::thread_rng();
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    for _ in 0..batch_size {
+    for _ in 0..jobs {
       let salt: String = (0..32)
         .map(|_| {
           let idx = rng.gen_range(0..CHARSET.len());
@@ -168,6 +156,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
       opts.tick_limit,
       opts.memory_limit,
       round,
+      RuntimeOptions { jobs },
     )?;
 
     info!("Stress test batch finished.");
@@ -202,12 +191,12 @@ pub fn run(opts: &StressOpts) -> Result<()> {
         if let Some(max_rounds) = opts.rounds {
           info!(
             "Round {}/{} finished. Not hacked. All solutions passed {} test cases.",
-            round, max_rounds, batch_size
+            round, max_rounds, jobs
           );
         } else {
           info!(
             "Round {} finished. Not hacked. All solutions passed {} test cases.",
-            round, batch_size
+            round, jobs
           );
         }
       }
@@ -227,66 +216,78 @@ fn run_stress_round(
   tick_limit_override: Option<u64>,
   memory_limit_override: Option<u64>,
   round: u64,
+  options: RuntimeOptions,
 ) -> Result<Option<FailingTestCase>> {
-  for (case_index, generator_args) in generator_args_list.iter().enumerate() {
-    let test_case_name = format!("stress-round-{round}-case-{case_index}");
-    let generated_input = generate_input(generator_cwasm, generator_args, &test_case_name)?;
-    let mut dynamic_problem = problem.clone();
-    dynamic_problem.test_cases = vec![TestCaseSpec {
-      name: test_case_name.clone(),
-      input_file: Some(generated_input.to_string_lossy().into_owned()),
-      tick_limit: tick_limit_override.unwrap_or(problem.tick_limit),
-      memory_limit: memory_limit_override.unwrap_or(problem.memory_limit),
-      groups: Vec::new(),
-      traits: BTreeMap::new(),
-      generator: Some(generator_name.to_string()),
-      arguments: Some(generator_args.clone()),
-    }];
-    dynamic_problem.validator_tests = Vec::new();
-    dynamic_problem.checker_tests = Vec::new();
-    dynamic_problem.subtasks = vec![SubtaskSpec {
-      full_score: 1.0,
-      scoring_method: "min".to_string(),
-      test_cases: vec![test_case_name.clone()],
-    }];
+  ThreadPoolBuilder::new()
+    .num_threads(options.jobs)
+    .build()
+    .context("Failed to build stress worker pool")?
+    .install(|| {
+      generator_args_list
+        .par_iter()
+        .enumerate()
+        .map(|(case_index, generator_args)| {
+          let test_case_name = format!("stress-round-{round}-case-{case_index}");
+          let generated_input = generate_input(generator_cwasm, generator_args, &test_case_name)?;
+          let mut dynamic_problem = problem.clone();
+          dynamic_problem.test_cases = vec![TestCaseSpec {
+            name: test_case_name.clone(),
+            input_file: Some(generated_input.to_string_lossy().into_owned()),
+            tick_limit: tick_limit_override.unwrap_or(problem.tick_limit),
+            memory_limit: memory_limit_override.unwrap_or(problem.memory_limit),
+            groups: Vec::new(),
+            traits: BTreeMap::new(),
+            generator: Some(generator_name.to_string()),
+            arguments: Some(generator_args.to_vec()),
+          }];
+          dynamic_problem.validator_tests = Vec::new();
+          dynamic_problem.checker_tests = Vec::new();
+          dynamic_problem.subtasks = vec![SubtaskSpec {
+            full_score: 1.0,
+            scoring_method: "min".to_string(),
+            test_cases: vec![test_case_name.clone()],
+          }];
 
-    let workspace = RuntimeWorkspace::new(
-      std::env::temp_dir().join(format!("hull-stress-{round}-{case_index}")),
-    )?;
-    let runtime = analyze_problem(&dynamic_problem, &workspace)?;
+          let workspace = RuntimeWorkspace::new(
+            std::env::temp_dir().join(format!("hull-stress-{round}-{case_index}")),
+          )?;
+          let runtime = analyze_problem(&dynamic_problem, &workspace, options)?;
 
-    for solution in dynamic_problem
-      .solutions
-      .iter()
-      .filter(|solution| solution.name != dynamic_problem.main_correct_solution)
-    {
-      let solution_report = runtime
-        .solutions
-        .get(&solution.name)
-        .and_then(|solution_runtime| solution_runtime.test_case_results.get(&test_case_name))
-        .with_context(|| {
-          format!(
-            "Missing stress result for solution '{}' and test case '{}'",
-            solution.name, test_case_name
-          )
-        })?;
-      if solution_report.status != "accepted" {
-        return Ok(Some(FailingTestCase {
-          args: generator_args.clone(),
-          failing_solution_name: solution.name.clone(),
-          report: JudgeRunResult {
-            status: solution_report.status.clone(),
-            score: solution_report.score,
-            tick: solution_report.tick,
-            memory: solution_report.memory,
-            message: solution_report.message.clone(),
-          },
-        }));
-      }
-    }
-  }
+          for solution in dynamic_problem
+            .solutions
+            .iter()
+            .filter(|solution| solution.name != dynamic_problem.main_correct_solution)
+          {
+            let solution_report = runtime
+              .solutions
+              .get(&solution.name)
+              .and_then(|solution_runtime| solution_runtime.test_case_results.get(&test_case_name))
+              .with_context(|| {
+                format!(
+                  "Missing stress result for solution '{}' and test case '{}'",
+                  solution.name, test_case_name
+                )
+              })?;
+            if solution_report.status != "accepted" {
+              return Ok(Some(FailingTestCase {
+                args: generator_args.to_vec(),
+                failing_solution_name: solution.name.clone(),
+                report: JudgeRunResult {
+                  status: solution_report.status.clone(),
+                  score: solution_report.score,
+                  tick: solution_report.tick,
+                  memory: solution_report.memory,
+                  message: solution_report.message.clone(),
+                },
+              }));
+            }
+          }
 
-  Ok(None)
+          Ok(None)
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(|cases| cases.into_iter().flatten().next())
+    })
 }
 
 fn generate_input(

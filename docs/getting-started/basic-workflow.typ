@@ -23,9 +23,9 @@ Let's explore the most essential commands in a typical workflow.
 The `hull build` command is a comprehensive validation and packaging step. It serves as a sanity check for your entire problem configuration, ensuring that everything is consistent and correct before you proceed.
 
 *What it does:*
-- *Evaluates `problem.nix`*: It parses your problem definition, including all test cases, subtasks, solutions, and programs.
-- *Runs Automated Checks*: It automatically runs tests on your validator and checker, and critically, it verifies that the performance of each solution on each subtask matches your `subtaskPredictions`. This catches inconsistencies early.
-- *Builds the Default Target*: It compiles all necessary components and packages them into a final, structured output according to the `default` target defined in `problem.nix`.
+- *Loads Problem Metadata*: It evaluates your problem definition and extracts the metadata needed for validation, judging, and packaging.
+- *Runs Runtime Analysis*: It executes validator tests, checker tests, sample generation, and solution judging through Hull's Rust runtime, then verifies that each solution matches its `subtaskPredictions`.
+- *Builds the Default Target*: It injects the analyzed runtime data back into the problem target and packages the final result according to the `default` target defined in `problem.nix`.
 
 To build your problem, simply run:
 
@@ -33,7 +33,7 @@ To build your problem, simply run:
 hull build
 ```
 
-Upon successful completion, Hull creates a symbolic link named `result` in your project directory. This link points to the build output in the Nix store. The contents of this directory depend on the target definition (e.g., `problemTarget.common`), but it typically contains a structured layout of your entire problem:
+Upon successful completion, Hull creates a symbolic link named `result` in your project directory. Use `-j` / `--jobs` to control how many runtime analysis tasks Hull executes in parallel during the build. Arguments after `--` are forwarded to the final `nix build`, which is useful for flags like `--show-trace`. This link points to the build output in the Nix store. The contents of this directory depend on the target definition (e.g., `problemTarget.common`), but it typically contains a structured layout of your entire problem:
 
 - `data/`: Contains all test case inputs and the corresponding standard answer files.
 - `solution/`: Contains detailed judging results for every defined solution.
@@ -48,9 +48,9 @@ To test a single solution file against the problem's test cases, use the `hull j
 
 *What it does:*
 
-- *Compiles the Solution*: It compiles the specified source file to a WebAssembly module.
-- *Executes Against Test Cases*: It runs the compiled module against every test case defined in `problem.nix`, enforcing the specified `tickLimit` and `memoryLimit`.
-- *Checks the Output*: It uses the problem's `checker` to compare the solution's output against the standard answer for each test case.
+- *Loads Problem Metadata*: It resolves the selected problem and adds the ad-hoc source file as a temporary solution.
+- *Executes Against Test Cases*: It runs the solution against every test case defined in `problem.nix`, enforcing the specified `tickLimit` and `memoryLimit`.
+- *Checks the Output*: It uses the problem's `checker` to compare the solution's output against the official outputs for each test case.
 - *Generates a Report*: It prints a detailed, human-readable report of the results.
 
 For example, to judge the standard correct solution provided in the template:
@@ -73,7 +73,7 @@ Stress testing (also known as fuzz testing or randomized testing) is a powerful 
 
 *What it does:*
 
-1. In a loop, it repeatedly calls the specified generator with a random seed to create a new test case.
+1. In a loop, it repeatedly calls the specified generator with a random seed to create test cases.
 2. It runs the standard solution to get the correct answer.
 3. It runs the solution-under-test on the same input.
 4. It uses the problem's checker to compare their outputs.
@@ -85,4 +85,4 @@ For example, imagine you have a potentially buggy solution `wa` and a generator 
 hull stress --generator rand wa -- some parameters passed --to=generator
 ```
 
-If a failing test case is found, the process stops and prints a report, including the generator arguments that produced the failing case. This makes it easy to reproduce the failure and add it to your `problem.nix` for regression testing.
+If a failing test case is found, the process stops and prints a report, including the generator arguments that produced the failing case. The `-j` / `--jobs` option controls how many generated cases are explored in parallel during each round.

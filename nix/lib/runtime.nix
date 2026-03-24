@@ -207,11 +207,6 @@ let
     in
     checkedContest.targets.${targetName} checkedContest;
 
-  contestMetadata = contestConfig: {
-    name = contestConfig.name;
-    problemNames = map (problem: problem.config.problemAttrs.name) contestConfig.problems;
-  };
-
   withAdHocSolution =
     problemConfig: srcPath:
     withProblemModules problemConfig [
@@ -237,13 +232,24 @@ let
       ];
       includeTests = false;
     };
+
+  contestMetadata = contest: {
+    name = contest.config.name;
+    problems = map (
+      problem:
+      let
+        evaluated = if problem ? config then problem else hull.evalProblem problem { };
+      in
+      problemMetadata evaluated.config { }
+    ) contest.config.problems;
+  };
 in
 {
   inherit
     adHocProblemMetadata
     buildContestTarget
-    contestMetadata
     buildProblemTarget
+    contestMetadata
     problemMetadata
     withProblemRuntimeData
     ;

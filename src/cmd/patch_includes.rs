@@ -134,16 +134,16 @@ impl Replacer {
 #[derive(Parser)]
 pub struct PatchIncludesOpts {
   /// Path to the input source file.
-  input_path: String,
+  pub input_path: String,
 
   /// Path to the output source file.
-  output_path: String,
+  pub output_path: String,
 
   /// The regular expression to find.
-  find: String,
+  pub find: String,
 
   /// The replacement string. Supports capture groups like $1, ${name}, etc.
-  replace_with: String,
+  pub replace_with: String,
 
   #[arg(short = 'f', long, verbatim_doc_comment)]
   /**
@@ -156,7 +156,7 @@ pub struct PatchIncludesOpts {
    * s - `.` matches newline.
    * w - match whole words only.
    */
-  flags: Option<String>,
+  pub flags: Option<String>,
 }
 
 pub fn run(opts: &PatchIncludesOpts) -> Result<()> {

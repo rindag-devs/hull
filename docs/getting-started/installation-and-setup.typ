@@ -4,7 +4,7 @@
 
 = Installation & Setup
 
-This chapter will guide you through the initial setup process required to use Hull. We will cover the necessary prerequisites, how to create a new problem project from the official template, and how to enter the specialized development environment.
+This chapter will guide you through the initial setup process required to use Hull. We will cover the necessary prerequisites, how to create a problem project from the official template, and how to enter the specialized development environment.
 
 == Prerequisites
 
@@ -16,7 +16,7 @@ If you do not have Nix installed, please follow the official instructions at #li
 
 === 2. Enable Flakes
 
-Flakes are a new, powerful feature in Nix that provide better reproducibility and a more user-friendly interface. Hull relies on them. To enable Flakes, you need to edit your Nix configuration file.
+Flakes are a Nix feature that provides reproducibility and a more user-friendly interface. Hull relies on them. To enable Flakes, you need to edit your Nix configuration file.
 
 The location of this file depends on your system:
 - On NixOS: `/etc/nixos/configuration.nix`
@@ -42,25 +42,25 @@ nix flake --version
 
 == Creating a New Problem
 
-The easiest way to start a new problem is by using the official Hull flake template. This provides a standard directory structure and a pre-configured `problem.nix` file.
+The easiest way to start a problem is by using the official Hull flake template. This provides a standard directory structure and a pre-configured `problem.nix` file.
 
 === Creating a New Project Directory
 
-To create a new problem in a new directory, use the `nix flake new` command. This will create a directory and populate it with the contents of the template.
+To create a problem in a directory, use `nix flake init` inside that directory.
 
 ```bash
-# This creates a new project in the 'myProblem' directory
-nix flake new -t github:rindag-devs/hull --refresh myProblem
+# Initialize this directory from the basic Hull template
+nix flake init -t github:rindag-devs/hull#basic
 ```
 
 === Initializing an Existing Directory
 
-If you already have an empty directory where you want to set up your problem, you can use `nix flake init`.
+If you already have an empty directory where you want to set up your problem, you can initialize it directly.
 
 ```bash
 mkdir myProblem
 cd myProblem
-nix flake init -t github:rindag-devs/hull --refresh
+nix flake init -t github:rindag-devs/hull#basic
 ```
 
 == Entering the Development Environment
@@ -72,7 +72,7 @@ cd myProblem
 nix develop
 ```
 
-The `nix develop` command launches a new shell session that is specifically configured for your Hull project. Inside this shell:
+The `nix develop` command launches a shell session that is configured for your Hull project. Inside this shell:
 - The `hull` command-line interface (CLI) is available in your `PATH`.
 - All necessary compilers (e.g., `wasm32-wasi-wasip1-clang++`) and tools are ready to use.
 - Environment variables are set up for seamless integration with libraries like `cplib`.
