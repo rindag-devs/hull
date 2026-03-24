@@ -16,33 +16,19 @@
         name = "${config.name}-transform";
         extraObjects = [ ];
       };
-      transformCwasm = hull.compile.cwasm {
-        name = "${config.name}-transform";
-        wasm = transformWasm;
-      };
     in
     {
       _type = "hullJudger";
 
-      prepareSolution =
-        solution:
-        let
-          # This custom multi-phase judger runs the contestant program multiple
-          # times, so it prepares a reusable executable once here.
-          solutionWasm = hull.compile.executable {
-            inherit (config) languages includes;
-            src = solution.src;
-            name = "${config.name}-solution-${solution.name}";
-            extraObjects = [ ];
-          };
-        in
-        {
+      prepareSolution = solution: {
+        src = solution.src;
+        executable = hull.compile.executable {
+          name = "${config.name}-solution-${solution.name}";
+          inherit (config) languages includes;
           src = solution.src;
-          executable = hull.compile.cwasm {
-            name = "${config.name}-solution-${solution.name}";
-            wasm = solutionWasm;
-          };
+          extraObjects = [ ];
         };
+      };
 
       # This function generates the standard answer files using the main correct solution.
       # It writes the output files `first` and `second` into `$HULL_OUTPUTS_DIR`.
@@ -67,7 +53,7 @@
 
           # Transform: Generate input for phase 2
           ${hull.runWasm.script {
-            wasm = transformCwasm;
+            wasm = transformWasm;
             argumentsRaw = ''"--salt=$testCaseNameHash"'';
             stdin = "$HULL_INPUT_PATH";
             inputFiles = {
@@ -138,7 +124,7 @@
 
           # Phase 1: Check
           ${hull.check.script {
-            checkerWasm = config.checker.cwasm;
+            checkerWasm = config.checker.wasm;
             input = "$HULL_INPUT_PATH";
             output = "$output_dir/firstOut.txt";
             answer = "$HULL_OFFICIAL_OUTPUTS_DIR/first";
@@ -159,7 +145,7 @@
 
             # Transform
             ${hull.runWasm.script {
-              wasm = transformCwasm;
+              wasm = transformWasm;
               argumentsRaw = ''"--salt=$testCaseNameHash"'';
               stdin = "$HULL_INPUT_PATH";
               inputFiles = {
@@ -171,7 +157,7 @@
 
           # Validate
           ${hull.validate.script {
-            validatorWasm = config.validator.cwasm;
+            validatorWasm = config.validator.wasm;
             input = "$output_dir/secondIn.txt";
           }}
           cp validation.json validation_report.json
@@ -211,7 +197,7 @@
 
           # Phase 2: Check
           ${hull.check.script {
-            checkerWasm = config.checker.cwasm;
+            checkerWasm = config.checker.wasm;
             input = "$output_dir/secondIn.txt";
             output = "$output_dir/secondOut.txt";
             answer = "$HULL_OFFICIAL_OUTPUTS_DIR/second";

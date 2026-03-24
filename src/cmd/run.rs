@@ -28,6 +28,7 @@ use wasi_common::{
 use crate::{
   nix::{BuildCommand, get_current_system, get_flake_url},
   runner,
+  runtime::cache_native_module,
 };
 
 #[derive(Parser)]
@@ -132,10 +133,9 @@ pub fn run(opts: &RunOpts) -> Result<()> {
     .context("Failed to execute `nix build` for compilation")?;
 
   info!("Precompiling program");
-  let wasm_bytes = fs::read(&wasm_path)
-    .with_context(|| format!("Failed to read compiled WASM from {}", &wasm_path))?;
-
-  let cwasm_bytes = runner::compile(&wasm_bytes)?;
+  let cwasm_path = cache_native_module(&wasm_path)?;
+  let cwasm_bytes = fs::read(&cwasm_path)
+    .with_context(|| format!("Failed to read executable artifact from {}", &cwasm_path))?;
 
   let stdin: Box<dyn WasiFile> = Box::new(ReadPipe::new(std::io::stdin()));
   let stdout: Box<dyn WasiFile> = Box::new(WritePipe::new(std::io::stdout()));

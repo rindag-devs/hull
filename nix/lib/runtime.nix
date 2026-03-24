@@ -91,7 +91,6 @@ let
   serializeProgram = program: {
     src = toString (program.src or null);
     wasm = serializeArtifact (program.wasm or null);
-    cwasm = serializeArtifact (program.cwasm or null);
   };
 
   problemMetadata =

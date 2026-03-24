@@ -96,20 +96,6 @@ let
           };
         defaultText = lib.literalExpression "(problem.languages.\${config.language}).compile.executable { ... }";
       };
-      cwasm = lib.mkOption {
-        type = lib.types.package;
-        readOnly = true;
-        description = "The pre-compiled (AOT) CWASM artifact of the program.";
-        default = hull.compile.cwasm {
-          name = "${problem.name}-program-${builtins.baseNameOf config.src}";
-          wasm = config.wasm;
-        };
-        defaultText = lib.literalExpression ''
-          hull.compile.cwasm {
-            name = ...;
-            wasm = config.wasm;
-          }'';
-      };
       participantVisibility = lib.mkOption {
         type = lib.types.strMatching "no|src|wasm";
         default = "no";
@@ -394,22 +380,6 @@ in
             type = nullOr nonEmptyStr;
             default = null;
             description = "The name of the generator (from the top-level `generators` set) to use for creating the input file. If set, `inputFile` should be null.";
-          };
-          generatorCwasm = lib.mkOption {
-            type = nullOr pathInStore;
-            readOnly = true;
-            description = "The store path to the compiled CWASM of the specified generator.";
-            default =
-              let
-                generatorName = config.generator;
-              in
-              if generatorName == null then
-                null
-              else if builtins.hasAttr generatorName problem.generators then
-                problem.generators.${generatorName}.cwasm
-              else
-                throw "In test case `${config.name}`, generator `${generatorName}` not found";
-            defaultText = "The `.cwasm` attribute of the corresponding generator in `problem.generators`.";
           };
           arguments = lib.mkOption {
             type = nullOr (listOf str);

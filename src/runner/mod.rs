@@ -137,6 +137,10 @@ pub fn compile(wasm: &[u8]) -> Result<Vec<u8>> {
   Ok(engine.precompile_module(wasm)?)
 }
 
+pub fn is_precompiled(wasm: &[u8]) -> bool {
+  Engine::detect_precompiled(wasm).is_some()
+}
+
 pub fn run(
   wasm: &[u8],
   arguments: &[String],

@@ -13,12 +13,15 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
+use sha2::{Digest, Sha256};
 
 use super::types::{ArtifactSpec, RuntimeData};
+use crate::runner;
 
 pub fn realize_artifact(artifact: &ArtifactSpec) -> Result<String> {
   if Path::new(&artifact.path).exists() {
@@ -66,6 +69,78 @@ pub fn realize_artifact(artifact: &ArtifactSpec) -> Result<String> {
       )
     }
   }
+}
+
+pub fn cache_native_module(module_path: &str) -> Result<String> {
+  let module_bytes = fs::read(module_path)
+    .with_context(|| format!("Failed to read module artifact {}", module_path))?;
+
+  if runner::is_precompiled(&module_bytes) {
+    return Ok(module_path.to_string());
+  }
+
+  let cache_dir = native_module_cache_dir()?;
+  fs::create_dir_all(&cache_dir).with_context(|| {
+    format!(
+      "Failed to create native module cache {}",
+      cache_dir.display()
+    )
+  })?;
+
+  let mut hasher = Sha256::new();
+  hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
+  hasher.update(std::env::consts::ARCH.as_bytes());
+  hasher.update(std::env::consts::OS.as_bytes());
+  hasher.update(&module_bytes);
+  let cache_key = format!("{:x}", hasher.finalize());
+  let cached_path = cache_dir.join(format!("{cache_key}.cwasm"));
+
+  if cached_path.exists() {
+    return Ok(cached_path.to_string_lossy().into_owned());
+  }
+
+  let compiled_bytes = runner::compile(&module_bytes)?;
+  let temp_path = cache_dir.join(format!("{cache_key}.{}.tmp", std::process::id()));
+  fs::write(&temp_path, compiled_bytes).with_context(|| {
+    format!(
+      "Failed to write cached native module {}",
+      temp_path.display()
+    )
+  })?;
+
+  match fs::rename(&temp_path, &cached_path) {
+    Ok(()) => {}
+    Err(err) if cached_path.exists() => {
+      let _ = fs::remove_file(&temp_path);
+      let _ = err;
+    }
+    Err(err) => {
+      let _ = fs::remove_file(&temp_path);
+      return Err(err).with_context(|| {
+        format!(
+          "Failed to move cached native module into place at {}",
+          cached_path.display()
+        )
+      });
+    }
+  }
+
+  Ok(cached_path.to_string_lossy().into_owned())
+}
+
+fn native_module_cache_dir() -> Result<PathBuf> {
+  if let Some(cache_home) = std::env::var_os("XDG_CACHE_HOME") {
+    return Ok(PathBuf::from(cache_home).join("hull").join("cwasm"));
+  }
+
+  let home =
+    std::env::var_os("HOME").context("Failed to determine HOME for native module cache")?;
+  Ok(
+    PathBuf::from(home)
+      .join(".cache")
+      .join("hull")
+      .join("cwasm"),
+  )
 }
 
 pub fn add_path_to_store(path: &str) -> Result<String> {

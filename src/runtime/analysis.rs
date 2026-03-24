@@ -32,7 +32,7 @@ use super::types::{
 use super::workspace::RuntimeWorkspace;
 use crate::runner::RunStatus;
 
-const TOOL_TICK_LIMIT: u64 = u64::MAX;
+const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
 const TOOL_MEMORY_LIMIT: u64 = u32::MAX as u64;
 
 // Execute the full runtime analysis for one problem and return the data that
@@ -293,16 +293,16 @@ fn run_validator(
   input_path: &Path,
   reader_trace_level: u8,
 ) -> Result<ValidationReport> {
-  let validator_cwasm = realize_artifact(
+  let validator_wasm = realize_artifact(
     problem
       .validator
-      .cwasm
+      .wasm
       .as_ref()
-      .context("Validator metadata is missing `cwasm`")?,
+      .context("Validator metadata is missing `wasm`")?,
   )?;
 
   let result = run_wasm_for_stdio(
-    &validator_cwasm,
+    &validator_wasm,
     Some(input_path),
     &[format!("--reader-trace-level={reader_trace_level}")],
     TOOL_TICK_LIMIT,
@@ -327,12 +327,12 @@ fn run_checker(
   output_path: &Path,
   answer_path: &Path,
 ) -> Result<CheckerReport> {
-  let checker_cwasm = realize_artifact(
+  let checker_wasm = realize_artifact(
     problem
       .checker
-      .cwasm
+      .wasm
       .as_ref()
-      .context("Checker metadata is missing `cwasm`")?,
+      .context("Checker metadata is missing `wasm`")?,
   )?;
 
   let mount = vec![
@@ -342,7 +342,7 @@ fn run_checker(
   ];
 
   let result = run_wasm_for_stdio(
-    &checker_cwasm,
+    &checker_wasm,
     None,
     &[
       "input".to_string(),
@@ -620,18 +620,18 @@ fn resolve_test_input(
       temp_name
     )
   })?;
-  let generator_cwasm = problem
+  let generator_wasm = problem
     .generators
     .get(generator_name)
-    .and_then(|program| program.cwasm.as_ref())
-    .with_context(|| format!("Generator '{}' is missing `cwasm` metadata", generator_name))?;
-  let generator_cwasm = realize_artifact(generator_cwasm)?;
+    .and_then(|program| program.wasm.as_ref())
+    .with_context(|| format!("Generator '{}' is missing `wasm` metadata", generator_name))?;
+  let generator_wasm = realize_artifact(generator_wasm)?;
   let result = run_wasm_for_stdio(
-    &generator_cwasm,
+    &generator_wasm,
     None,
     arguments.unwrap_or(&[]),
-    u64::MAX,
-    u32::MAX as u64,
+    TOOL_TICK_LIMIT,
+    TOOL_MEMORY_LIMIT,
     &[],
   )?;
   let path = std::env::temp_dir().join(format!(

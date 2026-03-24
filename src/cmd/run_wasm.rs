@@ -20,7 +20,10 @@ use wasi_common::{
   pipe::{ReadPipe, WritePipe},
 };
 
-use crate::runner::{self, RunStatus, judge_dir::JudgeDir};
+use crate::{
+  runner::{self, RunStatus, judge_dir::JudgeDir},
+  runtime::cache_native_module,
+};
 
 const DEFAULT_TICK_LIMIT: u64 = 100_000_000_000;
 const DEFAULT_MEMORY_LIMIT: u64 = u32::MAX as u64;
@@ -152,7 +155,8 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
     Box::new(WritePipe::new(std::io::sink()))
   };
 
-  let wasm_bytes = std::fs::read(&run_wasm_opts.wasm_path)?;
+  let executable_path = cache_native_module(&run_wasm_opts.wasm_path)?;
+  let wasm_bytes = std::fs::read(&executable_path)?;
 
   let judge_dir = JudgeDir::new(&run_wasm_opts.read_files, &run_wasm_opts.write_files)?;
 

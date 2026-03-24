@@ -46,26 +46,16 @@ in
 {
   _type = "hullJudger";
 
-  prepareSolution =
-    solution:
-    let
-      # The interactive runner launches the prepared solution executable and the
-      # interactor in a custom shell workflow, so the executable is prepared up front.
-      solWasm = hull.compile.executable {
-        inherit languages;
-        name = "${problem.name}-solution-${solution.name}";
-        src = solution.src;
-        includes = problem.includes;
-        extraObjects = [ ];
-      };
-    in
-    {
+  prepareSolution = solution: {
+    src = solution.src;
+    executable = hull.compile.executable {
+      inherit languages;
+      name = "${problem.name}-solution-${solution.name}";
       src = solution.src;
-      executable = hull.compile.cwasm {
-        name = "${problem.name}-solution-${solution.name}";
-        wasm = solWasm;
-      };
+      includes = problem.includes;
+      extraObjects = [ ];
     };
+  };
 
   judge = pkgs.writeShellApplication {
     name = "hull-judger-stdioInteraction-judge-${problem.name}";
@@ -87,16 +77,16 @@ in
       intr_to_sol=intr_to_sol
       interactor_json=interactor.json
       run_json=run.json
-      sol_cwasm=sol.cwasm
-      interactor_cwasm=interactor.cwasm
+      sol_wasm=sol.wasm
+      interactor_wasm=interactor.wasm
       input_path=input
 
       mkfifo "$sol_to_intr" "$intr_to_sol"
-      cp "$HULL_SOLUTION_EXECUTABLE" "$sol_cwasm"
-      cp ${problem.checker.cwasm} "$interactor_cwasm"
+      cp "$HULL_SOLUTION_EXECUTABLE" "$sol_wasm"
+      cp ${problem.checker.wasm} "$interactor_wasm"
       cp "$HULL_INPUT_PATH" "$input_path"
 
-      hull run-wasm "$interactor_cwasm" \
+      hull run-wasm "$interactor_wasm" \
         --stdin-path="$sol_to_intr" \
         --stdout-path="$intr_to_sol" \
         --stderr-path="$interactor_json" \
@@ -104,7 +94,7 @@ in
         -- input &
       intr_pid=$!
 
-      timeout ${toString realTimeLimitSeconds}s hull run-wasm "$sol_cwasm" \
+      timeout ${toString realTimeLimitSeconds}s hull run-wasm "$sol_wasm" \
         --stdin-path="$intr_to_sol" \
         --stdout-path="$sol_to_intr" \
         --tick-limit="$HULL_TICK_LIMIT" \

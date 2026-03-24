@@ -22,7 +22,10 @@ use wasi_common::{
   pipe::{ReadPipe, WritePipe},
 };
 
-use crate::runner::{self, RunStatus};
+use crate::{
+  runner::{self, RunStatus},
+  runtime::cache_native_module,
+};
 
 pub struct WasmRunResult {
   pub status: RunStatus,
@@ -41,8 +44,9 @@ pub fn run_wasm_for_stdio(
   memory_limit: u64,
   read_files: &[(PathBuf, String)],
 ) -> Result<WasmRunResult> {
-  let wasm_bytes =
-    fs::read(wasm_path).with_context(|| format!("Failed to read WASM artifact {}", wasm_path))?;
+  let executable_path = cache_native_module(wasm_path)?;
+  let wasm_bytes = fs::read(&executable_path)
+    .with_context(|| format!("Failed to read executable artifact {}", executable_path))?;
 
   let stdin: Box<dyn WasiFile> = match stdin_path {
     Some(path) => Box::new(ReadPipe::from(

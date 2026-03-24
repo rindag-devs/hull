@@ -57,26 +57,16 @@ in
 {
   _type = "hullJudger";
 
-  prepareSolution =
-    solution:
-    let
-      # Batch-style packaged judgers execute a precompiled contestant program,
-      # so prepareSolution materializes the executable expected by the runner.
-      wasm = hull.compile.executable {
-        inherit languages;
-        name = "${problem.name}-solution-${solution.name}";
-        src = solution.src;
-        includes = problem.includes;
-        extraObjects = compiledObjects;
-      };
-    in
-    {
+  prepareSolution = solution: {
+    src = solution.src;
+    executable = hull.compile.executable {
+      inherit languages;
+      name = "${problem.name}-solution-${solution.name}";
       src = solution.src;
-      executable = hull.compile.cwasm {
-        name = "${problem.name}-solution-${solution.name}";
-        inherit wasm;
-      };
+      includes = problem.includes;
+      extraObjects = compiledObjects;
     };
+  };
 
   generateOutputs = pkgs.writeShellApplication {
     name = "hull-judger-batch-generateOutputs-${problem.name}";
@@ -122,7 +112,7 @@ in
 
       if [ "$run_status" = "accepted" ]; then
         ${hull.check.script {
-          checkerWasm = problem.checker.cwasm;
+          checkerWasm = problem.checker.wasm;
           input = "$HULL_INPUT_PATH";
           output = "$run_stdout";
           answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";

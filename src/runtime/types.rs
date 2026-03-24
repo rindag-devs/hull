@@ -42,7 +42,6 @@ pub struct ArtifactSpec {
 pub struct ProgramSpec {
   pub src: Option<String>,
   pub wasm: Option<ArtifactSpec>,
-  pub cwasm: Option<ArtifactSpec>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

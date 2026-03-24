@@ -110,11 +110,11 @@ pub fn run(opts: &StressOpts) -> Result<()> {
     solution.name == problem.main_correct_solution || solutions_to_test.contains(&solution.name)
   });
 
-  let generator_cwasm = problem
+  let generator_wasm = problem
     .generators
     .get(&opts.generator)
-    .and_then(|program| program.cwasm.as_ref())
-    .with_context(|| format!("Generator '{}' is missing `cwasm` metadata", opts.generator))?
+    .and_then(|program| program.wasm.as_ref())
+    .with_context(|| format!("Generator '{}' is missing `wasm` metadata", opts.generator))?
     .clone();
 
   let mut round = 1;
@@ -150,7 +150,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
 
     let hacked_case = run_stress_round(
       &problem,
-      &crate::runtime::realize_artifact(&generator_cwasm)?,
+      &crate::runtime::realize_artifact(&generator_wasm)?,
       &all_generator_args,
       &opts.generator,
       opts.tick_limit,
@@ -210,7 +210,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
 
 fn run_stress_round(
   problem: &ProblemSpec,
-  generator_cwasm: &str,
+  generator_wasm: &str,
   generator_args_list: &[Vec<String>],
   generator_name: &str,
   tick_limit_override: Option<u64>,
@@ -228,7 +228,7 @@ fn run_stress_round(
         .enumerate()
         .map(|(case_index, generator_args)| {
           let test_case_name = format!("stress-round-{round}-case-{case_index}");
-          let generated_input = generate_input(generator_cwasm, generator_args, &test_case_name)?;
+          let generated_input = generate_input(generator_wasm, generator_args, &test_case_name)?;
           let mut dynamic_problem = problem.clone();
           dynamic_problem.test_cases = vec![TestCaseSpec {
             name: test_case_name.clone(),
@@ -291,12 +291,12 @@ fn run_stress_round(
 }
 
 fn generate_input(
-  generator_cwasm: &str,
+  generator_wasm: &str,
   arguments: &[String],
   test_case_name: &str,
 ) -> Result<std::path::PathBuf> {
   let result = run_wasm_for_stdio(
-    generator_cwasm,
+    generator_wasm,
     None,
     arguments,
     u64::MAX,

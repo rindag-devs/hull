@@ -46,7 +46,7 @@ problem: {
     ];
     text = ''
       ${hull.check.script {
-        checkerWasm = problem.checker.cwasm;
+        checkerWasm = problem.checker.wasm;
         input = "$HULL_INPUT_PATH";
         output = "$HULL_SOLUTION_SRC";
         answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
