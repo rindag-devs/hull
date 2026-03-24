@@ -23,11 +23,7 @@ use super::artifact::storeify_runtime_data;
 use super::metadata::{load_contest_spec, load_problem_spec};
 use super::types::{RuntimeData, RuntimeOptions};
 use super::workspace::RuntimeWorkspace;
-
-fn workspace_flake_ref() -> Result<String> {
-  let cwd = std::env::current_dir().context("Failed to determine current directory")?;
-  Ok(cwd.to_string_lossy().into_owned())
-}
+use crate::nix::get_flake_url;
 
 pub fn render_runtime_json(runtime: &RuntimeData) -> Result<String> {
   serde_json::to_string(runtime).context("Failed to serialize runtime analysis JSON")
@@ -42,7 +38,7 @@ pub fn build_problem_target(
 ) -> Result<()> {
   // Runtime analysis stores paths outside `/nix/store`; move them into the
   // store before handing the data back to Nix target evaluation.
-  let flake_ref = workspace_flake_ref()?;
+  let flake_ref = get_flake_url()?;
   let mut runtime = runtime.clone();
   storeify_runtime_data(&mut runtime)?;
   let runtime_json = render_runtime_json(&runtime)?;
@@ -74,7 +70,7 @@ pub fn build_contest_target(
   out_link: &str,
   nix_args: &[String],
 ) -> Result<()> {
-  let flake_ref = workspace_flake_ref()?;
+  let flake_ref = get_flake_url()?;
   let mut runtime_by_problem = runtime_by_problem.clone();
   for runtime in runtime_by_problem.values_mut() {
     storeify_runtime_data(runtime)?;

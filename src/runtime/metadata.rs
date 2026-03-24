@@ -19,14 +19,10 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 
 use super::types::{ContestSpec, ProblemSpec};
-
-fn workspace_flake_ref() -> Result<String> {
-  let cwd = std::env::current_dir().context("Failed to determine current directory")?;
-  Ok(cwd.to_string_lossy().into_owned())
-}
+use crate::nix::get_flake_url;
 
 pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
-  let flake_ref = workspace_flake_ref()?;
+  let flake_ref = get_flake_url()?;
   let expr = format!(
     r#"
       let
@@ -53,7 +49,7 @@ pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
 }
 
 pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
-  let flake_ref = workspace_flake_ref()?;
+  let flake_ref = get_flake_url()?;
   let expr = format!(
     r#"
       let
@@ -80,7 +76,7 @@ pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
 }
 
 pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<ProblemSpec> {
-  let flake_ref = workspace_flake_ref()?;
+  let flake_ref = get_flake_url()?;
   let expr = format!(
     r#"
       let
