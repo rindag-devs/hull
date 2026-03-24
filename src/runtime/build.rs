@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 
-use super::analysis::analyze_problem;
+use super::analysis::{analyze_problem, analyze_problem_in_pool, install_with_pool};
 use super::artifact::storeify_runtime_data;
 use super::metadata::{load_contest_spec, load_problem_spec};
 use super::types::{RuntimeData, RuntimeOptions};
@@ -120,16 +120,18 @@ pub fn build_contest(
   nix_args: &[String],
 ) -> Result<()> {
   let contest_spec = load_contest_spec(contest)?;
-  let runtime_by_problem = contest_spec
-    .problems
-    .par_iter()
-    .map(|spec| {
-      let workspace = RuntimeWorkspace::new(
-        std::env::temp_dir().join(format!("hull-build-contest-{contest}-{}", spec.name)),
-      )?;
-      let runtime = analyze_problem(&spec, &workspace, options)?;
-      Ok((spec.name.clone(), runtime))
-    })
-    .collect::<Result<BTreeMap<_, _>>>()?;
+  let runtime_by_problem = install_with_pool(options, || {
+    contest_spec
+      .problems
+      .par_iter()
+      .map(|spec| {
+        let workspace = RuntimeWorkspace::new(
+          std::env::temp_dir().join(format!("hull-build-contest-{contest}-{}", spec.name)),
+        )?;
+        let runtime = analyze_problem_in_pool(spec, &workspace)?;
+        Ok((spec.name.clone(), runtime))
+      })
+      .collect::<Result<BTreeMap<_, _>>>()
+  })?;
   build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args)
 }

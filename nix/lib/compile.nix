@@ -14,8 +14,6 @@
 */
 
 {
-  pkgs,
-  hullPkgs,
   hull,
   ...
 }:

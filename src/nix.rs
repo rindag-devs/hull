@@ -24,16 +24,6 @@ pub struct FlakeMetadata {
   url: String,
 }
 
-/// Get the current OS name in nix.
-pub fn get_current_system() -> Result<String> {
-  let output = Command::new("nix")
-    .args(["eval", "--raw", "nixpkgs#system"])
-    .output()?;
-
-  let data = String::from_utf8_lossy(&output.stdout);
-  Ok(data.trim().to_string())
-}
-
 /// Get the flake URL for the current directory by running `nix flake metadata`.
 pub fn get_flake_url() -> Result<String> {
   let output = Command::new("nix")

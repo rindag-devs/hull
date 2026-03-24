@@ -26,7 +26,7 @@ use wasi_common::{
 };
 
 use crate::{
-  nix::{BuildCommand, get_current_system, get_flake_url},
+  nix::{BuildCommand, get_flake_url},
   runner,
   runtime::cache_native_module,
 };
@@ -78,8 +78,6 @@ pub fn run(opts: &RunOpts) -> Result<()> {
   })?;
 
   // Construct and run nix build command
-  let system =
-    get_current_system().context("Failed to determine current system using `nix eval`")?;
   let flake_url =
     get_flake_url().context("Could not determine the flake URL for the current project")?;
   let submodule_query = if opts.submodules { "?submodules=1" } else { "" };
@@ -94,9 +92,9 @@ pub fn run(opts: &RunOpts) -> Result<()> {
       {{ srcPath, languageName }}:
       let
         flake = builtins.getFlake "{final_flake_ref}";
-        hullLib = (flake.inputs.hull.lib or flake.outputs.lib).{system};
-        pkgs = flake.inputs.nixpkgs.legacyPackages.{system};
-        problem = flake.outputs.hullProblems.{system}.{problem_name}.config;
+        hullLib = (flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}};
+        pkgs = flake.inputs.nixpkgs.legacyPackages.${{builtins.currentSystem}};
+        problem = flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem_name}.config;
 
         langName = if languageName != null
                    then languageName

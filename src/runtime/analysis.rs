@@ -37,7 +37,7 @@ const TOOL_MEMORY_LIMIT: u64 = u32::MAX as u64;
 
 // Execute the full runtime analysis for one problem and return the data that
 // problem and contest targets consume during packaging.
-fn install_with_pool<T, F>(options: RuntimeOptions, f: F) -> Result<T>
+pub(crate) fn install_with_pool<T, F>(options: RuntimeOptions, f: F) -> Result<T>
 where
   T: Send,
   F: FnOnce() -> Result<T> + Send,
@@ -58,10 +58,10 @@ pub fn analyze_problem(
   workspace: &RuntimeWorkspace,
   options: RuntimeOptions,
 ) -> Result<RuntimeData> {
-  install_with_pool(options, || analyze_problem_serial(problem, workspace))
+  install_with_pool(options, || analyze_problem_in_pool(problem, workspace))
 }
 
-fn analyze_problem_serial(
+pub(crate) fn analyze_problem_in_pool(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
 ) -> Result<RuntimeData> {
@@ -80,7 +80,93 @@ fn analyze_problem_serial(
       )
     })?;
 
-  let validator_test_results = problem
+  let (validator_test_results, (checker_test_results, test_case_outputs)) = rayon::join(
+    || run_validator_tests(problem),
+    || {
+      rayon::join(
+        || run_checker_tests(problem, workspace, &solutions_by_name, main_solution),
+        || run_test_cases(problem, workspace),
+      )
+    },
+  );
+
+  let validator_test_results = validator_test_results?;
+  let checker_test_results = checker_test_results?;
+  let test_case_outputs = test_case_outputs?;
+
+  let test_case_runtime = test_case_outputs
+    .iter()
+    .map(|(test_case_name, (runtime, _))| (test_case_name.clone(), runtime.clone()))
+    .collect::<BTreeMap<_, _>>();
+
+  let solution_reports_by_test_case = test_case_outputs
+    .into_iter()
+    .map(|(test_case_name, (_, reports))| (test_case_name, reports))
+    .collect::<BTreeMap<_, _>>();
+
+  let solutions_runtime = problem
+    .solutions
+    .iter()
+    .map(|solution| {
+      let test_case_results = solution_reports_by_test_case
+        .iter()
+        .map(|(test_case_name, reports)| {
+          let report = reports.get(&solution.name).with_context(|| {
+            format!(
+              "Missing judge report for solution '{}' on test case '{}'",
+              solution.name, test_case_name
+            )
+          })?;
+          Ok((test_case_name.clone(), report.clone()))
+        })
+        .collect::<Result<BTreeMap<_, _>>>()?;
+
+      let subtask_results = aggregate_subtask_results(problem, &test_case_results);
+      let score = subtask_results
+        .iter()
+        .map(|result| result.scaled_score)
+        .sum();
+      Ok((
+        solution.name.clone(),
+        RuntimeSolutionData {
+          test_case_results,
+          subtask_results,
+          score,
+        },
+      ))
+    })
+    .collect::<Result<BTreeMap<_, _>>>()?;
+
+  Ok(RuntimeData {
+    checker: CheckerRuntimeData {
+      test_inputs: checker_test_results
+        .iter()
+        .map(|(name, (path, _))| (name.clone(), path.clone()))
+        .collect(),
+      test_results: checker_test_results
+        .into_iter()
+        .map(|(name, (_, report))| (name, report))
+        .collect(),
+    },
+    test_cases: test_case_runtime,
+    validator: ValidatorRuntimeData {
+      test_inputs: validator_test_results
+        .iter()
+        .map(|(name, (path, _))| (name.clone(), path.clone()))
+        .collect(),
+      test_results: validator_test_results
+        .into_iter()
+        .map(|(name, (_, report))| (name, report))
+        .collect(),
+    },
+    solutions: solutions_runtime,
+  })
+}
+
+fn run_validator_tests(
+  problem: &ProblemSpec,
+) -> Result<BTreeMap<String, (String, ValidationReport)>> {
+  problem
     .validator_tests
     .par_iter()
     .map(|test| {
@@ -98,50 +184,16 @@ fn analyze_problem_serial(
         (input_path.to_string_lossy().into_owned(), report),
       ))
     })
-    .collect::<Result<BTreeMap<_, _>>>()?;
+    .collect()
+}
 
-  let test_case_runtime = problem
-    .test_cases
-    .par_iter()
-    .map(|test_case| {
-      info!("Preparing test case {}", test_case.name);
-      let input_path = resolve_test_input(
-        problem,
-        test_case.input_file.as_deref(),
-        test_case.generator.as_deref(),
-        test_case.arguments.as_deref(),
-        &test_case.name,
-      )?;
-      let trace_level = if test_case.groups.iter().any(|group| group == "sample") {
-        2
-      } else {
-        1
-      };
-      let validation = run_validator(problem, Path::new(&input_path), trace_level)?;
-      let concrete_test_case = TestCaseSpec {
-        input_file: Some(input_path.to_string_lossy().into_owned()),
-        ..test_case.clone()
-      };
-      let outputs_dir = run_generate_outputs(
-        problem,
-        &concrete_test_case,
-        &main_solution.prepared,
-        workspace,
-      )?;
-      Ok((
-        test_case.name.clone(),
-        RuntimeTestCaseData {
-          data: RuntimeTestCaseFiles {
-            input: input_path.to_string_lossy().into_owned(),
-            outputs: outputs_dir.to_string_lossy().into_owned(),
-          },
-          input_validation: validation,
-        },
-      ))
-    })
-    .collect::<Result<BTreeMap<_, _>>>()?;
-
-  let checker_test_results = problem
+fn run_checker_tests(
+  problem: &ProblemSpec,
+  workspace: &RuntimeWorkspace,
+  solutions_by_name: &BTreeMap<String, super::types::SolutionSpec>,
+  main_solution: &super::types::SolutionSpec,
+) -> Result<BTreeMap<String, (String, CheckerReport)>> {
+  problem
     .checker_tests
     .par_iter()
     .map(|test| {
@@ -214,78 +266,85 @@ fn analyze_problem_serial(
         (input_path.to_string_lossy().into_owned(), report),
       ))
     })
-    .collect::<Result<BTreeMap<_, _>>>()?;
+    .collect()
+}
 
-  let solutions_runtime = problem
-    .solutions
+fn run_test_cases(
+  problem: &ProblemSpec,
+  workspace: &RuntimeWorkspace,
+) -> Result<BTreeMap<String, (RuntimeTestCaseData, BTreeMap<String, JudgeReport>)>> {
+  let solutions = &problem.solutions;
+  let main_solution = solutions
+    .iter()
+    .find(|solution| solution.name == problem.main_correct_solution)
+    .with_context(|| {
+      format!(
+        "Main correct solution '{}' not found in runtime metadata",
+        problem.main_correct_solution
+      )
+    })?;
+
+  problem
+    .test_cases
     .par_iter()
-    .map(|solution| {
-      info!("Judging solution {}", solution.name);
-      let test_case_results = problem
-        .test_cases
+    .map(|test_case| {
+      info!("Preparing test case {}", test_case.name);
+      let input_path = resolve_test_input(
+        problem,
+        test_case.input_file.as_deref(),
+        test_case.generator.as_deref(),
+        test_case.arguments.as_deref(),
+        &test_case.name,
+      )?;
+      let input_path_string = input_path.to_string_lossy().into_owned();
+      let trace_level = if test_case.groups.iter().any(|group| group == "sample") {
+        2
+      } else {
+        1
+      };
+      let validation = run_validator(problem, Path::new(&input_path), trace_level)?;
+      let concrete_test_case = TestCaseSpec {
+        input_file: Some(input_path_string.clone()),
+        ..test_case.clone()
+      };
+      let outputs_dir = run_generate_outputs(
+        problem,
+        &concrete_test_case,
+        &main_solution.prepared,
+        workspace,
+      )?;
+      let outputs_path = outputs_dir.to_string_lossy().into_owned();
+
+      let solution_reports = solutions
         .par_iter()
-        .map(|test_case| {
-          let official_outputs_dir = test_case_runtime.get(&test_case.name).with_context(|| {
-            format!(
-              "Missing official outputs for test case '{}'",
-              test_case.name
-            )
-          })?;
-          let concrete_test_case = TestCaseSpec {
-            input_file: Some(official_outputs_dir.data.input.clone()),
-            ..test_case.clone()
-          };
+        .map(|solution| {
+          info!("Judging solution {} on {}", solution.name, test_case.name);
           let report = run_judge(
             problem,
             &concrete_test_case,
             &solution.prepared,
-            Path::new(&official_outputs_dir.data.outputs),
+            Path::new(&outputs_path),
             workspace,
           )?;
-          Ok((test_case.name.clone(), report))
+          Ok((solution.name.clone(), report))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
 
-      let subtask_results = aggregate_subtask_results(problem, &test_case_results);
-      let score = subtask_results
-        .iter()
-        .map(|result| result.scaled_score)
-        .sum();
       Ok((
-        solution.name.clone(),
-        RuntimeSolutionData {
-          test_case_results,
-          subtask_results,
-          score,
-        },
+        test_case.name.clone(),
+        (
+          RuntimeTestCaseData {
+            data: RuntimeTestCaseFiles {
+              input: input_path_string,
+              outputs: outputs_path,
+            },
+            input_validation: validation,
+          },
+          solution_reports,
+        ),
       ))
     })
-    .collect::<Result<BTreeMap<_, _>>>()?;
-
-  Ok(RuntimeData {
-    checker: CheckerRuntimeData {
-      test_inputs: checker_test_results
-        .iter()
-        .map(|(name, (path, _))| (name.clone(), path.clone()))
-        .collect(),
-      test_results: checker_test_results
-        .into_iter()
-        .map(|(name, (_, report))| (name, report))
-        .collect(),
-    },
-    test_cases: test_case_runtime,
-    validator: ValidatorRuntimeData {
-      test_inputs: validator_test_results
-        .iter()
-        .map(|(name, (path, _))| (name.clone(), path.clone()))
-        .collect(),
-      test_results: validator_test_results
-        .into_iter()
-        .map(|(name, (_, report))| (name, report))
-        .collect(),
-    },
-    solutions: solutions_runtime,
-  })
+    .collect()
 }
 
 fn run_validator(
