@@ -114,7 +114,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
     .generators
     .get(&opts.generator)
     .and_then(|program| program.wasm.as_ref())
-    .with_context(|| format!("Generator '{}' is missing `wasm` metadata", opts.generator))?
+    .with_context(|| format!("Generator `{}` is missing `wasm` metadata", opts.generator))?
     .clone();
 
   let mut round = 1;
@@ -165,7 +165,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
         println!("\nHacked! Found a failing test case.");
         let report = case.report;
         println!(
-          "  Solution '{}' failed with status: {}, score: {:.3}, tick: {}, memory: {}",
+          "  Solution `{}` failed with status: {}, score: {:.3}, tick: {}, memory: {}",
           case.failing_solution_name,
           report.status,
           report.score,
@@ -264,7 +264,7 @@ fn run_stress_round(
               .and_then(|solution_runtime| solution_runtime.test_case_results.get(&test_case_name))
               .with_context(|| {
                 format!(
-                  "Missing stress result for solution '{}' and test case '{}'",
+                  "Missing stress result for solution `{}` and test case `{}`",
                   solution.name, test_case_name
                 )
               })?;

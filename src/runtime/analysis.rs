@@ -75,7 +75,7 @@ pub(crate) fn analyze_problem_in_pool(
     .get(&problem.main_correct_solution)
     .with_context(|| {
       format!(
-        "Main correct solution '{}' not found in runtime metadata",
+        "Main correct solution `{}` not found in runtime metadata",
         problem.main_correct_solution
       )
     })?;
@@ -113,7 +113,7 @@ pub(crate) fn analyze_problem_in_pool(
         .map(|(test_case_name, reports)| {
           let report = reports.get(&solution.name).with_context(|| {
             format!(
-              "Missing judge report for solution '{}' on test case '{}'",
+              "Missing judge report for solution `{}` on test case `{}`",
               solution.name, test_case_name
             )
           })?;
@@ -210,7 +210,7 @@ fn run_checker_tests(
         (None, Some(solution_name)) => {
           let solution = solutions_by_name
             .get(solution_name)
-            .with_context(|| format!("Checker test solution '{}' not found", solution_name))?;
+            .with_context(|| format!("Checker test solution `{}` not found", solution_name))?;
           let fake_test_case = TestCaseSpec {
             name: format!("checker-test-{}", test.name),
             input_file: Some(input_path.to_string_lossy().into_owned()),
@@ -227,13 +227,13 @@ fn run_checker_tests(
         }
         (Some(_), Some(_)) => {
           bail!(
-            "Checker test '{}' cannot specify both outputPath and outputSolution",
+            "Checker test `{}` cannot specify both outputPath and outputSolution",
             test.name
           )
         }
         (None, None) => {
           bail!(
-            "Checker test '{}' must specify outputPath or outputSolution",
+            "Checker test `{}` must specify outputPath or outputSolution",
             test.name
           )
         }
@@ -279,7 +279,7 @@ fn run_test_cases(
     .find(|solution| solution.name == problem.main_correct_solution)
     .with_context(|| {
       format!(
-        "Main correct solution '{}' not found in runtime metadata",
+        "Main correct solution `{}` not found in runtime metadata",
         problem.main_correct_solution
       )
     })?;
@@ -572,7 +572,7 @@ fn run_judger_script(
     .with_context(|| format!("Failed to execute judger runner {}", runner))?;
   if !output.status.success() {
     bail!(
-      "Judger runner '{}' failed. Stdout:\n{}\nStderr:\n{}",
+      "Judger runner `{}` failed. Stdout:\n{}\nStderr:\n{}",
       runner,
       String::from_utf8_lossy(&output.stdout).trim(),
       String::from_utf8_lossy(&output.stderr).trim()
@@ -675,7 +675,7 @@ fn resolve_test_input(
 
   let generator_name = generator_name.with_context(|| {
     format!(
-      "Input for '{}' is missing both inputFile and generator",
+      "Input for `{}` is missing both inputFile and generator",
       temp_name
     )
   })?;
@@ -683,7 +683,7 @@ fn resolve_test_input(
     .generators
     .get(generator_name)
     .and_then(|program| program.wasm.as_ref())
-    .with_context(|| format!("Generator '{}' is missing `wasm` metadata", generator_name))?;
+    .with_context(|| format!("Generator `{}` is missing `wasm` metadata", generator_name))?;
   let generator_wasm = realize_artifact(generator_wasm)?;
   let result = run_wasm_for_stdio(
     &generator_wasm,

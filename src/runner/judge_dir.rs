@@ -35,7 +35,7 @@ fn path_to_inode(path: &str) -> u64 {
   let mut hasher = DefaultHasher::new();
   path.hash(&mut hasher);
   // Start file inodes from a higher number to avoid collision with dir inode.
-  hasher.finish().wrapping_add(100)
+  hasher.finish() | 0x8000_0000_0000_0000
 }
 
 pub struct JudgeDir {
@@ -76,7 +76,7 @@ impl WasiDir for JudgeDir {
         || oflags.contains(OFlags::TRUNCATE)
         || oflags.contains(OFlags::EXCLUSIVE)
       {
-        return Err(Error::perm().context(format!("file '{}' is read-only", path)));
+        return Err(Error::perm().context(format!("file `{}` is read-only", path)));
       }
 
       // Clone the file handle to create a new file descriptor.
@@ -91,7 +91,7 @@ impl WasiDir for JudgeDir {
     } else if let Some(std_file) = self.write_only_files.get(path) {
       // The file is strictly write-only.
       if read {
-        return Err(Error::perm().context(format!("file '{}' is write-only", path)));
+        return Err(Error::perm().context(format!("file `{}` is write-only", path)));
       }
 
       // Clone the file handle to create a new file descriptor.
@@ -218,9 +218,9 @@ impl WasiDir for JudgeDir {
       filetype: FileType::RegularFile,
       nlink: 1,
       size: meta.len(),
-      atim: meta.accessed().ok().map(|t| t.into_std()),
-      mtim: meta.modified().ok().map(|t| t.into_std()),
-      ctim: meta.created().ok().map(|t| t.into_std()),
+      atim: None,
+      mtim: None,
+      ctim: None,
     })
   }
 

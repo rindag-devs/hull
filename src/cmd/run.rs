@@ -72,7 +72,7 @@ pub fn run(opts: &RunOpts) -> Result<()> {
     .with_context(|| format!("Failed to find source file: {}", opts.src_path))?;
   let src_path_str = src_path_abs.to_str().with_context(|| {
     format!(
-      "Path '{}' contains non-UTF-8 characters and cannot be processed.",
+      "Path `{}` contains non-UTF-8 characters and cannot be processed.",
       src_path_abs.display()
     )
   })?;
