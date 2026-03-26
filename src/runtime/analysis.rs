@@ -31,7 +31,7 @@ use super::types::{
   SubtaskRuntimeReport, TestCaseSpec, ValidationReport, ValidatorRuntimeData,
 };
 use super::workspace::RuntimeWorkspace;
-use crate::interactive::{ProblemProgressHandle, TaskItemReport, TaskKind};
+use crate::interactive::{ProblemProgressHandle, TaskHandle, TaskItemReport, TaskKind};
 use crate::runner::RunStatus;
 
 const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
@@ -62,11 +62,11 @@ pub fn analyze_problem(
 ) -> Result<RuntimeData> {
   let progress = options.progress.clone();
   install_with_pool(options, || {
-    analyze_problem_in_pool_with_progress(problem, workspace, Some(&progress))
+    analyze_problem_in_pool(problem, workspace, Some(&progress))
   })
 }
 
-pub(crate) fn analyze_problem_in_pool_with_progress(
+pub(crate) fn analyze_problem_in_pool(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
   progress: Option<&ProblemProgressHandle>,
@@ -181,18 +181,13 @@ fn run_validator_tests(
   problem: &ProblemSpec,
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<BTreeMap<String, (String, ValidationReport)>> {
-  let handle = if problem.validator_tests.is_empty() {
-    None
-  } else {
-    progress.map(|progress| {
-      progress.register_group(
-        TaskKind::Validator,
-        "Validator",
-        problem.validator_tests.iter().map(|test| test.name.clone()),
-        None,
-      )
-    })
-  };
+  let handle = register_progress_group(
+    progress,
+    TaskKind::Validator,
+    "Validator",
+    problem.validator_tests.iter().map(|test| test.name.clone()),
+    None,
+  );
   problem
     .validator_tests
     .par_iter()
@@ -234,18 +229,13 @@ fn run_checker_tests(
   main_solution: &super::types::SolutionSpec,
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<BTreeMap<String, (String, CheckerReport)>> {
-  let handle = if problem.checker_tests.is_empty() {
-    None
-  } else {
-    progress.map(|progress| {
-      progress.register_group(
-        TaskKind::Checker,
-        "Checker",
-        problem.checker_tests.iter().map(|test| test.name.clone()),
-        None,
-      )
-    })
-  };
+  let handle = register_progress_group(
+    progress,
+    TaskKind::Checker,
+    "Checker",
+    problem.checker_tests.iter().map(|test| test.name.clone()),
+    None,
+  );
   problem
     .checker_tests
     .par_iter()
@@ -359,18 +349,16 @@ fn run_test_cases(
       solutions
         .iter()
         .map(|solution| {
-          (
+          let handle = progress.register_group(
+            TaskKind::Solution,
             solution.name.clone(),
-            progress.register_group(
-              TaskKind::Solution,
-              solution.name.clone(),
-              problem
-                .test_cases
-                .iter()
-                .map(|test_case| test_case.name.clone()),
-              Some(0.0),
-            ),
-          )
+            problem
+              .test_cases
+              .iter()
+              .map(|test_case| test_case.name.clone()),
+            Some(0.0),
+          );
+          (solution.name.clone(), handle)
         })
         .collect::<BTreeMap<_, _>>()
     })
@@ -480,6 +468,24 @@ fn is_fatal_validation_status(status: &str) -> bool {
 
 fn is_fatal_checker_status(status: &str) -> bool {
   matches!(status, "internal_error")
+}
+
+fn register_progress_group<I>(
+  progress: Option<&ProblemProgressHandle>,
+  kind: TaskKind,
+  name: &str,
+  item_names: I,
+  score: Option<f64>,
+) -> Option<TaskHandle>
+where
+  I: IntoIterator<Item = String>,
+{
+  let item_names = item_names.into_iter().collect::<Vec<_>>();
+  if item_names.is_empty() {
+    None
+  } else {
+    progress.map(|progress| progress.register_group(kind, name, item_names, score))
+  }
 }
 
 fn run_validator(

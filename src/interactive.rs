@@ -14,7 +14,7 @@
 */
 
 use std::collections::BTreeMap;
-use std::io::{stdout, IsTerminal, Write};
+use std::io::{IsTerminal, Write, stdout};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -105,19 +105,19 @@ impl InteractiveSettings {
 
 #[derive(Clone, Debug)]
 pub struct ProblemProgressHandle {
-  inner: Arc<Mutex<InteractiveState>>,
-  scope: Option<String>,
+  inner: Arc<Mutex<State>>,
+  parent_item: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct TaskHandle {
-  inner: Arc<Mutex<InteractiveState>>,
+  inner: Arc<Mutex<State>>,
   key: TaskKey,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct TaskKey {
-  parent: Option<String>,
+  parent_item: Option<String>,
   kind: TaskKind,
   name: String,
 }
@@ -130,10 +130,10 @@ struct PhaseState {
 }
 
 #[derive(Clone, Debug)]
-struct InteractiveState {
+struct State {
   enabled: bool,
   title_label: String,
-  problem_name: Option<String>,
+  title_name: Option<String>,
   phase: Option<PhaseState>,
   tasks: BTreeMap<TaskKey, TaskProgress>,
   last_rendered_lines: usize,
@@ -141,7 +141,7 @@ struct InteractiveState {
 
 #[derive(Clone, Debug)]
 struct TaskProgress {
-  parent: Option<String>,
+  parent_item: Option<String>,
   kind: TaskKind,
   name: String,
   score: Option<f64>,
@@ -158,13 +158,12 @@ struct TaskItem {
 }
 
 static SETTINGS: OnceLock<InteractiveSettings> = OnceLock::new();
-static LOG_GUARD: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
-static ACTIVE_PROGRESS: OnceLock<Arc<Mutex<Option<Weak<Mutex<InteractiveState>>>>>> =
-  OnceLock::new();
+static OUTPUT_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
+static ACTIVE_PROGRESS: OnceLock<Arc<Mutex<Option<Weak<Mutex<State>>>>>> = OnceLock::new();
 
 pub fn init(settings: InteractiveSettings) {
   let _ = SETTINGS.set(settings);
-  let _ = LOG_GUARD.set(Arc::new(Mutex::new(())));
+  let _ = OUTPUT_LOCK.set(Arc::new(Mutex::new(())));
   let _ = ACTIVE_PROGRESS.set(Arc::new(Mutex::new(None)));
 }
 
@@ -180,38 +179,44 @@ pub fn log_line(message: &str) {
   });
 }
 
-pub fn create_problem_progress(problem_name: &str) -> ProblemProgressHandle {
-  let inner = Arc::new(Mutex::new(InteractiveState {
+pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
+  let inner = Arc::new(Mutex::new(State {
     enabled: current_settings().enabled(),
     title_label: "Problem".to_string(),
-    problem_name: Some(problem_name.to_string()),
+    title_name: Some(name.to_string()),
     phase: None,
     tasks: BTreeMap::new(),
     last_rendered_lines: 0,
   }));
+
   ACTIVE_PROGRESS
     .get_or_init(|| Arc::new(Mutex::new(None)))
     .lock()
     .unwrap()
     .replace(Arc::downgrade(&inner));
+
   if current_settings().enabled() {
     spawn_refresh_thread(&inner);
   }
-  ProblemProgressHandle { inner, scope: None }
+
+  ProblemProgressHandle {
+    inner,
+    parent_item: None,
+  }
 }
 
 impl ProblemProgressHandle {
   pub fn disabled() -> Self {
     Self {
-      inner: Arc::new(Mutex::new(InteractiveState {
+      inner: Arc::new(Mutex::new(State {
         enabled: false,
         title_label: "Problem".to_string(),
-        problem_name: None,
+        title_name: None,
         phase: None,
         tasks: BTreeMap::new(),
         last_rendered_lines: 0,
       })),
-      scope: None,
+      parent_item: None,
     }
   }
 
@@ -219,33 +224,22 @@ impl ProblemProgressHandle {
     self.inner.lock().unwrap().enabled
   }
 
-  pub fn reset(&self, problem_name: impl Into<String>) {
-    {
-      let mut state = self.inner.lock().unwrap();
-      state.problem_name = Some(problem_name.into());
-      state.phase = None;
-      state.tasks.clear();
-      state.last_rendered_lines = 0;
-    }
-    render_handle(&self.inner);
-  }
-
   pub fn set_title(&self, label: impl Into<String>, name: impl Into<String>) {
     {
       let mut state = self.inner.lock().unwrap();
       state.title_label = label.into();
-      state.problem_name = Some(name.into());
+      state.title_name = Some(name.into());
       state.phase = None;
       state.tasks.clear();
       state.last_rendered_lines = 0;
     }
-    render_handle(&self.inner);
+    render(&self.inner);
   }
 
-  pub fn child_scope(&self, name: impl Into<String>) -> Self {
+  pub fn child_scope(&self, item_name: impl Into<String>) -> Self {
     Self {
       inner: self.inner.clone(),
-      scope: Some(name.into()),
+      parent_item: Some(item_name.into()),
     }
   }
 
@@ -258,15 +252,16 @@ impl ProblemProgressHandle {
         started_at: Instant::now(),
       });
     }
-    render_handle(&self.inner);
+    render(&self.inner);
   }
 
   pub fn finish_phase(&self) {
     {
       let mut state = self.inner.lock().unwrap();
       state.phase = None;
+      state.tasks.clear();
     }
-    render_handle(&self.inner);
+    render(&self.inner);
   }
 
   pub fn register_group(
@@ -278,31 +273,33 @@ impl ProblemProgressHandle {
   ) -> TaskHandle {
     let name = name.into();
     let key = TaskKey {
-      parent: self.scope.clone(),
+      parent_item: self.parent_item.clone(),
       kind,
       name: name.clone(),
     };
-    let mut items = BTreeMap::new();
-    for item_name in item_names {
-      let item_name = item_name.into();
-      items.insert(
-        item_name.clone(),
-        TaskItem {
-          name: item_name,
-          state: ExecutionState::Pending,
-          report: TaskItemReport::default(),
-          started_at: None,
-          finished_at: None,
-        },
-      );
-    }
+    let items = item_names
+      .into_iter()
+      .map(|item_name| {
+        let item_name = item_name.into();
+        (
+          item_name.clone(),
+          TaskItem {
+            name: item_name,
+            state: ExecutionState::Pending,
+            report: TaskItemReport::default(),
+            started_at: None,
+            finished_at: None,
+          },
+        )
+      })
+      .collect();
 
     {
       let mut state = self.inner.lock().unwrap();
       state.tasks.insert(
         key.clone(),
         TaskProgress {
-          parent: self.scope.clone(),
+          parent_item: self.parent_item.clone(),
           kind,
           name,
           score,
@@ -310,7 +307,8 @@ impl ProblemProgressHandle {
         },
       );
     }
-    render_handle(&self.inner);
+    render(&self.inner);
+
     TaskHandle {
       inner: self.inner.clone(),
       key,
@@ -347,19 +345,6 @@ impl ProblemProgressHandle {
 }
 
 impl TaskHandle {
-  pub fn start_item(&self, name: &str) {
-    {
-      let mut state = self.inner.lock().unwrap();
-      if let Some(item) = get_item_mut(&mut state, &self.key, name) {
-        item.state = ExecutionState::Running;
-        item.started_at = Some(Instant::now());
-        item.finished_at = None;
-        item.report = TaskItemReport::default();
-      }
-    }
-    render_handle(&self.inner);
-  }
-
   pub fn finish_item(&self, name: &str, status: Option<&str>, success: bool) {
     self.finish_item_with_report(
       name,
@@ -371,24 +356,29 @@ impl TaskHandle {
     );
   }
 
+  pub fn start_item(&self, name: &str) {
+    update_item(&self.inner, &self.key, name, |item| {
+      item.state = ExecutionState::Running;
+      item.report = TaskItemReport::default();
+      item.started_at = Some(Instant::now());
+      item.finished_at = None;
+    });
+  }
+
   pub fn finish_item_with_report(&self, name: &str, success: bool, report: TaskItemReport) {
-    {
-      let mut state = self.inner.lock().unwrap();
-      if let Some(item) = get_item_mut(&mut state, &self.key, name) {
-        item.state = if success {
-          ExecutionState::Passed
-        } else {
-          ExecutionState::Failed
-        };
-        let duration = report
-          .duration
-          .or_else(|| item.started_at.map(|started_at| started_at.elapsed()));
-        item.report = TaskItemReport { duration, ..report };
-        item.started_at = None;
-        item.finished_at = Some(Instant::now());
-      }
-    }
-    render_handle(&self.inner);
+    update_item(&self.inner, &self.key, name, |item| {
+      item.state = if success {
+        ExecutionState::Passed
+      } else {
+        ExecutionState::Failed
+      };
+      let duration = report
+        .duration
+        .or_else(|| item.started_at.map(|started| started.elapsed()));
+      item.report = TaskItemReport { duration, ..report };
+      item.started_at = None;
+      item.finished_at = Some(Instant::now());
+    });
   }
 
   pub fn set_score(&self, score: f64) {
@@ -398,32 +388,39 @@ impl TaskHandle {
         task.score = Some(score);
       }
     }
-    render_handle(&self.inner);
+    render(&self.inner);
   }
 }
 
-fn get_item_mut<'a>(
-  state: &'a mut InteractiveState,
+fn update_item(
+  inner: &Arc<Mutex<State>>,
   key: &TaskKey,
   name: &str,
-) -> Option<&'a mut TaskItem> {
-  state
-    .tasks
-    .get_mut(key)
-    .and_then(|task| task.items.get_mut(name))
+  update: impl FnOnce(&mut TaskItem),
+) {
+  {
+    let mut state = inner.lock().unwrap();
+    if let Some(item) = state
+      .tasks
+      .get_mut(key)
+      .and_then(|task| task.items.get_mut(name))
+    {
+      update(item);
+    }
+  }
+  render(inner);
 }
 
-fn render_handle(inner: &Arc<Mutex<InteractiveState>>) {
-  with_output_lock(|| {
-    render_handle_locked(inner);
-  });
+fn render(inner: &Arc<Mutex<State>>) {
+  with_output_lock(|| render_locked(inner));
 }
 
-fn render_handle_locked(inner: &Arc<Mutex<InteractiveState>>) {
+fn render_locked(inner: &Arc<Mutex<State>>) {
   let mut state = inner.lock().unwrap();
   if !state.enabled {
     return;
   }
+
   let lines = render_lines(&state);
   let mut out = stdout();
   clear_previous_lines(&mut out, state.last_rendered_lines);
@@ -437,87 +434,14 @@ fn render_handle_locked(inner: &Arc<Mutex<InteractiveState>>) {
   state.last_rendered_lines = lines.len();
 }
 
-fn with_output_lock(f: impl FnOnce()) {
-  let guard = LOG_GUARD.get_or_init(|| Arc::new(Mutex::new(()))).clone();
-  let _lock = guard.lock().unwrap();
-  f();
-}
-
-fn clear_active_render() {
-  let Some(inner) = active_progress_inner() else {
-    return;
-  };
-  let mut state = inner.lock().unwrap();
-  if state.enabled && state.last_rendered_lines > 0 {
-    let mut out = stdout();
-    clear_previous_lines(&mut out, state.last_rendered_lines);
-    let _ = out.flush();
-    state.last_rendered_lines = 0;
-  }
-}
-
-fn redraw_active_render_locked() {
-  if let Some(inner) = active_progress_inner() {
-    render_handle_locked(&inner);
-  }
-}
-
-fn active_progress_inner() -> Option<Arc<Mutex<InteractiveState>>> {
-  let active = ACTIVE_PROGRESS.get_or_init(|| Arc::new(Mutex::new(None)));
-  let mut guard = active.lock().unwrap();
-  let upgraded = guard.as_ref().and_then(Weak::upgrade);
-  if upgraded.is_none() {
-    *guard = None;
-  }
-  upgraded
-}
-
-fn spawn_refresh_thread(inner: &Arc<Mutex<InteractiveState>>) {
-  let weak = Arc::downgrade(inner);
-  thread::spawn(move || loop {
-    thread::sleep(Duration::from_millis(100));
-    let Some(inner) = weak.upgrade() else {
-      break;
-    };
-    let should_refresh = {
-      let state = inner.lock().unwrap();
-      state.enabled && has_running_items(&state)
-    };
-    if should_refresh {
-      render_handle(&inner);
-    }
-  });
-}
-
-fn has_running_items(state: &InteractiveState) -> bool {
-  state.tasks.values().any(|task| {
-    task
-      .items
-      .values()
-      .any(|item| item.state == ExecutionState::Running)
-  })
-}
-
-fn clear_previous_lines(out: &mut impl Write, line_count: usize) {
-  if line_count == 0 {
-    return;
-  }
-
-  for index in 0..line_count {
-    if index > 0 {
-      let _ = write!(out, "\x1b[1A");
-    }
-    let _ = write!(out, "\r\x1b[2K");
-  }
-}
-
-fn render_lines(state: &InteractiveState) -> Vec<String> {
+fn render_lines(state: &State) -> Vec<String> {
   let mut lines = Vec::new();
-  if let Some(problem_name) = &state.problem_name {
+
+  if let Some(name) = &state.title_name {
     lines.push(format!(
       "{} {}",
       Style::new().bold().apply_to(&state.title_label),
-      Style::new().yellow().bold().apply_to(problem_name)
+      Style::new().yellow().bold().apply_to(name)
     ));
   }
 
@@ -537,88 +461,59 @@ fn render_lines(state: &InteractiveState) -> Vec<String> {
   let root_tasks = state
     .tasks
     .values()
-    .filter(|task| task.parent.is_none())
+    .filter(|task| task.parent_item.is_none())
     .collect::<Vec<_>>();
-  let total = root_tasks.len();
+
   for (index, task) in root_tasks.iter().enumerate() {
-    let is_last = index + 1 == total;
+    let is_last = index + 1 == root_tasks.len();
     lines.push(render_task_line(state, task, is_last));
-    lines.extend(render_task_children(state, task, is_last, ""));
+    lines.extend(render_child_lines(state, task, is_last, ""));
   }
+
   lines
 }
 
-fn render_task_children(
-  state: &InteractiveState,
+fn render_child_lines(
+  state: &State,
   task: &TaskProgress,
   parent_is_last: bool,
   ancestor_prefix: &str,
 ) -> Vec<String> {
-  let mut lines = Vec::new();
   let prefix = format!(
     "{}{}",
     ancestor_prefix,
     if parent_is_last { "  " } else { "│ " }
   );
-
-  let child_tasks = state
-    .tasks
-    .values()
-    .filter(|candidate| {
-      candidate.parent.as_deref() == Some(task.name.as_str())
-        || candidate
-          .parent
-          .as_ref()
-          .is_some_and(|parent| task.items.contains_key(parent))
-    })
-    .collect::<Vec<_>>();
+  let child_tasks = child_tasks_for(state, task);
 
   if !child_tasks.is_empty() {
-    let total = child_tasks.len();
+    let mut lines = Vec::new();
     for (index, child) in child_tasks.iter().enumerate() {
-      let is_last_child = index + 1 == total;
-      let branch = if is_last_child { "└─" } else { "├─" };
+      let is_last = index + 1 == child_tasks.len();
+      let branch = if is_last { "└─" } else { "├─" };
       lines.push(format!(
         "{}{} {}",
         prefix,
         Style::new().cyan().apply_to(branch),
         render_task_summary(state, child)
       ));
-      lines.extend(render_task_children(state, child, is_last_child, &prefix));
+      lines.extend(render_child_lines(state, child, is_last, &prefix));
     }
     return lines;
   }
 
-  lines.extend(render_recent_items(
-    state,
-    task,
-    parent_is_last,
-    ancestor_prefix,
-  ));
-  lines
+  render_recent_items(state, task, parent_is_last, ancestor_prefix)
 }
 
-fn render_task_summary(state: &InteractiveState, task: &TaskProgress) -> String {
-  let (done, running, pending, failed) = task_counts(state, task);
-  let mut line = format!(
-    "{} {} {}",
-    Style::new().bold().apply_to(task_label(task.kind)),
-    Style::new().yellow().bold().apply_to(&task.name),
-    render_counter(done, running, pending, failed)
-  );
-  if let Some(score) = task.score {
-    line.push(' ');
-    line.push_str(
-      &Style::new()
-        .green()
-        .apply_to(format!("{score:.3} / 1.000 pts"))
-        .to_string(),
-    );
-  }
-  line
+fn child_tasks_for<'a>(state: &'a State, task: &TaskProgress) -> Vec<&'a TaskProgress> {
+  state
+    .tasks
+    .values()
+    .filter(|candidate| candidate.parent_item.as_deref() == Some(task.name.as_str()))
+    .collect()
 }
 
-fn render_task_line(state: &InteractiveState, task: &TaskProgress, is_last: bool) -> String {
+fn render_task_line(state: &State, task: &TaskProgress, is_last: bool) -> String {
   let branch = if is_last { "└─" } else { "├─" };
   format!(
     "{} {}",
@@ -627,8 +522,28 @@ fn render_task_line(state: &InteractiveState, task: &TaskProgress, is_last: bool
   )
 }
 
+fn render_task_summary(state: &State, task: &TaskProgress) -> String {
+  let (done, running, pending, failed) = task_counts(state, task);
+  let mut text = format!(
+    "{} {} {}",
+    Style::new().bold().apply_to(task_label(task.kind)),
+    Style::new().yellow().bold().apply_to(&task.name),
+    render_counter(done, running, pending, failed)
+  );
+  if let Some(score) = task.score {
+    text.push(' ');
+    text.push_str(
+      &Style::new()
+        .green()
+        .apply_to(format!("{score:.3} / 1.000 pts"))
+        .to_string(),
+    );
+  }
+  text
+}
+
 fn render_recent_items(
-  state: &InteractiveState,
+  state: &State,
   task: &TaskProgress,
   parent_is_last: bool,
   ancestor_prefix: &str,
@@ -638,24 +553,27 @@ fn render_recent_items(
     return Vec::new();
   }
 
+  let prefix = format!(
+    "{}{}",
+    ancestor_prefix,
+    if parent_is_last { "  " } else { "│ " }
+  );
   let mut running = Vec::new();
   let mut failed = Vec::new();
   let mut finished = Vec::new();
-  let mut pending_count = 0usize;
+  let mut pending = 0usize;
 
   for item in task.items.values() {
     match item.state {
       ExecutionState::Running => running.push(item),
       ExecutionState::Failed => failed.push(item),
       ExecutionState::Passed => finished.push(item),
-      ExecutionState::Pending => pending_count += 1,
+      ExecutionState::Pending => pending += 1,
     }
   }
 
-  failed.sort_by_key(|item| item.finished_at.unwrap_or_else(Instant::now));
-  failed.reverse();
-  finished.sort_by_key(|item| item.finished_at.unwrap_or_else(Instant::now));
-  finished.reverse();
+  sort_recent(&mut failed);
+  sort_recent(&mut finished);
 
   let mut visible = Vec::new();
   visible.extend(running);
@@ -663,23 +581,12 @@ fn render_recent_items(
   if visible.len() < 4 {
     visible.extend(finished.into_iter().take(4 - visible.len()));
   }
-  if visible.len() > 4 {
-    visible.truncate(4);
-  }
+  visible.truncate(4);
 
-  if visible.is_empty() && pending_count == 0 {
-    return Vec::new();
-  }
-
-  let prefix = format!(
-    "{}{}",
-    ancestor_prefix,
-    if parent_is_last { "  " } else { "│ " }
-  );
   let mut lines = Vec::new();
   for (index, item) in visible.iter().enumerate() {
-    let last_child = index + 1 == visible.len() && pending_count == 0;
-    let branch = if last_child { "└─" } else { "├─" };
+    let is_last = index + 1 == visible.len() && pending == 0;
+    let branch = if is_last { "└─" } else { "├─" };
     lines.push(format!(
       "{}{} {}",
       prefix,
@@ -688,18 +595,51 @@ fn render_recent_items(
     ));
   }
 
-  if pending_count > 0 {
+  if pending > 0 {
     lines.push(format!(
       "{}{} {}",
       prefix,
       Style::new().cyan().apply_to("└─"),
       Style::new()
         .dim()
-        .apply_to(format!("{pending_count} more pending"))
+        .apply_to(format!("{pending} more pending"))
     ));
   }
 
   lines
+}
+
+fn sort_recent(items: &mut Vec<&TaskItem>) {
+  items.sort_by_key(|item| item.finished_at.unwrap_or_else(Instant::now));
+  items.reverse();
+}
+
+fn task_counts(state: &State, task: &TaskProgress) -> (usize, usize, usize, usize) {
+  let child_tasks = child_tasks_for(state, task);
+  if !child_tasks.is_empty() {
+    return child_tasks.into_iter().fold((0, 0, 0, 0), |acc, child| {
+      let counts = task_counts(state, child);
+      (
+        acc.0 + counts.0,
+        acc.1 + counts.1,
+        acc.2 + counts.2,
+        acc.3 + counts.3,
+      )
+    });
+  }
+
+  task.items.values().fold((0, 0, 0, 0), |mut acc, item| {
+    match item.state {
+      ExecutionState::Pending => acc.2 += 1,
+      ExecutionState::Running => acc.1 += 1,
+      ExecutionState::Passed => acc.0 += 1,
+      ExecutionState::Failed => {
+        acc.0 += 1;
+        acc.3 += 1;
+      }
+    }
+    acc
+  })
 }
 
 fn render_item_line(item: &TaskItem) -> String {
@@ -709,7 +649,7 @@ fn render_item_line(item: &TaskItem) -> String {
     ExecutionState::Passed => Style::new().green().bold().apply_to("D").to_string(),
     ExecutionState::Failed => Style::new().red().bold().apply_to("D").to_string(),
   };
-  let name = Style::new().yellow().apply_to(&item.name).to_string();
+
   let status = item
     .report
     .status
@@ -730,12 +670,12 @@ fn render_item_line(item: &TaskItem) -> String {
       ExecutionState::Failed => Style::new().red().apply_to("Failed").to_string(),
     });
 
-  let elapsed = item
+  let mut details = Vec::new();
+  if let Some(duration) = item
     .report
     .duration
-    .or_else(|| item.started_at.map(|started_at| started_at.elapsed()));
-  let mut details = Vec::new();
-  if let Some(duration) = elapsed {
+    .or_else(|| item.started_at.map(|started| started.elapsed()))
+  {
     details.push(
       Style::new()
         .dim()
@@ -768,6 +708,7 @@ fn render_item_line(item: &TaskItem) -> String {
     );
   }
 
+  let name = Style::new().yellow().apply_to(&item.name).to_string();
   if details.is_empty() {
     format!("[{marker}] {name} {status}")
   } else {
@@ -787,48 +728,6 @@ fn render_counter(done: usize, running: usize, pending: usize, failed: usize) ->
   format!("[{}]", parts.join(" / "))
 }
 
-fn task_counts(state: &InteractiveState, task: &TaskProgress) -> (usize, usize, usize, usize) {
-  let child_tasks = state
-    .tasks
-    .values()
-    .filter(|candidate| {
-      candidate.parent.as_deref() == Some(task.name.as_str())
-        || candidate
-          .parent
-          .as_ref()
-          .is_some_and(|parent| task.items.contains_key(parent))
-    })
-    .collect::<Vec<_>>();
-  if !child_tasks.is_empty() {
-    return child_tasks.into_iter().fold((0, 0, 0, 0), |acc, child| {
-      let counts = task_counts(state, child);
-      (
-        acc.0 + counts.0,
-        acc.1 + counts.1,
-        acc.2 + counts.2,
-        acc.3 + counts.3,
-      )
-    });
-  }
-
-  let mut done = 0;
-  let mut running = 0;
-  let mut pending = 0;
-  let mut failed = 0;
-  for item in task.items.values() {
-    match item.state {
-      ExecutionState::Pending => pending += 1,
-      ExecutionState::Running => running += 1,
-      ExecutionState::Passed => done += 1,
-      ExecutionState::Failed => {
-        done += 1;
-        failed += 1;
-      }
-    }
-  }
-  (done, running, pending, failed)
-}
-
 fn task_label(kind: TaskKind) -> &'static str {
   match kind {
     TaskKind::Problem => "Problems",
@@ -843,5 +742,78 @@ fn phase_label(kind: PhaseKind) -> &'static str {
     PhaseKind::NixEval => "Nix eval",
     PhaseKind::Runtime => "Runtime",
     PhaseKind::NixBuild => "Nix build",
+  }
+}
+
+fn with_output_lock(f: impl FnOnce()) {
+  let lock = OUTPUT_LOCK.get_or_init(|| Arc::new(Mutex::new(()))).clone();
+  let _guard = lock.lock().unwrap();
+  f();
+}
+
+fn clear_active_render() {
+  let Some(inner) = active_progress() else {
+    return;
+  };
+  let mut state = inner.lock().unwrap();
+  if !state.enabled || state.last_rendered_lines == 0 {
+    return;
+  }
+  let mut out = stdout();
+  clear_previous_lines(&mut out, state.last_rendered_lines);
+  let _ = out.flush();
+  state.last_rendered_lines = 0;
+}
+
+fn redraw_active_render_locked() {
+  if let Some(inner) = active_progress() {
+    render_locked(&inner);
+  }
+}
+
+fn active_progress() -> Option<Arc<Mutex<State>>> {
+  let active = ACTIVE_PROGRESS.get_or_init(|| Arc::new(Mutex::new(None)));
+  let mut guard = active.lock().unwrap();
+  let upgraded = guard.as_ref().and_then(Weak::upgrade);
+  if upgraded.is_none() {
+    *guard = None;
+  }
+  upgraded
+}
+
+fn spawn_refresh_thread(inner: &Arc<Mutex<State>>) {
+  let weak = Arc::downgrade(inner);
+  thread::spawn(move || {
+    loop {
+      thread::sleep(Duration::from_millis(100));
+      let Some(inner) = weak.upgrade() else {
+        break;
+      };
+      let refresh = {
+        let state = inner.lock().unwrap();
+        state.enabled && has_running_items(&state)
+      };
+      if refresh {
+        render(&inner);
+      }
+    }
+  });
+}
+
+fn has_running_items(state: &State) -> bool {
+  state.tasks.values().any(|task| {
+    task
+      .items
+      .values()
+      .any(|item| item.state == ExecutionState::Running)
+  })
+}
+
+fn clear_previous_lines(out: &mut impl Write, line_count: usize) {
+  for index in 0..line_count {
+    if index > 0 {
+      let _ = write!(out, "\x1b[1A");
+    }
+    let _ = write!(out, "\r\x1b[2K");
   }
 }
