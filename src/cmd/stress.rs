@@ -166,16 +166,16 @@ pub fn run(opts: &StressOpts) -> Result<()> {
       all_generator_args.push(current_args);
     }
 
-    let hacked_case = run_stress_round(
-      &problem,
-      &crate::runtime::realize_artifact(&generator_wasm)?,
-      &all_generator_args,
-      &opts.generator,
-      opts.tick_limit,
-      opts.memory_limit,
+    let hacked_case = run_stress_round(&StressRoundContext {
+      problem: &problem,
+      generator_wasm: &crate::runtime::realize_artifact(&generator_wasm)?,
+      generator_args_list: &all_generator_args,
+      generator_name: &opts.generator,
+      tick_limit_override: opts.tick_limit,
+      memory_limit_override: opts.memory_limit,
       round,
-      RuntimeOptions::new(Some(jobs)).with_progress(progress.clone()),
-    )?;
+      options: RuntimeOptions::new(Some(jobs)).with_progress(progress.clone()),
+    })?;
 
     info!("Stress test batch finished.");
     match hacked_case {
@@ -226,36 +226,33 @@ pub fn run(opts: &StressOpts) -> Result<()> {
   Ok(())
 }
 
-fn run_stress_round(
-  problem: &ProblemSpec,
-  generator_wasm: &str,
-  generator_args_list: &[Vec<String>],
-  generator_name: &str,
-  tick_limit_override: Option<u64>,
-  memory_limit_override: Option<u64>,
-  round: u64,
-  options: RuntimeOptions,
-) -> Result<Option<FailingTestCase>> {
+fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTestCase>> {
   ThreadPoolBuilder::new()
-    .num_threads(options.jobs)
+    .num_threads(context.options.jobs)
     .build()
     .context("Failed to build stress worker pool")?
     .install(|| {
-      generator_args_list
+      context
+        .generator_args_list
         .par_iter()
         .enumerate()
         .map(|(case_index, generator_args)| {
-          let test_case_name = format!("stress-round-{round}-case-{case_index}");
-          let generated_input = generate_input(generator_wasm, generator_args, &test_case_name)?;
-          let mut dynamic_problem = problem.clone();
+          let test_case_name = format!("stress-round-{}-case-{case_index}", context.round);
+          let generated_input =
+            generate_input(context.generator_wasm, generator_args, &test_case_name)?;
+          let mut dynamic_problem = context.problem.clone();
           dynamic_problem.test_cases = vec![TestCaseSpec {
             name: test_case_name.clone(),
             input_file: Some(generated_input.to_string_lossy().into_owned()),
-            tick_limit: tick_limit_override.unwrap_or(problem.tick_limit),
-            memory_limit: memory_limit_override.unwrap_or(problem.memory_limit),
+            tick_limit: context
+              .tick_limit_override
+              .unwrap_or(context.problem.tick_limit),
+            memory_limit: context
+              .memory_limit_override
+              .unwrap_or(context.problem.memory_limit),
             groups: Vec::new(),
             traits: BTreeMap::new(),
-            generator: Some(generator_name.to_string()),
+            generator: Some(context.generator_name.to_string()),
             arguments: Some(generator_args.to_vec()),
           }];
           dynamic_problem.validator_tests = Vec::new();
@@ -267,9 +264,9 @@ fn run_stress_round(
           }];
 
           let workspace = RuntimeWorkspace::new(
-            std::env::temp_dir().join(format!("hull-stress-{round}-{case_index}")),
+            std::env::temp_dir().join(format!("hull-stress-{}-{case_index}", context.round)),
           )?;
-          let runtime = analyze_problem(&dynamic_problem, &workspace, options.clone())?;
+          let runtime = analyze_problem(&dynamic_problem, &workspace, context.options.clone())?;
 
           for solution in dynamic_problem
             .solutions
@@ -306,6 +303,17 @@ fn run_stress_round(
         .collect::<Result<Vec<_>>>()
         .map(|cases| cases.into_iter().flatten().next())
     })
+}
+
+struct StressRoundContext<'a> {
+  problem: &'a ProblemSpec,
+  generator_wasm: &'a str,
+  generator_args_list: &'a [Vec<String>],
+  generator_name: &'a str,
+  tick_limit_override: Option<u64>,
+  memory_limit_override: Option<u64>,
+  round: u64,
+  options: RuntimeOptions,
 }
 
 fn generate_input(

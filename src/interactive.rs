@@ -110,6 +110,21 @@ pub struct ProblemProgressHandle {
   scope: Option<String>,
 }
 
+pub struct PhaseGuard {
+  inner: Arc<Mutex<InteractiveState>>,
+  active: bool,
+}
+
+pub struct LiveRenderSuspendGuard {
+  active: bool,
+}
+
+pub struct ItemGuard {
+  handle: TaskHandle,
+  item_name: String,
+  active: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct TaskHandle {
   inner: Arc<Mutex<InteractiveState>>,
@@ -152,15 +167,20 @@ enum NodeKind {
   Item,
 }
 
+type OutputLock = Arc<Mutex<()>>;
+type ActiveProgress = Arc<Mutex<Option<Weak<Mutex<InteractiveState>>>>>;
+type SuspendState = Arc<Mutex<bool>>;
+
 static SETTINGS: OnceLock<InteractiveSettings> = OnceLock::new();
-static OUTPUT_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
-static ACTIVE_PROGRESS: OnceLock<Arc<Mutex<Option<Weak<Mutex<InteractiveState>>>>>> =
-  OnceLock::new();
+static OUTPUT_LOCK: OnceLock<OutputLock> = OnceLock::new();
+static ACTIVE_PROGRESS: OnceLock<ActiveProgress> = OnceLock::new();
+static LIVE_RENDER_SUSPENDED: OnceLock<SuspendState> = OnceLock::new();
 
 pub fn init(settings: InteractiveSettings) {
   let _ = SETTINGS.set(settings);
   let _ = OUTPUT_LOCK.set(Arc::new(Mutex::new(())));
   let _ = ACTIVE_PROGRESS.set(Arc::new(Mutex::new(None)));
+  let _ = LIVE_RENDER_SUSPENDED.set(Arc::new(Mutex::new(false)));
 }
 
 pub fn current_settings() -> InteractiveSettings {
@@ -175,17 +195,17 @@ pub fn log_line(message: &str) {
   });
 }
 
-pub fn suspend_live_render() {
+pub fn suspend_live_render() -> LiveRenderSuspendGuard {
+  let suspended = LIVE_RENDER_SUSPENDED
+    .get_or_init(|| Arc::new(Mutex::new(false)))
+    .clone();
+  {
+    let mut guard = suspended.lock().unwrap();
+    assert!(!*guard, "live render is already suspended");
+    *guard = true;
+  }
   with_output_lock(detach_active_render);
-}
-
-pub fn resume_live_render(separate_line: bool) {
-  with_output_lock(|| {
-    if separate_line {
-      println!();
-    }
-    redraw_active_render_locked();
-  });
+  LiveRenderSuspendGuard { active: true }
 }
 
 pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
@@ -216,7 +236,7 @@ impl ProblemProgressHandle {
     Self {
       inner: Arc::new(Mutex::new(InteractiveState {
         enabled: false,
-        title_label: "Problem".to_string(),
+        title_label: "Dummy".to_string(),
         title_name: None,
         phase: None,
         roots: BTreeMap::new(),
@@ -228,10 +248,6 @@ impl ProblemProgressHandle {
 
   pub fn enabled(&self) -> bool {
     self.inner.lock().unwrap().enabled
-  }
-
-  pub fn reset(&self, name: impl Into<String>) {
-    self.set_title("Problem", name);
   }
 
   pub fn set_title(&self, label: impl Into<String>, name: impl Into<String>) {
@@ -253,7 +269,7 @@ impl ProblemProgressHandle {
     }
   }
 
-  pub fn set_phase(&self, kind: PhaseKind, label: impl Into<String>) {
+  pub fn phase(&self, kind: PhaseKind, label: impl Into<String>) -> PhaseGuard {
     {
       let mut state = self.inner.lock().unwrap();
       state.phase = Some(PhaseState {
@@ -263,15 +279,16 @@ impl ProblemProgressHandle {
       });
     }
     render(&self.inner);
-  }
-
-  pub fn finish_phase(&self) {
-    {
-      let mut state = self.inner.lock().unwrap();
-      state.phase = None;
-      state.roots.clear();
+    if self.enabled() {
+      with_output_lock(|| {
+        redraw_active_render_locked();
+        detach_active_render();
+      });
     }
-    render(&self.inner);
+    PhaseGuard {
+      inner: self.inner.clone(),
+      active: true,
+    }
   }
 
   pub fn register_group(
@@ -325,49 +342,39 @@ impl ProblemProgressHandle {
       task_id,
     }
   }
+}
 
-  pub fn println_fallback(&self, line: &str) {
-    if !self.enabled() {
-      log_line(line);
+impl Drop for PhaseGuard {
+  fn drop(&mut self) {
+    if !self.active {
+      return;
     }
-  }
-
-  pub fn finish(&self) {
-    with_output_lock(|| {
+    {
       let mut state = self.inner.lock().unwrap();
-      if !state.enabled || state.last_rendered_lines == 0 {
-        return;
-      }
+      state.phase = None;
+      state.roots.clear();
+    }
+    render(&self.inner);
+    self.active = false;
+  }
+}
 
-      let lines = render_lines(&state);
-      clear_previous_lines(&mut stdout(), state.last_rendered_lines);
-      let mut out = stdout();
-      for (index, line) in lines.iter().enumerate() {
-        if index > 0 {
-          let _ = writeln!(out);
-        }
-        let _ = write!(out, "{line}");
-      }
-      let _ = writeln!(out);
-      let _ = out.flush();
-      state.last_rendered_lines = 0;
-    });
+impl Drop for LiveRenderSuspendGuard {
+  fn drop(&mut self) {
+    if !self.active {
+      return;
+    }
+    *LIVE_RENDER_SUSPENDED
+      .get_or_init(|| Arc::new(Mutex::new(false)))
+      .lock()
+      .unwrap() = false;
+    with_output_lock(redraw_active_render_locked);
+    self.active = false;
   }
 }
 
 impl TaskHandle {
-  pub fn finish_item(&self, name: &str, status: Option<&str>, success: bool) {
-    self.finish_item_with_report(
-      name,
-      success,
-      TaskItemReport {
-        status: status.map(ToOwned::to_owned),
-        ..TaskItemReport::default()
-      },
-    );
-  }
-
-  pub fn start_item(&self, name: &str) {
+  fn start_item(&self, name: &str) {
     update_item(&self.inner, &self.task_id, name, |item| {
       item.state = ExecutionState::Running;
       item.report = TaskItemReport::default();
@@ -376,7 +383,17 @@ impl TaskHandle {
     });
   }
 
-  pub fn finish_item_with_report(&self, name: &str, success: bool, report: TaskItemReport) {
+  pub fn item(&self, name: impl Into<String>) -> ItemGuard {
+    let item_name = name.into();
+    self.start_item(&item_name);
+    ItemGuard {
+      handle: self.clone(),
+      item_name,
+      active: true,
+    }
+  }
+
+  fn finish_item(&self, name: &str, success: bool, report: TaskItemReport) {
     update_item(&self.inner, &self.task_id, name, |item| {
       item.state = if success {
         ExecutionState::Passed
@@ -403,12 +420,35 @@ impl TaskHandle {
   }
 }
 
-fn insert_group(state: &mut InteractiveState, scope: Option<&str>, node: TreeNode) {
-  if let Some(scope) = scope {
-    if let Some(parent_item) = find_item_mut_by_label(&mut state.roots, scope) {
-      parent_item.children.insert(node.id.clone(), node);
-      return;
+impl ItemGuard {
+  pub fn finish(mut self, success: bool, report: TaskItemReport) {
+    self.handle.finish_item(&self.item_name, success, report);
+    self.active = false;
+  }
+}
+
+impl Drop for ItemGuard {
+  fn drop(&mut self) {
+    if self.active {
+      self.handle.finish_item(
+        &self.item_name,
+        false,
+        TaskItemReport {
+          status: Some("internal_error".to_string()),
+          ..TaskItemReport::default()
+        },
+      );
+      self.active = false;
     }
+  }
+}
+
+fn insert_group(state: &mut InteractiveState, scope: Option<&str>, node: TreeNode) {
+  if let Some(scope) = scope
+    && let Some(parent_item) = find_item_mut_by_label(&mut state.roots, scope)
+  {
+    parent_item.children.insert(node.id.clone(), node);
+    return;
   }
   state.roots.insert(node.id.clone(), node);
 }
@@ -421,10 +461,10 @@ fn update_item(
 ) {
   {
     let mut state = inner.lock().unwrap();
-    if let Some(task) = find_node_mut_by_id(&mut state.roots, task_id) {
-      if let Some(item) = task.children.get_mut(item_name) {
-        update(item);
-      }
+    if let Some(task) = find_node_mut_by_id(&mut state.roots, task_id)
+      && let Some(item) = task.children.get_mut(item_name)
+    {
+      update(item);
     }
   }
   render(inner);
@@ -1069,5 +1109,56 @@ mod tests {
     assert_eq!(task_label(TaskKind::Validator), "Validator tests");
     assert_eq!(phase_label(PhaseKind::NixPrepare), "Nix prepare");
     assert_eq!(phase_label(PhaseKind::NixBuild), "Nix build");
+  }
+
+  #[test]
+  fn phase_guard_sets_and_clears_phase() {
+    let progress = ProblemProgressHandle::disabled();
+    {
+      let _phase = progress.phase(PhaseKind::Runtime, "Running tests");
+      let state = progress.inner.lock().unwrap();
+      assert!(state.phase.is_some());
+      assert_eq!(
+        state.phase.as_ref().map(|phase| phase.label.as_str()),
+        Some("Running tests")
+      );
+    }
+
+    let state = progress.inner.lock().unwrap();
+    assert!(state.phase.is_none());
+  }
+
+  #[test]
+  fn item_guard_marks_unfinished_items_as_internal_error() {
+    let progress = ProblemProgressHandle::disabled();
+    let handle = progress.register_group(TaskKind::Solution, "std", ["case1"], Some(0.0));
+
+    {
+      let _item = handle.item("case1");
+    }
+
+    let state = progress.inner.lock().unwrap();
+    let node = state.roots.get("std").unwrap();
+    let item = node.children.get("case1").unwrap();
+    assert_eq!(item.state, ExecutionState::Failed);
+    assert_eq!(item.report.status.as_deref(), Some("internal_error"));
+  }
+
+  #[test]
+  fn live_render_suspend_guard_restores_state_on_drop() {
+    let guard = suspend_live_render();
+    assert!(
+      *LIVE_RENDER_SUSPENDED
+        .get_or_init(|| Arc::new(Mutex::new(false)))
+        .lock()
+        .unwrap()
+    );
+    drop(guard);
+    assert!(
+      !*LIVE_RENDER_SUSPENDED
+        .get_or_init(|| Arc::new(Mutex::new(false)))
+        .lock()
+        .unwrap()
+    );
   }
 }

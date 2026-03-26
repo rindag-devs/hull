@@ -99,7 +99,7 @@ fn print_human_readable_report(report: &JudgeReport) {
     report.score, report.full_score
   );
 
-  // --- Subtasks Table ---
+  // Subtasks table
   let mut subtask_table = Table::new();
   subtask_table.load_preset(UTF8_FULL);
   subtask_table.set_header(vec!["#", "Status", "Score", "Full Score"]);
@@ -125,7 +125,7 @@ fn print_human_readable_report(report: &JudgeReport) {
   println!("Subtask Results:");
   println!("{subtask_table}");
 
-  // --- Test Cases Table ---
+  // Test cases table
   let mut test_case_table = Table::new();
   test_case_table.load_preset(UTF8_FULL);
   test_case_table.set_header(vec!["Name", "Status", "Score", "Tick", "Memory"]);

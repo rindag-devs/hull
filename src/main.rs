@@ -29,6 +29,10 @@ pub mod utils;
 fn main() -> Result<()> {
   let opts = Opts::parse();
 
+  interactive::init(interactive::InteractiveSettings {
+    mode: opts.interactive,
+  });
+
   tracing_subscriber::registry()
     .with(
       tracing_subscriber::EnvFilter::try_from_default_env()
@@ -41,10 +45,6 @@ fn main() -> Result<()> {
         .with_writer(|| crate::interactive::LogWriter),
     )
     .init();
-
-  interactive::init(interactive::InteractiveSettings {
-    mode: opts.interactive,
-  });
 
   match &opts.command {
     cli::Command::Build(opts) => cmd::build::run(opts),

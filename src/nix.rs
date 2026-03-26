@@ -19,7 +19,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 
-use crate::interactive::{self, ProblemProgressHandle};
+use crate::interactive;
 
 #[derive(Deserialize)]
 pub struct FlakeMetadata {
@@ -103,7 +103,7 @@ impl EvalCommand {
   }
 
   pub fn run_and_capture_stdout(self) -> Result<String> {
-    run_nix_command(self.build_command(), self.with_nom, "nix eval", None, true)
+    run_nix_command(self.build_command(), self.with_nom, "nix eval", true)
   }
 }
 
@@ -268,20 +268,13 @@ impl BuildCommand {
   /// Executes the configured `nix build` command.
   /// This method is suitable when stdout does not need to be captured.
   pub fn run(self) -> Result<()> {
-    run_nix_command(
-      self.build_command(),
-      self.with_nom,
-      "nix build",
-      None,
-      false,
-    )
-    .map(|_| ())
+    run_nix_command(self.build_command(), self.with_nom, "nix build", false).map(|_| ())
   }
 
   /// Executes the command and captures its standard output.
   /// This requires `print_out_paths` to be true to be useful.
   pub fn run_and_capture_stdout(self) -> Result<String> {
-    run_nix_command(self.build_command(), self.with_nom, "nix build", None, true)
+    run_nix_command(self.build_command(), self.with_nom, "nix build", true)
   }
 }
 
@@ -304,7 +297,7 @@ pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()
     .collect::<Vec<_>>()
     .join(" & ");
   shell.arg("-c").arg(format!("{script} && wait"));
-  run_nix_command(shell, with_nom, label, None, false).map(|_| ())
+  run_nix_command(shell, with_nom, label, false).map(|_| ())
 }
 
 fn shell_escape_command(command: &Command) -> String {
@@ -337,11 +330,10 @@ fn run_nix_command(
   mut command: Command,
   with_nom: bool,
   label: &str,
-  progress: Option<&ProblemProgressHandle>,
   capture_stdout: bool,
 ) -> Result<String> {
   if with_nom {
-    interactive::suspend_live_render();
+    let _suspend = interactive::suspend_live_render();
     let mut child = command
       .stdin(Stdio::null())
       .stdout(if capture_stdout {
@@ -383,29 +375,21 @@ fn run_nix_command(
     };
 
     if !nom_status.success() {
-      interactive::resume_live_render(true);
       bail!("Log process `nom` failed with exit code: {:?}", nom_status);
     }
 
     if let Some(output) = output {
       if !output.status.success() {
-        interactive::resume_live_render(true);
         bail!("{label} command failed.");
       }
       let stdout = String::from_utf8(output.stdout)
         .with_context(|| format!("Failed to parse {label} stdout as UTF-8"))?;
-      interactive::resume_live_render(true);
       Ok(stdout.trim().to_string())
     } else {
-      interactive::resume_live_render(true);
       Ok(String::new())
     }
   } else {
-    if let Some(progress) = progress {
-      progress.println_fallback(&format!("Running {label}..."));
-    } else {
-      interactive::log_line(&format!("Running {label}..."));
-    }
+    interactive::log_line(&format!("Running {label}..."));
     if capture_stdout {
       let output = command
         .stdin(Stdio::null())

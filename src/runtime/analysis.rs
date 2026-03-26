@@ -37,9 +37,22 @@ use crate::runner::RunStatus;
 const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
 const TOOL_MEMORY_LIMIT: u64 = u32::MAX as u64;
 
+type TestCaseRunMap = BTreeMap<String, (RuntimeTestCaseData, BTreeMap<String, JudgeReport>)>;
+
+struct JudgerInvocation<'a> {
+  runner: &'a ArtifactSpec,
+  mode: &'a str,
+  input_path: &'a Path,
+  test_case: &'a TestCaseSpec,
+  prepared_solution: &'a PreparedSolutionSpec,
+  outputs_dir: &'a Path,
+  judge_context: Option<(&'a Path, &'a Path)>,
+  work_dir: &'a Path,
+}
+
 // Execute the full runtime analysis for one problem and return the data that
 // problem and contest targets consume during packaging.
-pub(crate) fn install_with_pool<T, F>(options: RuntimeOptions, f: F) -> Result<T>
+pub fn install_with_pool<T, F>(options: RuntimeOptions, f: F) -> Result<T>
 where
   T: Send,
   F: FnOnce() -> Result<T> + Send,
@@ -66,7 +79,7 @@ pub fn analyze_problem(
   })
 }
 
-pub(crate) fn analyze_problem_in_pool(
+fn analyze_problem_in_pool(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
   progress: Option<&ProblemProgressHandle>,
@@ -193,9 +206,7 @@ fn run_validator_tests(
     .par_iter()
     .map(|test| {
       info!("Running validator test {}", test.name);
-      if let Some(handle) = &handle {
-        handle.start_item(&test.name);
-      }
+      let guard = handle.as_ref().map(|handle| handle.item(test.name.clone()));
       let input_path = resolve_test_input(
         problem,
         test.input_file.as_deref(),
@@ -204,9 +215,8 @@ fn run_validator_tests(
         &format!("validator-test-{}", test.name),
       )?;
       let report = run_validator(problem, &input_path, 1)?;
-      if let Some(handle) = &handle {
-        handle.finish_item_with_report(
-          &test.name,
+      if let Some(guard) = guard {
+        guard.finish(
           !is_fatal_validation_status(&report.status),
           TaskItemReport {
             status: Some(report.status.clone()),
@@ -241,9 +251,7 @@ fn run_checker_tests(
     .par_iter()
     .map(|test| {
       info!("Running checker test {}", test.name);
-      if let Some(handle) = &handle {
-        handle.start_item(&test.name);
-      }
+      let guard = handle.as_ref().map(|handle| handle.item(test.name.clone()));
       let input_path = resolve_test_input(
         problem,
         test.input_file.as_deref(),
@@ -307,9 +315,8 @@ fn run_checker_tests(
         &output_path,
         &answer_dir.join(&test.output_name),
       )?;
-      if let Some(handle) = &handle {
-        handle.finish_item_with_report(
-          &test.name,
+      if let Some(guard) = guard {
+        guard.finish(
           !is_fatal_checker_status(&report.status),
           TaskItemReport {
             status: Some(report.status.clone()),
@@ -330,7 +337,7 @@ fn run_test_cases(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
   progress: Option<&ProblemProgressHandle>,
-) -> Result<BTreeMap<String, (RuntimeTestCaseData, BTreeMap<String, JudgeReport>)>> {
+) -> Result<TestCaseRunMap> {
   let solutions = &problem.solutions;
   let main_solution = solutions
     .iter()
@@ -400,12 +407,10 @@ fn run_test_cases(
         .par_iter()
         .map(|solution| {
           info!("Judging solution {} on {}", solution.name, test_case.name);
-          if let Some(handle) = solution_handles
+          let guard = solution_handles
             .as_ref()
             .and_then(|handles| handles.get(&solution.name))
-          {
-            handle.start_item(&test_case.name);
-          }
+            .map(|handle| handle.item(test_case.name.clone()));
           let report = run_judge(
             problem,
             &concrete_test_case,
@@ -424,17 +429,18 @@ fn run_test_cases(
               entry.1 += 1;
               entry.0 / problem.test_cases.len().max(1) as f64
             };
-            handle.finish_item_with_report(
-              &test_case.name,
-              !is_fatal_judge_status(&report.status),
-              TaskItemReport {
-                status: Some(report.status.clone()),
-                tick: Some(report.tick),
-                memory: Some(report.memory),
-                score: Some(report.score),
-                ..TaskItemReport::default()
-              },
-            );
+            if let Some(guard) = guard {
+              guard.finish(
+                !is_fatal_judge_status(&report.status),
+                TaskItemReport {
+                  status: Some(report.status.clone()),
+                  tick: Some(report.tick),
+                  memory: Some(report.memory),
+                  score: Some(report.score),
+                  ..TaskItemReport::default()
+                },
+              );
+            }
             handle.set_score(current_score);
           }
           Ok((solution.name.clone(), report))
@@ -597,16 +603,16 @@ fn run_generate_outputs(
   }
   fs::create_dir_all(&outputs_dir)?;
 
-  run_judger_script(
-    &problem.judger.generate_outputs_runner,
-    "generateOutputs",
-    &input_path,
+  run_judger_script(JudgerInvocation {
+    runner: &problem.judger.generate_outputs_runner,
+    mode: "generateOutputs",
+    input_path: &input_path,
     test_case,
     prepared_solution,
-    &outputs_dir,
-    None,
-    &work_dir,
-  )?;
+    outputs_dir: &outputs_dir,
+    judge_context: None,
+    work_dir: &work_dir,
+  })?;
 
   Ok(outputs_dir)
 }
@@ -645,16 +651,16 @@ fn run_judge(
   fs::create_dir_all(&outputs_dir)?;
   let report_path = case_dir.join("report.json");
 
-  run_judger_script(
-    &problem.judger.judge_runner,
-    "judge",
-    &input_path,
+  run_judger_script(JudgerInvocation {
+    runner: &problem.judger.judge_runner,
+    mode: "judge",
+    input_path: &input_path,
     test_case,
     prepared_solution,
-    &outputs_dir,
-    Some((official_outputs_dir, &report_path)),
-    &work_dir,
-  )?;
+    outputs_dir: &outputs_dir,
+    judge_context: Some((official_outputs_dir, &report_path)),
+    work_dir: &work_dir,
+  })?;
 
   let mut report: JudgeReport = serde_json::from_slice(
     &fs::read(&report_path)
@@ -665,38 +671,35 @@ fn run_judge(
   Ok(report)
 }
 
-fn run_judger_script(
-  runner: &ArtifactSpec,
-  mode: &str,
-  input_path: &Path,
-  test_case: &TestCaseSpec,
-  prepared_solution: &PreparedSolutionSpec,
-  outputs_dir: &Path,
-  judge_context: Option<(&Path, &Path)>,
-  work_dir: &Path,
-) -> Result<()> {
+fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<()> {
   // The packaged runners write helper files into their working directory, so
   // each invocation gets an isolated sandbox directory.
-  let runner = realize_runner(runner)?;
+  let runner = realize_runner(invocation.runner)?;
   let mut command = Command::new(&runner);
   command
-    .current_dir(work_dir)
-    .env("HULL_MODE", mode)
-    .env("HULL_TESTCASE_NAME", &test_case.name)
-    .env("HULL_SOLUTION_NAME", &prepared_solution.src)
-    .env("HULL_INPUT_PATH", input_path)
-    .env("HULL_TICK_LIMIT", test_case.tick_limit.to_string())
-    .env("HULL_MEMORY_LIMIT", test_case.memory_limit.to_string())
-    .env("HULL_SOLUTION_SRC", &prepared_solution.src)
-    .env("HULL_OUTPUTS_DIR", outputs_dir);
+    .current_dir(invocation.work_dir)
+    .env("HULL_MODE", invocation.mode)
+    .env("HULL_TESTCASE_NAME", &invocation.test_case.name)
+    .env("HULL_SOLUTION_NAME", &invocation.prepared_solution.src)
+    .env("HULL_INPUT_PATH", invocation.input_path)
+    .env(
+      "HULL_TICK_LIMIT",
+      invocation.test_case.tick_limit.to_string(),
+    )
+    .env(
+      "HULL_MEMORY_LIMIT",
+      invocation.test_case.memory_limit.to_string(),
+    )
+    .env("HULL_SOLUTION_SRC", &invocation.prepared_solution.src)
+    .env("HULL_OUTPUTS_DIR", invocation.outputs_dir);
 
-  if let Some(executable) = &prepared_solution.executable {
+  if let Some(executable) = &invocation.prepared_solution.executable {
     command.env("HULL_SOLUTION_EXECUTABLE", realize_artifact(executable)?);
   } else {
     command.env_remove("HULL_SOLUTION_EXECUTABLE");
   }
 
-  match judge_context {
+  match invocation.judge_context {
     Some((official_outputs_dir, report_path)) => {
       command
         .env("HULL_OFFICIAL_OUTPUTS_DIR", official_outputs_dir)

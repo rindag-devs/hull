@@ -106,47 +106,41 @@ pub fn build_problem(
   options: RuntimeOptions,
   nix_args: &[String],
 ) -> Result<()> {
-  options.progress.set_phase(
-    PhaseKind::NixEval,
-    format!("Loading metadata for {problem}"),
-  );
-  if options.progress.enabled() {
-    options.progress.finish();
-  }
-  let spec = load_problem_spec(problem)?;
-  options.progress.finish_phase();
+  let spec = {
+    let _phase = options.progress.phase(
+      PhaseKind::NixEval,
+      format!("Loading metadata for {problem}"),
+    );
+    load_problem_spec(problem)?
+  };
 
-  options.progress.set_phase(
-    PhaseKind::NixPrepare,
-    format!("Realizing toolchains and prepared artifacts for {problem}"),
-  );
-  if options.progress.enabled() {
-    options.progress.finish();
+  {
+    let _phase = options.progress.phase(
+      PhaseKind::NixPrepare,
+      format!("Realizing toolchains and prepared artifacts for {problem}"),
+    );
+    run_build_commands(
+      collect_problem_realize_builds(&spec),
+      "nix prepare for runtime artifacts",
+    )?;
   }
-  run_build_commands(
-    collect_problem_realize_builds(&spec),
-    "nix prepare for runtime artifacts",
-  )?;
-  options.progress.finish_phase();
 
-  options.progress.set_phase(
-    PhaseKind::Runtime,
-    "Running validators, checker tests, and solutions".to_string(),
-  );
-  let workspace =
-    RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;
-  let runtime = analyze_problem(&spec, &workspace, options.clone())?;
-  options.progress.finish_phase();
+  let runtime = {
+    let _phase = options.progress.phase(
+      PhaseKind::Runtime,
+      "Running validators, checker tests, and solutions".to_string(),
+    );
+    let workspace =
+      RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;
+    analyze_problem(&spec, &workspace, options.clone())?
+  };
 
-  options
-    .progress
-    .set_phase(PhaseKind::NixBuild, format!("Packaging target {}", target));
-  if options.progress.enabled() {
-    options.progress.finish();
+  {
+    let _phase = options
+      .progress
+      .phase(PhaseKind::NixBuild, format!("Packaging target {}", target));
+    build_problem_target(problem, target, &runtime, out_link, nix_args)
   }
-  let result = build_problem_target(problem, target, &runtime, out_link, nix_args);
-  options.progress.finish_phase();
-  result
 }
 
 pub fn build_contest(
@@ -156,87 +150,81 @@ pub fn build_contest(
   options: RuntimeOptions,
   nix_args: &[String],
 ) -> Result<()> {
-  options.progress.set_phase(
-    PhaseKind::NixEval,
-    format!("Loading contest metadata for {contest}"),
-  );
-  if options.progress.enabled() {
-    options.progress.finish();
-  }
-  let contest_spec = load_contest_spec(contest)?;
-  options.progress.finish_phase();
-
-  options.progress.set_phase(
-    PhaseKind::NixPrepare,
-    format!("Realizing toolchains and prepared artifacts for contest {contest}"),
-  );
-  if options.progress.enabled() {
-    options.progress.finish();
-  }
-  run_build_commands(
-    contest_spec
-      .problems
-      .iter()
-      .flat_map(collect_problem_realize_builds)
-      .collect(),
-    "nix prepare for contest runtime artifacts",
-  )?;
-  options.progress.finish_phase();
-
-  options.progress.set_phase(
-    PhaseKind::Runtime,
-    format!("Running analysis for contest {}", contest),
-  );
-  options.progress.set_title("Contest", contest);
-  let contest_handle = if contest_spec.problems.is_empty() {
-    None
-  } else {
-    Some(options.progress.register_group(
-      TaskKind::Problem,
-      contest,
-      contest_spec.problems.iter().map(|spec| spec.name.clone()),
-      None,
-    ))
+  let contest_spec = {
+    let _phase = options.progress.phase(
+      PhaseKind::NixEval,
+      format!("Loading contest metadata for {contest}"),
+    );
+    load_contest_spec(contest)?
   };
-  let runtime_by_problem = install_with_pool(options.clone(), || {
-    contest_spec
-      .problems
-      .par_iter()
-      .map(|spec| {
-        if let Some(handle) = &contest_handle {
-          handle.start_item(&spec.name);
-        }
-        let workspace = RuntimeWorkspace::new(
-          std::env::temp_dir().join(format!("hull-build-contest-{contest}-{}", spec.name)),
-        )?;
-        let runtime = analyze_problem(
-          spec,
-          &workspace,
-          RuntimeOptions::new(Some(1)).with_progress(options.progress.child_scope(&spec.name)),
-        )?;
-        if let Some(handle) = &contest_handle {
-          handle.finish_item_with_report(
-            &spec.name,
-            true,
-            TaskItemReport {
-              status: Some("accepted".to_string()),
-              ..TaskItemReport::default()
-            },
-          );
-        }
-        Ok((spec.name.clone(), runtime))
-      })
-      .collect::<Result<BTreeMap<_, _>>>()
-  })?;
-  options.progress.finish_phase();
-  options.progress.set_phase(
-    PhaseKind::NixBuild,
-    format!("Packaging contest target {}", target),
-  );
-  if options.progress.enabled() {
-    options.progress.finish();
+
+  {
+    let _phase = options.progress.phase(
+      PhaseKind::NixPrepare,
+      format!("Realizing toolchains and prepared artifacts for contest {contest}"),
+    );
+    run_build_commands(
+      contest_spec
+        .problems
+        .iter()
+        .flat_map(collect_problem_realize_builds)
+        .collect(),
+      "nix prepare for contest runtime artifacts",
+    )?;
   }
-  let result = build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args);
-  options.progress.finish_phase();
-  result
+
+  let runtime_by_problem = {
+    let _phase = options.progress.phase(
+      PhaseKind::Runtime,
+      format!("Running analysis for contest {}", contest),
+    );
+    options.progress.set_title("Contest", contest);
+    let contest_handle = if contest_spec.problems.is_empty() {
+      None
+    } else {
+      Some(options.progress.register_group(
+        TaskKind::Problem,
+        contest,
+        contest_spec.problems.iter().map(|spec| spec.name.clone()),
+        None,
+      ))
+    };
+    install_with_pool(options.clone(), || {
+      contest_spec
+        .problems
+        .par_iter()
+        .map(|spec| {
+          let guard = contest_handle
+            .as_ref()
+            .map(|handle| handle.item(spec.name.clone()));
+          let workspace = RuntimeWorkspace::new(
+            std::env::temp_dir().join(format!("hull-build-contest-{contest}-{}", spec.name)),
+          )?;
+          let runtime = analyze_problem(
+            spec,
+            &workspace,
+            RuntimeOptions::new(Some(1)).with_progress(options.progress.child_scope(&spec.name)),
+          )?;
+          if let Some(guard) = guard {
+            guard.finish(
+              true,
+              TaskItemReport {
+                status: Some("accepted".to_string()),
+                ..TaskItemReport::default()
+              },
+            );
+          }
+          Ok((spec.name.clone(), runtime))
+        })
+        .collect::<Result<BTreeMap<_, _>>>()
+    })?
+  };
+
+  {
+    let _phase = options.progress.phase(
+      PhaseKind::NixBuild,
+      format!("Packaging contest target {}", target),
+    );
+    build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args)
+  }
 }
