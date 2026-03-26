@@ -261,6 +261,10 @@ impl BuildCommand {
     cmd
   }
 
+  pub fn build_command_for_debug(&self) -> String {
+    shell_escape_command(&self.build_command())
+  }
+
   /// Executes the configured `nix build` command.
   /// This method is suitable when stdout does not need to be captured.
   pub fn run(self) -> Result<()> {
@@ -284,6 +288,48 @@ impl BuildCommand {
 impl Default for BuildCommand {
   fn default() -> Self {
     Self::new()
+  }
+}
+
+pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()> {
+  if commands.is_empty() {
+    return Ok(());
+  }
+
+  let with_nom = commands.iter().any(|command| command.with_nom);
+  let mut shell = Command::new("sh");
+  let script = commands
+    .into_iter()
+    .map(|command| shell_escape_command(&command.build_command()))
+    .collect::<Vec<_>>()
+    .join(" & ");
+  shell.arg("-c").arg(format!("{script} && wait"));
+  run_nix_command(shell, with_nom, label, None, false).map(|_| ())
+}
+
+fn shell_escape_command(command: &Command) -> String {
+  let program = shell_escape_arg(&command.get_program().to_string_lossy());
+  let args = command
+    .get_args()
+    .map(|arg| shell_escape_arg(&arg.to_string_lossy()))
+    .collect::<Vec<_>>();
+  if args.is_empty() {
+    program
+  } else {
+    format!("{} {}", program, args.join(" "))
+  }
+}
+
+fn shell_escape_arg(arg: &str) -> String {
+  if arg.is_empty() {
+    "''".to_string()
+  } else if arg
+    .chars()
+    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-' | ':' | '+' | '='))
+  {
+    arg.to_string()
+  } else {
+    format!("'{}'", arg.replace('\'', "'\\''"))
   }
 }
 

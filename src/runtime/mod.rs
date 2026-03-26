@@ -22,7 +22,7 @@ mod types;
 mod workspace;
 
 pub use analysis::analyze_problem;
-pub use artifact::{cache_native_module, realize_artifact};
+pub use artifact::{cache_native_module, collect_problem_realize_builds, realize_artifact};
 pub use build::{build_contest, build_problem};
 pub use metadata::{load_ad_hoc_problem_spec, load_contest_spec, load_problem_spec};
 pub use sandbox::{WasmRunResult, run_wasm_for_stdio};

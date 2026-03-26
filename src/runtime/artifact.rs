@@ -23,6 +23,62 @@ use sha2::{Digest, Sha256};
 use super::types::{ArtifactSpec, RuntimeData};
 use crate::runner;
 
+pub fn collect_problem_realize_builds(
+  problem: &super::types::ProblemSpec,
+) -> Vec<crate::nix::BuildCommand> {
+  let mut builds = Vec::new();
+  collect_artifact_build(&mut builds, problem.validator.wasm.as_ref());
+  collect_artifact_build(&mut builds, problem.checker.wasm.as_ref());
+  collect_artifact_build(&mut builds, Some(&problem.judger.generate_outputs_runner));
+  collect_artifact_build(&mut builds, Some(&problem.judger.judge_runner));
+
+  for generator in problem.generators.values() {
+    collect_artifact_build(&mut builds, generator.wasm.as_ref());
+  }
+  for solution in &problem.solutions {
+    collect_artifact_build(&mut builds, solution.prepared.executable.as_ref());
+  }
+
+  dedup_builds(builds)
+}
+
+fn collect_artifact_build(
+  builds: &mut Vec<crate::nix::BuildCommand>,
+  artifact: Option<&ArtifactSpec>,
+) {
+  let Some(artifact) = artifact else {
+    return;
+  };
+  if Path::new(&artifact.path).exists() {
+    return;
+  }
+  if let Some(drv_path) = &artifact.drv_path {
+    builds.push(
+      crate::nix::BuildCommand::new()
+        .no_link(true)
+        .installable(&format!("{drv_path}^*")),
+    );
+  } else if let Some(parent) = Path::new(&artifact.path).parent() {
+    builds.push(
+      crate::nix::BuildCommand::new()
+        .no_link(true)
+        .installable(parent.to_string_lossy().as_ref()),
+    );
+  }
+}
+
+fn dedup_builds(builds: Vec<crate::nix::BuildCommand>) -> Vec<crate::nix::BuildCommand> {
+  let mut seen = std::collections::BTreeSet::new();
+  let mut unique = Vec::new();
+  for build in builds {
+    let command = build.build_command_for_debug();
+    if seen.insert(command.clone()) {
+      unique.push(build);
+    }
+  }
+  unique
+}
+
 pub fn realize_artifact(artifact: &ArtifactSpec) -> Result<String> {
   if Path::new(&artifact.path).exists() {
     return Ok(artifact.path.clone());

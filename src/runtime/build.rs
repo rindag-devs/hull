@@ -19,12 +19,12 @@ use anyhow::{Context, Result};
 use rayon::prelude::*;
 
 use super::analysis::{analyze_problem, install_with_pool};
-use super::artifact::storeify_runtime_data;
+use super::artifact::{collect_problem_realize_builds, storeify_runtime_data};
 use super::metadata::{load_contest_spec, load_problem_spec};
 use super::types::{RuntimeData, RuntimeOptions};
 use super::workspace::RuntimeWorkspace;
 use crate::interactive::{PhaseKind, TaskItemReport, TaskKind};
-use crate::nix::get_flake_url;
+use crate::nix::{get_flake_url, run_build_commands};
 
 pub fn render_runtime_json(runtime: &RuntimeData) -> Result<String> {
   serde_json::to_string(runtime).context("Failed to serialize runtime analysis JSON")
@@ -114,6 +114,16 @@ pub fn build_problem(
   options.progress.finish_phase();
 
   options.progress.set_phase(
+    PhaseKind::NixPrepare,
+    format!("Realizing toolchains and prepared artifacts for {problem}"),
+  );
+  run_build_commands(
+    collect_problem_realize_builds(&spec),
+    "nix prepare for runtime artifacts",
+  )?;
+  options.progress.finish_phase();
+
+  options.progress.set_phase(
     PhaseKind::Runtime,
     "Running validators, checker tests, and solutions".to_string(),
   );
@@ -142,6 +152,20 @@ pub fn build_contest(
     format!("Loading contest metadata for {contest}"),
   );
   let contest_spec = load_contest_spec(contest)?;
+  options.progress.finish_phase();
+
+  options.progress.set_phase(
+    PhaseKind::NixPrepare,
+    format!("Realizing toolchains and prepared artifacts for contest {contest}"),
+  );
+  run_build_commands(
+    contest_spec
+      .problems
+      .iter()
+      .flat_map(collect_problem_realize_builds)
+      .collect(),
+    "nix prepare for contest runtime artifacts",
+  )?;
   options.progress.finish_phase();
 
   options.progress.set_phase(

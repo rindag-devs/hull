@@ -51,6 +51,7 @@ pub enum InteractiveMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhaseKind {
   NixEval,
+  NixPrepare,
   Runtime,
   NixBuild,
 }
@@ -515,6 +516,27 @@ fn render_child_lines(
     return lines;
   }
 
+  let child_items = task
+    .items
+    .values()
+    .filter(|item| !child_tasks_for_item(state, &item.name).is_empty())
+    .collect::<Vec<_>>();
+  if !child_items.is_empty() {
+    let mut lines = Vec::new();
+    for (index, item) in child_items.iter().enumerate() {
+      let is_last = index + 1 == child_items.len();
+      let branch = if is_last { "└─" } else { "├─" };
+      lines.push(format!(
+        "{}{} {}",
+        prefix,
+        Style::new().cyan().apply_to(branch),
+        render_item_group_line(state, item)
+      ));
+      lines.extend(render_item_child_lines(state, &item.name, is_last, &prefix));
+    }
+    return lines;
+  }
+
   render_recent_items(state, task, parent_is_last, ancestor_prefix)
 }
 
@@ -524,6 +546,41 @@ fn child_tasks_for<'a>(state: &'a State, task: &TaskProgress) -> Vec<&'a TaskPro
     .values()
     .filter(|candidate| candidate.parent_item.as_deref() == Some(task.name.as_str()))
     .collect()
+}
+
+fn child_tasks_for_item<'a>(state: &'a State, item_name: &str) -> Vec<&'a TaskProgress> {
+  state
+    .tasks
+    .values()
+    .filter(|candidate| candidate.parent_item.as_deref() == Some(item_name))
+    .collect()
+}
+
+fn render_item_child_lines(
+  state: &State,
+  item_name: &str,
+  parent_is_last: bool,
+  ancestor_prefix: &str,
+) -> Vec<String> {
+  let prefix = format!(
+    "{}{}",
+    ancestor_prefix,
+    if parent_is_last { "  " } else { "│ " }
+  );
+  let child_tasks = child_tasks_for_item(state, item_name);
+  let mut lines = Vec::new();
+  for (index, child) in child_tasks.iter().enumerate() {
+    let is_last = index + 1 == child_tasks.len();
+    let branch = if is_last { "└─" } else { "├─" };
+    lines.push(format!(
+      "{}{} {}",
+      prefix,
+      Style::new().cyan().apply_to(branch),
+      render_task_summary(state, child)
+    ));
+    lines.extend(render_child_lines(state, child, is_last, &prefix));
+  }
+  lines
 }
 
 fn render_task_line(state: &State, task: &TaskProgress, is_last: bool) -> String {
@@ -553,6 +610,16 @@ fn render_task_summary(state: &State, task: &TaskProgress) -> String {
     );
   }
   text
+}
+
+fn render_item_group_line(state: &State, item: &TaskItem) -> String {
+  let (done, running, pending, failed) = counts_for_item_children(state, &item.name);
+  format!(
+    "{} {} {}",
+    Style::new().bold().apply_to("Problem"),
+    Style::new().yellow().bold().apply_to(&item.name),
+    render_counter(done, running, pending, failed)
+  )
 }
 
 fn render_recent_items(
@@ -641,6 +708,23 @@ fn task_counts(state: &State, task: &TaskProgress) -> (usize, usize, usize, usiz
     });
   }
 
+  let child_items = task
+    .items
+    .values()
+    .filter(|item| !child_tasks_for_item(state, &item.name).is_empty())
+    .collect::<Vec<_>>();
+  if !child_items.is_empty() {
+    return child_items.into_iter().fold((0, 0, 0, 0), |acc, item| {
+      let counts = counts_for_item_children(state, &item.name);
+      (
+        acc.0 + counts.0,
+        acc.1 + counts.1,
+        acc.2 + counts.2,
+        acc.3 + counts.3,
+      )
+    });
+  }
+
   task.items.values().fold((0, 0, 0, 0), |mut acc, item| {
     match item.state {
       ExecutionState::Pending => acc.2 += 1,
@@ -653,6 +737,20 @@ fn task_counts(state: &State, task: &TaskProgress) -> (usize, usize, usize, usiz
     }
     acc
   })
+}
+
+fn counts_for_item_children(state: &State, item_name: &str) -> (usize, usize, usize, usize) {
+  child_tasks_for_item(state, item_name)
+    .into_iter()
+    .fold((0, 0, 0, 0), |acc, task| {
+      let counts = task_counts(state, task);
+      (
+        acc.0 + counts.0,
+        acc.1 + counts.1,
+        acc.2 + counts.2,
+        acc.3 + counts.3,
+      )
+    })
 }
 
 fn render_item_line(item: &TaskItem) -> String {
@@ -753,6 +851,7 @@ fn task_label(kind: TaskKind) -> &'static str {
 fn phase_label(kind: PhaseKind) -> &'static str {
   match kind {
     PhaseKind::NixEval => "Nix eval",
+    PhaseKind::NixPrepare => "Nix prepare",
     PhaseKind::Runtime => "Runtime",
     PhaseKind::NixBuild => "Nix build",
   }
