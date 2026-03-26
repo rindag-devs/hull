@@ -115,7 +115,7 @@ pub fn build_problem(
 
   options.progress.set_phase(
     PhaseKind::Runtime,
-    format!("Running validators, checker tests, and solutions"),
+    "Running validators, checker tests, and solutions".to_string(),
   );
   let workspace =
     RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;

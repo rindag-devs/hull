@@ -295,6 +295,7 @@ fn run_nix_command(
   capture_stdout: bool,
 ) -> Result<String> {
   if with_nom {
+    interactive::suspend_live_render();
     let mut child = command
       .stdin(Stdio::null())
       .stdout(if capture_stdout {
@@ -336,17 +337,21 @@ fn run_nix_command(
     };
 
     if !nom_status.success() {
+      interactive::resume_live_render(true);
       bail!("Log process `nom` failed with exit code: {:?}", nom_status);
     }
 
     if let Some(output) = output {
       if !output.status.success() {
+        interactive::resume_live_render(true);
         bail!("{label} command failed.");
       }
       let stdout = String::from_utf8(output.stdout)
         .with_context(|| format!("Failed to parse {label} stdout as UTF-8"))?;
+      interactive::resume_live_render(true);
       Ok(stdout.trim().to_string())
     } else {
+      interactive::resume_live_render(true);
       Ok(String::new())
     }
   } else {

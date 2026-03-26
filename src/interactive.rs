@@ -179,6 +179,19 @@ pub fn log_line(message: &str) {
   });
 }
 
+pub fn suspend_live_render() {
+  with_output_lock(clear_active_render);
+}
+
+pub fn resume_live_render(separate_line: bool) {
+  with_output_lock(|| {
+    if separate_line {
+      println!();
+    }
+    redraw_active_render_locked();
+  });
+}
+
 pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
   let inner = Arc::new(Mutex::new(State {
     enabled: current_settings().enabled(),
