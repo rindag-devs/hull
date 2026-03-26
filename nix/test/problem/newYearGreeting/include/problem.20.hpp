@@ -17,7 +17,7 @@ constexpr int CNT = 1024;
 struct Pair {
   std::uint32_t k, v;
 
-  static auto read(cplib::var::Reader& in) -> Pair {
+  static auto read(cplib::var::Reader &in) -> Pair {
     std::uint32_t k, v;
     std::tie(k, std::ignore, v) =
         in(cplib::var::u32("k"), cplib::var::space, cplib::var::u32("v", 0, CNT - 1));
@@ -28,7 +28,7 @@ struct Pair {
 struct InputFirst {
   std::vector<Pair> pairs;
 
-  static auto read(cplib::var::Reader& in) -> InputFirst {
+  static auto read(cplib::var::Reader &in) -> InputFirst {
     auto pairs = in.read(cplib::var::Vec(cplib::var::ExtVar<Pair>("pairs"), CNT, cplib::var::eoln));
     in.read(cplib::var::eoln);
     if (cplib::get_work_mode() == cplib::WorkMode::VALIDATOR) {
@@ -50,7 +50,7 @@ struct InputSecond {
   std::int32_t Q;
   std::vector<std::uint32_t> indexes;
 
-  static auto read(cplib::var::Reader& in) -> InputSecond {
+  static auto read(cplib::var::Reader &in) -> InputSecond {
     auto [encoded, Q] =
         in(cplib::var::String("encoded", cplib::var::String::Mode::LINE, cplib::Pattern("[01]+")),
            cplib::var::i32("Q", 1, CNT));
@@ -69,7 +69,7 @@ struct InputSecond {
 };
 
 struct Input : std::variant<InputFirst, InputSecond> {
-  static auto read(cplib::var::Reader& in) -> Input {
+  static auto read(cplib::var::Reader &in) -> Input {
     auto type = in.read(cplib::var::String("type", cplib::var::String::Mode::LINE,
                                            cplib::Pattern("encode|decode")));
     if (type == "encode") {
@@ -84,7 +84,7 @@ struct Input : std::variant<InputFirst, InputSecond> {
 
 struct OutputFirst {
   std::string encoded;
-  static auto read(cplib::var::Reader& in) -> OutputFirst {
+  static auto read(cplib::var::Reader &in) -> OutputFirst {
     auto encoded = in.read(cplib::var::String("encoded", cplib::Pattern("[01]+")));
     return {encoded};
   }
@@ -93,14 +93,14 @@ struct OutputFirst {
 struct OutputSecond {
   std::vector<uint32_t> positions;
 
-  static auto read(cplib::var::Reader& in, const InputSecond& inp) -> OutputSecond {
+  static auto read(cplib::var::Reader &in, const InputSecond &inp) -> OutputSecond {
     auto positions = in.read(cplib::var::u32(0, CNT - 1) * inp.Q);
     return {positions};
   }
 };
 
 struct Output : std::variant<OutputFirst, OutputSecond> {
-  static auto read(cplib::var::Reader& in, const Input& inp) -> Output {
+  static auto read(cplib::var::Reader &in, const Input &inp) -> Output {
     auto type = in.read(cplib::var::i32("type", 0, 1));
     if (type == 0) {
       auto res = in.read(cplib::var::ExtVar<OutputFirst>("first"));
@@ -111,8 +111,8 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
     }
   }
 
-  static auto evaluate(cplib::evaluate::Evaluator& ev, const Output& pans, const Output& jans,
-                       const Input&) -> cplib::evaluate::Result {
+  static auto evaluate(cplib::evaluate::Evaluator &ev, const Output &pans, const Output &jans,
+                       const Input &) -> cplib::evaluate::Result {
     if (pans.index() != jans.index()) {
       ev.fail(cplib::format("Index mismatch: pans = {}, jans = {}", pans.index(), jans.index()));
     }
@@ -148,12 +148,12 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
   }
 };
 
-inline auto traits(const Input& input) -> std::vector<cplib::validator::Trait> {
+inline auto traits(const Input &input) -> std::vector<cplib::validator::Trait> {
   return {
       {"k_lt_1024",
        [&]() {
          return input.index() == 0 && std::ranges::all_of(std::get<0>(input).pairs,
-                                                          [](const Pair& p) { return p.k < 1024; });
+                                                          [](const Pair &p) { return p.k < 1024; });
        }},
   };
 }

@@ -10,7 +10,7 @@ using cplib::var::Reader;
 struct Input {
   int32_t a, b;
 
-  static auto read(Reader& in) -> Input {
+  static auto read(Reader &in) -> Input {
     int32_t a, b;
     std::tie(a, std::ignore, b, std::ignore) =
         in(i32("a", -1000, 1000), cplib::var::space, i32("b", -1000, 1000), cplib::var::eoln);
@@ -18,7 +18,7 @@ struct Input {
   }
 };
 
-auto traits(const Input& input) -> std::vector<cplib::validator::Trait> {
+auto traits(const Input &input) -> std::vector<cplib::validator::Trait> {
   return {
       {"a_positive", [&]() { return input.a > 0; }},
       {"b_positive", [&]() { return input.b > 0; }},

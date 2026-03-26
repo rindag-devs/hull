@@ -9,7 +9,7 @@ using cplib::var::Reader;
 struct Input {
   std::string s;
 
-  static auto read(Reader& in) -> Input {
+  static auto read(Reader &in) -> Input {
     std::string s;
     std::tie(s, std::ignore) =
         in(cplib::var::String("s", cplib::Pattern("3\\.[0-9]+")), cplib::var::eoln);
@@ -22,4 +22,4 @@ struct Input {
 };
 
 CPLIB_REGISTER_VALIDATOR(Input,
-                         [](const Input&) -> std::vector<cplib::validator::Trait> { return {}; });
+                         [](const Input &) -> std::vector<cplib::validator::Trait> { return {}; });

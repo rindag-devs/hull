@@ -7,7 +7,7 @@
 struct Input {
   std::string s;
 
-  static auto read(cplib::var::Reader& in) -> Input {
+  static auto read(cplib::var::Reader &in) -> Input {
     auto s = in.read(cplib::var::String("s", cplib::var::String::Mode::LINE));
     constexpr int N_DIGITS = 100000;
     if (s.size() != N_DIGITS + 2) {
@@ -20,14 +20,14 @@ struct Input {
 struct Output {
   std::string s;
 
-  static auto read(cplib::var::Reader& in, const Input&) -> Output {
+  static auto read(cplib::var::Reader &in, const Input &) -> Output {
     auto s = in.read(
         cplib::var::String("s", cplib::var::String::Mode::LINE, cplib::Pattern("3\\.[0-9]+")));
     return {s};
   }
 
-  static auto evaluate(cplib::evaluate::Evaluator&, const Output& pans, const Output& jans,
-                       const Input&) -> cplib::evaluate::Result {
+  static auto evaluate(cplib::evaluate::Evaluator &, const Output &pans, const Output &jans,
+                       const Input &) -> cplib::evaluate::Result {
     auto res = cplib::evaluate::Result::ac();
     std::size_t min_length = std::min(pans.s.size(), jans.s.size());
     std::size_t n_correct_digit = 0;

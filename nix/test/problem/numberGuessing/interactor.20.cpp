@@ -10,7 +10,7 @@ CPLIB_REGISTER_INTERACTOR(intr);
 
 struct Input {
   int n, m;
-  static auto read(var::Reader& in) -> Input {
+  static auto read(var::Reader &in) -> Input {
     auto [n, m] = in(var::i32("n"), var::i32("m"));
     return {.n = n, .m = m};
   }
@@ -18,7 +18,7 @@ struct Input {
 
 struct Query {
   int x;
-  static auto read(var::Reader& in, const Input& input) -> Query {
+  static auto read(var::Reader &in, const Input &input) -> Query {
     auto x = in.read(var::i32("x", 1, input.n));
     return {x};
   }
@@ -26,14 +26,14 @@ struct Query {
 
 struct Answer {
   int x;
-  static auto read(var::Reader& in, const Input& input) -> Answer {
+  static auto read(var::Reader &in, const Input &input) -> Answer {
     auto x = in.read(var::i32("x", 1, input.n));
     return {x};
   }
 };
 
 struct Operate : std::variant<Query, Answer> {
-  static auto read(var::Reader& in, const Input& input) -> Operate {
+  static auto read(var::Reader &in, const Input &input) -> Operate {
     auto op = in.read(var::String("type", Pattern("[QA]")));
     if (op == "Q") {
       return {in.read(var::ExtVar<Query>("Q", input))};
@@ -52,7 +52,7 @@ void interactor_main() {
   while (true) {
     auto op = intr.from_user.read(var::ExtVar<Operate>("operate", input));
     if (op.index() == 0) {
-      const auto& Q = std::get<0>(op);
+      const auto &Q = std::get<0>(op);
       if (use_cnt >= 50) intr.quit_wa("Too many queries");
       if (Q.x > input.m) {
         intr.to_user << ">\n";
@@ -63,7 +63,7 @@ void interactor_main() {
       }
       ++use_cnt;
     } else {
-      const auto& A = std::get<1>(op);
+      const auto &A = std::get<1>(op);
       if (A.x == input.m) {
         intr.quit_ac();
       } else {

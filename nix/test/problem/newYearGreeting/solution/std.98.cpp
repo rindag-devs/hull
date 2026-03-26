@@ -27,7 +27,7 @@ void print(int x, int len) {
     }
   }
 }
-void get(int& x, int len) {
+void get(int &x, int len) {
   while (getbit() == '1') {
     len++;
   }
@@ -47,7 +47,7 @@ void print1(unsigned x) {
     }
   }
 }
-void get1(unsigned& x) {
+void get1(unsigned &x) {
   x = 0;
   for (int i = 0; i < 10; i++) {
     if (getbit() == '1') {
@@ -60,8 +60,8 @@ unsigned k[1024];
 unsigned v[1024];
 unsigned k1[1024], v1[1024];
 struct node {
-  node* ls;
-  node* rs;
+  node *ls;
+  node *rs;
   int l;
   int r;
   unsigned a;
@@ -69,8 +69,8 @@ struct node {
 };
 node nn[2048];
 int num = 0;
-node* build(int l, int r) {
-  node* root = &nn[num];
+node *build(int l, int r) {
+  node *root = &nn[num];
   num++;
   root->l = l;
   root->r = r;
@@ -171,7 +171,7 @@ node* build(int l, int r) {
   root->rs = build(mid + 1, r);
   return root;
 }
-unsigned query(node* root, unsigned k) {
+unsigned query(node *root, unsigned k) {
   a = root->a;
   b = root->b;
   if (root->r - root->l + 1 == 8) {
@@ -191,7 +191,7 @@ int main() {
       scanf("%u%u", &k[i], &v[i]);
     }
   }
-  node* root = build(0, 1023);
+  node *root = build(0, 1023);
   if (tp[0] == 'd') {
     int q;
     scanf("%d", &q);
