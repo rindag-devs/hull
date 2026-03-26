@@ -18,11 +18,12 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 
-use super::analysis::{analyze_problem, analyze_problem_in_pool, install_with_pool};
+use super::analysis::{analyze_problem, install_with_pool};
 use super::artifact::storeify_runtime_data;
 use super::metadata::{load_contest_spec, load_problem_spec};
 use super::types::{RuntimeData, RuntimeOptions};
 use super::workspace::RuntimeWorkspace;
+use crate::interactive::{PhaseKind, TaskItemReport, TaskKind};
 use crate::nix::get_flake_url;
 
 pub fn render_runtime_json(runtime: &RuntimeData) -> Result<String> {
@@ -105,11 +106,28 @@ pub fn build_problem(
   options: RuntimeOptions,
   nix_args: &[String],
 ) -> Result<()> {
+  options.progress.set_phase(
+    PhaseKind::NixEval,
+    format!("Loading metadata for {problem}"),
+  );
   let spec = load_problem_spec(problem)?;
+  options.progress.finish_phase();
+
+  options.progress.set_phase(
+    PhaseKind::Runtime,
+    format!("Running validators, checker tests, and solutions"),
+  );
   let workspace =
     RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;
-  let runtime = analyze_problem(&spec, &workspace, options)?;
-  build_problem_target(problem, target, &runtime, out_link, nix_args)
+  let runtime = analyze_problem(&spec, &workspace, options.clone())?;
+  options.progress.finish_phase();
+
+  options
+    .progress
+    .set_phase(PhaseKind::NixBuild, format!("Packaging target {}", target));
+  let result = build_problem_target(problem, target, &runtime, out_link, nix_args);
+  options.progress.finish_phase();
+  result
 }
 
 pub fn build_contest(
@@ -119,19 +137,64 @@ pub fn build_contest(
   options: RuntimeOptions,
   nix_args: &[String],
 ) -> Result<()> {
+  options.progress.set_phase(
+    PhaseKind::NixEval,
+    format!("Loading contest metadata for {contest}"),
+  );
   let contest_spec = load_contest_spec(contest)?;
-  let runtime_by_problem = install_with_pool(options, || {
+  options.progress.finish_phase();
+
+  options.progress.set_phase(
+    PhaseKind::Runtime,
+    format!("Running analysis for contest {}", contest),
+  );
+  options.progress.set_title("Contest", contest);
+  let contest_handle = if contest_spec.problems.is_empty() {
+    None
+  } else {
+    Some(options.progress.register_group(
+      TaskKind::Problem,
+      contest,
+      contest_spec.problems.iter().map(|spec| spec.name.clone()),
+      None,
+    ))
+  };
+  let runtime_by_problem = install_with_pool(options.clone(), || {
     contest_spec
       .problems
       .par_iter()
       .map(|spec| {
+        if let Some(handle) = &contest_handle {
+          handle.start_item(&spec.name);
+        }
         let workspace = RuntimeWorkspace::new(
           std::env::temp_dir().join(format!("hull-build-contest-{contest}-{}", spec.name)),
         )?;
-        let runtime = analyze_problem_in_pool(spec, &workspace)?;
+        let runtime = analyze_problem(
+          spec,
+          &workspace,
+          RuntimeOptions::new(Some(1)).with_progress(options.progress.child_scope(&spec.name)),
+        )?;
+        if let Some(handle) = &contest_handle {
+          handle.finish_item_with_report(
+            &spec.name,
+            true,
+            TaskItemReport {
+              status: Some("accepted".to_string()),
+              ..TaskItemReport::default()
+            },
+          );
+        }
         Ok((spec.name.clone(), runtime))
       })
       .collect::<Result<BTreeMap<_, _>>>()
   })?;
-  build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args)
+  options.progress.finish_phase();
+  options.progress.set_phase(
+    PhaseKind::NixBuild,
+    format!("Packaging contest target {}", target),
+  );
+  let result = build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args);
+  options.progress.finish_phase();
+  result
 }

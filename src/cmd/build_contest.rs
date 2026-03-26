@@ -16,6 +16,7 @@
 use anyhow::Result;
 use clap::Parser;
 
+use crate::interactive;
 use crate::runtime::{self, RuntimeOptions};
 
 #[derive(Parser)]
@@ -42,11 +43,12 @@ pub struct BuildContestOpts {
 }
 
 pub fn run(build_opts: &BuildContestOpts) -> Result<()> {
+  let progress = interactive::create_problem_progress(&build_opts.contest);
   runtime::build_contest(
     &build_opts.contest,
     &build_opts.target,
     &build_opts.out_link,
-    RuntimeOptions::new(build_opts.jobs),
+    RuntimeOptions::new(build_opts.jobs).with_progress(progress),
     &build_opts.nix_args,
   )
 }

@@ -22,8 +22,9 @@ use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Cell, Color, Table};
 use serde::{Deserialize, Serialize};
 
-use crate::runtime::{RuntimeOptions, RuntimeWorkspace, analyze_problem, load_ad_hoc_problem_spec};
-use crate::utils::{format_size, format_tick};
+use crate::interactive;
+use crate::runtime::{analyze_problem, load_ad_hoc_problem_spec, RuntimeOptions, RuntimeWorkspace};
+use crate::utils::{format_size, format_tick, to_title_case};
 
 #[derive(Parser)]
 pub struct JudgeOpts {
@@ -63,21 +64,6 @@ struct TestCaseResult {
   score: f64,
   tick: u64,
   memory: u64,
-}
-
-/// Converts a snake_case string to Title Case.
-/// e.g., "wrong_answer" -> "Wrong Answer"
-fn to_title_case(s: &str) -> String {
-  s.split('_')
-    .map(|word| {
-      let mut c = word.chars();
-      match c.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-      }
-    })
-    .collect::<Vec<String>>()
-    .join(" ")
 }
 
 /// Determines the overall status for a subtask based on its test cases.
@@ -176,7 +162,12 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   let ad_hoc_name = "__hullAdHoc".to_string();
 
   let workspace = RuntimeWorkspace::new(std::env::temp_dir().join("hull-judge-runtime"))?;
-  let runtime = analyze_problem(&problem, &workspace, RuntimeOptions::new(None))?;
+  let progress = interactive::create_problem_progress(&problem.name);
+  let runtime = analyze_problem(
+    &problem,
+    &workspace,
+    RuntimeOptions::new(None).with_progress(progress),
+  )?;
   let solution = runtime
     .solutions
     .get(&ad_hoc_name)

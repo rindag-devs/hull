@@ -19,6 +19,7 @@ use crate::cmd::{
   build::BuildOpts, build_contest::BuildContestOpts, judge::JudgeOpts,
   patch_includes::PatchIncludesOpts, run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
 };
+use crate::interactive::InteractiveMode;
 
 /// Competitive programming proposition automation tool
 #[derive(Parser)]
@@ -30,6 +31,10 @@ use crate::cmd::{
     max_term_width = 100,
 )]
 pub struct Opts {
+  /// Control interactive terminal UI: auto, always, or never.
+  #[arg(long, global = true, default_value = "auto", value_parser = parse_interactive_mode)]
+  pub interactive: InteractiveMode,
+
   #[command(subcommand)]
   pub command: Command,
 }
@@ -43,4 +48,13 @@ pub enum Command {
   Run(RunOpts),
   RunWasm(RunWasmOpts),
   Stress(StressOpts),
+}
+
+fn parse_interactive_mode(value: &str) -> Result<InteractiveMode, String> {
+  match value {
+    "auto" => Ok(InteractiveMode::Auto),
+    "always" => Ok(InteractiveMode::Always),
+    "never" => Ok(InteractiveMode::Never),
+    _ => Err("interactive must be one of: auto, always, never".to_string()),
+  }
 }

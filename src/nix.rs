@@ -16,8 +16,10 @@
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 
-use anyhow::{Context, Ok, Result, bail};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
+
+use crate::interactive::{self, ProblemProgressHandle};
 
 #[derive(Deserialize)]
 pub struct FlakeMetadata {
@@ -43,6 +45,72 @@ pub fn get_flake_url() -> Result<String> {
     .context("Failed to parse JSON from `nix flake metadata`")?;
 
   Ok(metadata.url)
+}
+
+pub struct EvalCommand {
+  expr: Option<String>,
+  impure: bool,
+  raw: bool,
+  with_nom: bool,
+}
+
+impl EvalCommand {
+  pub fn new() -> Self {
+    Self {
+      expr: None,
+      impure: false,
+      raw: true,
+      with_nom: interactive::current_settings().enabled(),
+    }
+  }
+
+  pub fn expr(mut self, expr: &str) -> Self {
+    self.expr = Some(expr.to_string());
+    self
+  }
+
+  pub fn impure(mut self, impure: bool) -> Self {
+    self.impure = impure;
+    self
+  }
+
+  pub fn raw(mut self, raw: bool) -> Self {
+    self.raw = raw;
+    self
+  }
+
+  pub fn with_nom(mut self, with_nom: bool) -> Self {
+    self.with_nom = with_nom;
+    self
+  }
+
+  fn build_command(&self) -> Command {
+    let mut cmd = Command::new("nix");
+    cmd.arg("eval");
+    if self.raw {
+      cmd.arg("--raw");
+    }
+    if self.impure {
+      cmd.arg("--impure");
+    }
+    if self.with_nom {
+      cmd.args(["--log-format", "internal-json", "-v"]);
+    }
+    if let Some(expr) = &self.expr {
+      cmd.arg("--expr").arg(expr);
+    }
+    cmd
+  }
+
+  pub fn run_and_capture_stdout(self) -> Result<String> {
+    run_nix_command(self.build_command(), self.with_nom, "nix eval", None, true)
+  }
+}
+
+impl Default for EvalCommand {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 /// A builder for executing `nix build` commands.
@@ -74,7 +142,7 @@ impl BuildCommand {
       no_link: false,
       print_out_paths: false,
       impure: false,
-      with_nom: true, // Default to using nom for better logs
+      with_nom: interactive::current_settings().enabled(),
       extra_args: Vec::new(),
     }
   }
@@ -196,120 +264,127 @@ impl BuildCommand {
   /// Executes the configured `nix build` command.
   /// This method is suitable when stdout does not need to be captured.
   pub fn run(self) -> Result<()> {
-    let mut nix_build_cmd = self.build_command();
-
-    if self.with_nom {
-      let mut nix_build_process = nix_build_cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to spawn `nix build` process")?;
-
-      let nix_stderr = nix_build_process
-        .stderr
-        .take()
-        .context("Failed to capture stderr from nix build process")?;
-
-      let nom_status = Command::new("nom")
-        .arg("--json")
-        .stdin(nix_stderr)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .context("Failed to execute `nom` log process")?;
-
-      let nix_status = nix_build_process
-        .wait()
-        .context("Failed to wait for `nix build` process")?;
-
-      if !nix_status.success() {
-        bail!("Nix build command failed.");
-      }
-      if !nom_status.success() {
-        bail!("Log process `nom` failed with exit code: {:?}", nom_status);
-      }
-    } else {
-      let status = nix_build_cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .status()
-        .context("Failed to execute `nix build`")?;
-
-      if !status.success() {
-        bail!("Nix build command failed.");
-      }
-    }
-
-    Ok(())
+    run_nix_command(
+      self.build_command(),
+      self.with_nom,
+      "nix build",
+      None,
+      false,
+    )
+    .map(|_| ())
   }
 
   /// Executes the command and captures its standard output.
   /// This requires `print_out_paths` to be true to be useful.
   pub fn run_and_capture_stdout(self) -> Result<String> {
-    let mut nix_build_cmd = self.build_command();
-
-    if self.with_nom {
-      let mut nix_build_process = nix_build_cmd
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to spawn `nix build` process")?;
-
-      let nix_stderr = nix_build_process
-        .stderr
-        .take()
-        .context("Failed to capture stderr from nix build process")?;
-
-      let mut nom_process = Command::new("nom")
-        .arg("--json")
-        .stdin(nix_stderr)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .context("Failed to spawn `nom` log process")?;
-
-      let output = nix_build_process
-        .wait_with_output()
-        .context("Failed to wait for `nix build` process")?;
-
-      let nom_status = nom_process
-        .wait()
-        .context("Failed to wait for `nom` log process")?;
-
-      if !nom_status.success() {
-        bail!("Log process `nom` failed with exit code: {:?}", nom_status);
-      }
-
-      if !output.status.success() {
-        bail!("Nix build command failed.");
-      }
-
-      let stdout_str =
-        String::from_utf8(output.stdout).context("Failed to parse nix build stdout as UTF-8")?;
-      Ok(stdout_str.trim().to_string())
-    } else {
-      let output = nix_build_cmd
-        .stdin(Stdio::null())
-        .output()
-        .context("Failed to execute `nix build`")?;
-
-      if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("Nix build command failed. Stderr:\n{}", stderr.trim());
-      }
-
-      let stdout_str =
-        String::from_utf8(output.stdout).context("Failed to parse nix build stdout as UTF-8")?;
-      Ok(stdout_str.trim().to_string())
-    }
+    run_nix_command(self.build_command(), self.with_nom, "nix build", None, true)
   }
 }
 
 impl Default for BuildCommand {
   fn default() -> Self {
     Self::new()
+  }
+}
+
+fn run_nix_command(
+  mut command: Command,
+  with_nom: bool,
+  label: &str,
+  progress: Option<&ProblemProgressHandle>,
+  capture_stdout: bool,
+) -> Result<String> {
+  if with_nom {
+    let mut child = command
+      .stdin(Stdio::null())
+      .stdout(if capture_stdout {
+        Stdio::piped()
+      } else {
+        Stdio::null()
+      })
+      .stderr(Stdio::piped())
+      .spawn()
+      .with_context(|| format!("Failed to spawn `{label}` process"))?;
+
+    let stderr = child
+      .stderr
+      .take()
+      .with_context(|| format!("Failed to capture stderr from {label} process"))?;
+
+    let nom_status = Command::new("nom")
+      .arg("--json")
+      .stdin(stderr)
+      .stdout(Stdio::inherit())
+      .stderr(Stdio::inherit())
+      .status()
+      .context("Failed to execute `nom` log process")?;
+
+    let output = if capture_stdout {
+      Some(
+        child
+          .wait_with_output()
+          .with_context(|| format!("Failed to wait for `{label}` process"))?,
+      )
+    } else {
+      let status = child
+        .wait()
+        .with_context(|| format!("Failed to wait for `{label}` process"))?;
+      if !status.success() {
+        bail!("{label} command failed.");
+      }
+      None
+    };
+
+    if !nom_status.success() {
+      bail!("Log process `nom` failed with exit code: {:?}", nom_status);
+    }
+
+    if let Some(output) = output {
+      if !output.status.success() {
+        bail!("{label} command failed.");
+      }
+      let stdout = String::from_utf8(output.stdout)
+        .with_context(|| format!("Failed to parse {label} stdout as UTF-8"))?;
+      Ok(stdout.trim().to_string())
+    } else {
+      Ok(String::new())
+    }
+  } else {
+    if let Some(progress) = progress {
+      progress.println_fallback(&format!("Running {label}..."));
+    } else {
+      interactive::log_line(&format!("Running {label}..."));
+    }
+    if capture_stdout {
+      let output = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .with_context(|| format!("Failed to execute `{label}`"))?
+        .wait_with_output()
+        .with_context(|| format!("Failed to wait for `{label}`"))?;
+
+      if !output.status.success() {
+        bail!("{label} command failed.");
+      }
+
+      let stdout = String::from_utf8(output.stdout)
+        .with_context(|| format!("Failed to parse {label} stdout as UTF-8"))?;
+      Ok(stdout.trim().to_string())
+    } else {
+      let status = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| format!("Failed to execute `{label}`"))?;
+
+      if !status.success() {
+        bail!("{label} command failed.");
+      }
+
+      Ok(String::new())
+    }
   }
 }

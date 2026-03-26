@@ -9,6 +9,7 @@ async-trait = "0.1.89"
 cap-std = "3"
 clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
+console = "0.16"
 num_cpus = "1"
 rand = "0.8"
 rayon = "1"

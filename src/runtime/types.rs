@@ -17,16 +17,25 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug)]
+use crate::interactive::ProblemProgressHandle;
+
+#[derive(Clone, Debug)]
 pub struct RuntimeOptions {
   pub jobs: usize,
+  pub progress: ProblemProgressHandle,
 }
 
 impl RuntimeOptions {
   pub fn new(jobs: Option<usize>) -> Self {
     Self {
       jobs: jobs.unwrap_or_else(num_cpus::get).max(1),
+      progress: ProblemProgressHandle::disabled(),
     }
+  }
+
+  pub fn with_progress(mut self, progress: ProblemProgressHandle) -> Self {
+    self.progress = progress;
+    self
   }
 }
 

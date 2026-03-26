@@ -14,12 +14,11 @@
 */
 
 use std::path::Path;
-use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use super::types::{ContestSpec, ProblemSpec};
-use crate::nix::get_flake_url;
+use crate::nix::{get_flake_url, EvalCommand};
 
 pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
   let flake_ref = get_flake_url()?;
@@ -33,19 +32,13 @@ pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
     flake_ref = serde_json::to_string(&flake_ref)?,
   );
 
-  let output = Command::new("nix")
-    .args(["eval", "--raw", "--impure", "--expr", &expr])
-    .output()
+  let output = EvalCommand::new()
+    .impure(true)
+    .expr(&expr)
+    .run_and_capture_stdout()
     .context("Failed to execute `nix eval` for runtime problem metadata")?;
 
-  if !output.status.success() {
-    bail!(
-      "Failed to evaluate runtime problem metadata. Stderr:\n{}",
-      String::from_utf8_lossy(&output.stderr).trim()
-    );
-  }
-
-  serde_json::from_slice(&output.stdout).context("Failed to parse runtime problem metadata JSON")
+  serde_json::from_str(&output).context("Failed to parse runtime problem metadata JSON")
 }
 
 pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
@@ -60,19 +53,13 @@ pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
     flake_ref = serde_json::to_string(&flake_ref)?,
   );
 
-  let output = Command::new("nix")
-    .args(["eval", "--raw", "--impure", "--expr", &expr])
-    .output()
+  let output = EvalCommand::new()
+    .impure(true)
+    .expr(&expr)
+    .run_and_capture_stdout()
     .context("Failed to execute `nix eval` for runtime contest metadata")?;
 
-  if !output.status.success() {
-    bail!(
-      "Failed to evaluate runtime contest metadata. Stderr:\n{}",
-      String::from_utf8_lossy(&output.stderr).trim()
-    );
-  }
-
-  serde_json::from_slice(&output.stdout).context("Failed to parse runtime contest metadata JSON")
+  serde_json::from_str(&output).context("Failed to parse runtime contest metadata JSON")
 }
 
 pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<ProblemSpec> {
@@ -88,18 +75,11 @@ pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<Proble
     src_path = serde_json::to_string(&src_path.to_string_lossy().into_owned())?,
   );
 
-  let output = Command::new("nix")
-    .args(["eval", "--raw", "--impure", "--expr", &expr])
-    .output()
+  let output = EvalCommand::new()
+    .impure(true)
+    .expr(&expr)
+    .run_and_capture_stdout()
     .context("Failed to execute `nix eval` for ad-hoc runtime problem metadata")?;
 
-  if !output.status.success() {
-    bail!(
-      "Failed to evaluate ad-hoc runtime problem metadata. Stderr:\n{}",
-      String::from_utf8_lossy(&output.stderr).trim()
-    );
-  }
-
-  serde_json::from_slice(&output.stdout)
-    .context("Failed to parse ad-hoc runtime problem metadata JSON")
+  serde_json::from_str(&output).context("Failed to parse ad-hoc runtime problem metadata JSON")
 }

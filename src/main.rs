@@ -20,21 +20,30 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod cli;
 pub mod cmd;
+pub mod interactive;
 pub mod nix;
 pub mod runner;
 pub mod runtime;
 pub mod utils;
 
 fn main() -> Result<()> {
+  let opts = Opts::parse();
+
   tracing_subscriber::registry()
     .with(
       tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| format!("{}=debug", env!("CARGO_CRATE_NAME")).into()),
     )
-    .with(tracing_subscriber::fmt::layer())
+    .with(
+      tracing_subscriber::fmt::layer().without_time().with_ansi(false).with_writer(|| {
+        crate::interactive::LogWriter
+      }),
+    )
     .init();
 
-  let opts = Opts::parse();
+  interactive::init(interactive::InteractiveSettings {
+    mode: opts.interactive,
+  });
 
   match &opts.command {
     cli::Command::Build(opts) => cmd::build::run(opts),

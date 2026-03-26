@@ -17,9 +17,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 
-use anyhow::{Context, Result, bail};
-use rayon::{ThreadPoolBuilder, prelude::*};
+use anyhow::{bail, Context, Result};
+use rayon::{prelude::*, ThreadPoolBuilder};
 use tracing::info;
 
 use super::artifact::realize_artifact;
@@ -30,6 +31,7 @@ use super::types::{
   SubtaskRuntimeReport, TestCaseSpec, ValidationReport, ValidatorRuntimeData,
 };
 use super::workspace::RuntimeWorkspace;
+use crate::interactive::{ProblemProgressHandle, TaskItemReport, TaskKind};
 use crate::runner::RunStatus;
 
 const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
@@ -58,12 +60,16 @@ pub fn analyze_problem(
   workspace: &RuntimeWorkspace,
   options: RuntimeOptions,
 ) -> Result<RuntimeData> {
-  install_with_pool(options, || analyze_problem_in_pool(problem, workspace))
+  let progress = options.progress.clone();
+  install_with_pool(options, || {
+    analyze_problem_in_pool_with_progress(problem, workspace, Some(&progress))
+  })
 }
 
-pub(crate) fn analyze_problem_in_pool(
+pub(crate) fn analyze_problem_in_pool_with_progress(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
+  progress: Option<&ProblemProgressHandle>,
 ) -> Result<RuntimeData> {
   let solutions_by_name: BTreeMap<_, _> = problem
     .solutions
@@ -81,11 +87,19 @@ pub(crate) fn analyze_problem_in_pool(
     })?;
 
   let (validator_test_results, (checker_test_results, test_case_outputs)) = rayon::join(
-    || run_validator_tests(problem),
+    || run_validator_tests(problem, progress),
     || {
       rayon::join(
-        || run_checker_tests(problem, workspace, &solutions_by_name, main_solution),
-        || run_test_cases(problem, workspace),
+        || {
+          run_checker_tests(
+            problem,
+            workspace,
+            &solutions_by_name,
+            main_solution,
+            progress,
+          )
+        },
+        || run_test_cases(problem, workspace, progress),
       )
     },
   );
@@ -165,12 +179,28 @@ pub(crate) fn analyze_problem_in_pool(
 
 fn run_validator_tests(
   problem: &ProblemSpec,
+  progress: Option<&ProblemProgressHandle>,
 ) -> Result<BTreeMap<String, (String, ValidationReport)>> {
+  let handle = if problem.validator_tests.is_empty() {
+    None
+  } else {
+    progress.map(|progress| {
+      progress.register_group(
+        TaskKind::Validator,
+        "Validator",
+        problem.validator_tests.iter().map(|test| test.name.clone()),
+        None,
+      )
+    })
+  };
   problem
     .validator_tests
     .par_iter()
     .map(|test| {
       info!("Running validator test {}", test.name);
+      if let Some(handle) = &handle {
+        handle.start_item(&test.name);
+      }
       let input_path = resolve_test_input(
         problem,
         test.input_file.as_deref(),
@@ -179,6 +209,16 @@ fn run_validator_tests(
         &format!("validator-test-{}", test.name),
       )?;
       let report = run_validator(problem, &input_path, 1)?;
+      if let Some(handle) = &handle {
+        handle.finish_item_with_report(
+          &test.name,
+          !is_fatal_validation_status(&report.status),
+          TaskItemReport {
+            status: Some(report.status.clone()),
+            ..TaskItemReport::default()
+          },
+        );
+      }
       Ok((
         test.name.clone(),
         (input_path.to_string_lossy().into_owned(), report),
@@ -192,12 +232,28 @@ fn run_checker_tests(
   workspace: &RuntimeWorkspace,
   solutions_by_name: &BTreeMap<String, super::types::SolutionSpec>,
   main_solution: &super::types::SolutionSpec,
+  progress: Option<&ProblemProgressHandle>,
 ) -> Result<BTreeMap<String, (String, CheckerReport)>> {
+  let handle = if problem.checker_tests.is_empty() {
+    None
+  } else {
+    progress.map(|progress| {
+      progress.register_group(
+        TaskKind::Checker,
+        "Checker",
+        problem.checker_tests.iter().map(|test| test.name.clone()),
+        None,
+      )
+    })
+  };
   problem
     .checker_tests
     .par_iter()
     .map(|test| {
       info!("Running checker test {}", test.name);
+      if let Some(handle) = &handle {
+        handle.start_item(&test.name);
+      }
       let input_path = resolve_test_input(
         problem,
         test.input_file.as_deref(),
@@ -261,6 +317,17 @@ fn run_checker_tests(
         &output_path,
         &answer_dir.join(&test.output_name),
       )?;
+      if let Some(handle) = &handle {
+        handle.finish_item_with_report(
+          &test.name,
+          !is_fatal_checker_status(&report.status),
+          TaskItemReport {
+            status: Some(report.status.clone()),
+            score: Some(report.score),
+            ..TaskItemReport::default()
+          },
+        );
+      }
       Ok((
         test.name.clone(),
         (input_path.to_string_lossy().into_owned(), report),
@@ -272,6 +339,7 @@ fn run_checker_tests(
 fn run_test_cases(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
+  progress: Option<&ProblemProgressHandle>,
 ) -> Result<BTreeMap<String, (RuntimeTestCaseData, BTreeMap<String, JudgeReport>)>> {
   let solutions = &problem.solutions;
   let main_solution = solutions
@@ -283,6 +351,31 @@ fn run_test_cases(
         problem.main_correct_solution
       )
     })?;
+
+  let solution_handles = if problem.test_cases.is_empty() {
+    None
+  } else {
+    progress.map(|progress| {
+      solutions
+        .iter()
+        .map(|solution| {
+          (
+            solution.name.clone(),
+            progress.register_group(
+              TaskKind::Solution,
+              solution.name.clone(),
+              problem
+                .test_cases
+                .iter()
+                .map(|test_case| test_case.name.clone()),
+              Some(0.0),
+            ),
+          )
+        })
+        .collect::<BTreeMap<_, _>>()
+    })
+  };
+  let live_scores = Arc::new(Mutex::new(BTreeMap::<String, (f64, usize)>::new()));
 
   problem
     .test_cases
@@ -319,6 +412,12 @@ fn run_test_cases(
         .par_iter()
         .map(|solution| {
           info!("Judging solution {} on {}", solution.name, test_case.name);
+          if let Some(handle) = solution_handles
+            .as_ref()
+            .and_then(|handles| handles.get(&solution.name))
+          {
+            handle.start_item(&test_case.name);
+          }
           let report = run_judge(
             problem,
             &concrete_test_case,
@@ -326,6 +425,30 @@ fn run_test_cases(
             Path::new(&outputs_path),
             workspace,
           )?;
+          if let Some(handle) = solution_handles
+            .as_ref()
+            .and_then(|handles| handles.get(&solution.name))
+          {
+            let current_score = {
+              let mut live_scores = live_scores.lock().unwrap();
+              let entry = live_scores.entry(solution.name.clone()).or_insert((0.0, 0));
+              entry.0 += report.score;
+              entry.1 += 1;
+              entry.0 / problem.test_cases.len().max(1) as f64
+            };
+            handle.finish_item_with_report(
+              &test_case.name,
+              !is_fatal_judge_status(&report.status),
+              TaskItemReport {
+                status: Some(report.status.clone()),
+                tick: Some(report.tick),
+                memory: Some(report.memory),
+                score: Some(report.score),
+                ..TaskItemReport::default()
+              },
+            );
+            handle.set_score(current_score);
+          }
           Ok((solution.name.clone(), report))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
@@ -345,6 +468,18 @@ fn run_test_cases(
       ))
     })
     .collect()
+}
+
+fn is_fatal_judge_status(status: &str) -> bool {
+  matches!(status, "internal_error")
+}
+
+fn is_fatal_validation_status(status: &str) -> bool {
+  matches!(status, "internal_error")
+}
+
+fn is_fatal_checker_status(status: &str) -> bool {
+  matches!(status, "internal_error")
 }
 
 fn run_validator(

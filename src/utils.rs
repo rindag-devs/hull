@@ -46,6 +46,28 @@ pub fn format_size(byte: u64) -> String {
   }
 }
 
+pub fn format_duration_ms(duration: std::time::Duration) -> String {
+  let millis = duration.as_millis();
+  if millis < 1_000 {
+    format!("{millis} ms")
+  } else {
+    format!("{:.3} s", duration.as_secs_f64())
+  }
+}
+
+pub fn to_title_case(s: &str) -> String {
+  s.split('_')
+    .map(|word| {
+      let mut chars = word.chars();
+      match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+      }
+    })
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

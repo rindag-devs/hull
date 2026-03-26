@@ -18,13 +18,14 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use clap::Parser;
 use rand::Rng;
-use rayon::{ThreadPoolBuilder, prelude::*};
+use rayon::{prelude::*, ThreadPoolBuilder};
 use tracing::info;
 
 use crate::{
+  interactive,
   runtime::{
-    ProblemSpec, RuntimeOptions, RuntimeWorkspace, SubtaskSpec, TestCaseSpec, analyze_problem,
-    load_problem_spec, run_wasm_for_stdio,
+    analyze_problem, load_problem_spec, run_wasm_for_stdio, ProblemSpec, RuntimeOptions,
+    RuntimeWorkspace, SubtaskSpec, TestCaseSpec,
   },
   utils::{format_size, format_tick},
 };
@@ -101,6 +102,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
   let jobs = opts.jobs.unwrap_or_else(num_cpus::get).max(1);
 
   let mut problem = load_problem_spec(&opts.problem)?;
+  let progress = interactive::create_problem_progress(&problem.name);
   if let Some(std_name) = &opts.std {
     problem.main_correct_solution = std_name.clone();
   }
@@ -156,7 +158,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
       opts.tick_limit,
       opts.memory_limit,
       round,
-      RuntimeOptions { jobs },
+      RuntimeOptions::new(Some(jobs)).with_progress(progress.clone()),
     )?;
 
     info!("Stress test batch finished.");
@@ -251,7 +253,7 @@ fn run_stress_round(
           let workspace = RuntimeWorkspace::new(
             std::env::temp_dir().join(format!("hull-stress-{round}-{case_index}")),
           )?;
-          let runtime = analyze_problem(&dynamic_problem, &workspace, options)?;
+          let runtime = analyze_problem(&dynamic_problem, &workspace, options.clone())?;
 
           for solution in dynamic_problem
             .solutions
