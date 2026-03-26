@@ -253,3 +253,182 @@ pub fn storeify_runtime_data(runtime: &mut RuntimeData) -> Result<()> {
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::collections::BTreeMap;
+
+  use crate::runtime::{
+    CheckerTestSpec, JudgerSpec, PreparedSolutionSpec, ProblemSpec, ProgramSpec, SolutionSpec,
+    SubtaskSpec, TestCaseSpec, ValidatorTestSpec,
+  };
+
+  fn artifact(path: &str, drv_path: Option<&str>) -> ArtifactSpec {
+    ArtifactSpec {
+      path: path.to_string(),
+      drv_path: drv_path.map(str::to_string),
+    }
+  }
+
+  fn problem_with_artifacts() -> ProblemSpec {
+    ProblemSpec {
+      name: "aPlusB".to_string(),
+      tick_limit: 1,
+      memory_limit: 1,
+      full_score: 1.0,
+      checker: ProgramSpec {
+        src: None,
+        wasm: Some(artifact(
+          "/missing/checker.wasm",
+          Some("/nix/store/checker.drv"),
+        )),
+      },
+      validator: ProgramSpec {
+        src: None,
+        wasm: Some(artifact(
+          "/missing/validator.wasm",
+          Some("/nix/store/validator.drv"),
+        )),
+      },
+      generators: BTreeMap::from([(
+        "gen".to_string(),
+        ProgramSpec {
+          src: None,
+          wasm: Some(artifact(
+            "/missing/gen.wasm",
+            Some("/nix/store/generator.drv"),
+          )),
+        },
+      )]),
+      main_correct_solution: "std".to_string(),
+      judger: JudgerSpec {
+        generate_outputs_runner: artifact("/missing/generate", Some("/nix/store/genout.drv")),
+        judge_runner: artifact("/missing/judge", Some("/nix/store/judge.drv")),
+      },
+      test_cases: vec![TestCaseSpec {
+        name: "case1".to_string(),
+        input_file: None,
+        tick_limit: 1,
+        memory_limit: 1,
+        groups: Vec::new(),
+        traits: BTreeMap::new(),
+        generator: None,
+        arguments: None,
+      }],
+      subtasks: vec![SubtaskSpec {
+        full_score: 1.0,
+        scoring_method: "min".to_string(),
+        test_cases: vec!["case1".to_string()],
+      }],
+      solutions: vec![
+        SolutionSpec {
+          name: "std".to_string(),
+          src: "std.cpp".to_string(),
+          main_correct_solution: true,
+          participant_visibility: true,
+          prepared: PreparedSolutionSpec {
+            src: "std.cpp".to_string(),
+            executable: Some(artifact("/missing/std", Some("/nix/store/std.drv"))),
+          },
+        },
+        SolutionSpec {
+          name: "dup".to_string(),
+          src: "dup.cpp".to_string(),
+          main_correct_solution: false,
+          participant_visibility: true,
+          prepared: PreparedSolutionSpec {
+            src: "dup.cpp".to_string(),
+            executable: Some(artifact("/missing/std", Some("/nix/store/std.drv"))),
+          },
+        },
+      ],
+      checker_tests: vec![CheckerTestSpec {
+        name: "checker".to_string(),
+        output_name: "output".to_string(),
+        output_solution: None,
+        output_path: None,
+        input_file: None,
+        generator: None,
+        arguments: None,
+      }],
+      validator_tests: vec![ValidatorTestSpec {
+        name: "validator".to_string(),
+        input_file: None,
+        generator: None,
+        arguments: None,
+      }],
+    }
+  }
+
+  #[test]
+  fn collect_problem_realize_builds_includes_all_runtime_artifact_kinds() {
+    let problem = problem_with_artifacts();
+    let commands = collect_problem_realize_builds(&problem)
+      .into_iter()
+      .map(|command| command.build_command_for_debug())
+      .collect::<Vec<_>>();
+
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/checker.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/validator.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/generator.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/genout.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/judge.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/std.drv^*"))
+    );
+  }
+
+  #[test]
+  fn collect_problem_realize_builds_deduplicates_identical_builds() {
+    let problem = problem_with_artifacts();
+    let commands = collect_problem_realize_builds(&problem)
+      .into_iter()
+      .map(|command| command.build_command_for_debug())
+      .collect::<Vec<_>>();
+
+    let std_matches = commands
+      .iter()
+      .filter(|command| command.contains("/nix/store/std.drv^*"))
+      .count();
+    assert_eq!(std_matches, 1);
+  }
+
+  #[test]
+  fn collect_problem_realize_builds_uses_parent_path_when_drv_path_is_missing() {
+    let mut problem = problem_with_artifacts();
+    problem.validator.wasm = Some(artifact("/tmp/hull/validator/output.wasm", None));
+    let commands = collect_problem_realize_builds(&problem)
+      .into_iter()
+      .map(|command| command.build_command_for_debug())
+      .collect::<Vec<_>>();
+
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/tmp/hull/validator"))
+    );
+  }
+}

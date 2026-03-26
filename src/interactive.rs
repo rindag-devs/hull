@@ -918,3 +918,144 @@ fn clear_previous_lines(out: &mut impl Write, line_count: usize) {
     let _ = write!(out, "\r\x1b[2K");
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn leaf(label: &str, state: ExecutionState) -> TreeNode {
+    TreeNode {
+      id: label.to_string(),
+      kind: NodeKind::Item,
+      label: label.to_string(),
+      state,
+      score: None,
+      report: TaskItemReport::default(),
+      started_at: None,
+      finished_at: Some(Instant::now()),
+      children: BTreeMap::new(),
+    }
+  }
+
+  fn group(kind: TaskKind, label: &str, children: &[TreeNode]) -> TreeNode {
+    TreeNode {
+      id: label.to_string(),
+      kind: NodeKind::Group(kind),
+      label: label.to_string(),
+      state: ExecutionState::Pending,
+      score: None,
+      report: TaskItemReport::default(),
+      started_at: None,
+      finished_at: None,
+      children: children
+        .iter()
+        .cloned()
+        .map(|child| (child.label.clone(), child))
+        .collect(),
+    }
+  }
+
+  #[test]
+  fn scoped_id_includes_scope_when_present() {
+    assert_eq!(scoped_id(None, "std"), "std");
+    assert_eq!(scoped_id(Some("aPlusB"), "std"), "aPlusB/std");
+  }
+
+  #[test]
+  fn summary_counts_reduce_entire_subtree() {
+    let node = group(
+      TaskKind::Problem,
+      "contest",
+      &[
+        group(
+          TaskKind::Solution,
+          "std",
+          &[
+            leaf("a", ExecutionState::Passed),
+            leaf("b", ExecutionState::Failed),
+          ],
+        ),
+        group(
+          TaskKind::Solution,
+          "wa",
+          &[
+            leaf("c", ExecutionState::Running),
+            leaf("d", ExecutionState::Pending),
+          ],
+        ),
+      ],
+    );
+
+    let counts = summary_counts(&node);
+    assert_eq!(counts.done, 2);
+    assert_eq!(counts.running, 1);
+    assert_eq!(counts.pending, 1);
+    assert_eq!(counts.failed, 1);
+  }
+
+  #[test]
+  fn finished_solution_subtree_is_collapsed_without_failures() {
+    let node = group(
+      TaskKind::Solution,
+      "std",
+      &[
+        leaf("a", ExecutionState::Passed),
+        leaf("b", ExecutionState::Passed),
+      ],
+    );
+
+    assert!(visible_children(&node).is_empty());
+  }
+
+  #[test]
+  fn visible_children_prioritize_running_then_failed_then_recent_finished() {
+    let mut finished_a = leaf("finished-a", ExecutionState::Passed);
+    finished_a.finished_at = Some(Instant::now() - Duration::from_secs(3));
+    let mut finished_b = leaf("finished-b", ExecutionState::Passed);
+    finished_b.finished_at = Some(Instant::now() - Duration::from_secs(2));
+    let mut failed = leaf("failed", ExecutionState::Failed);
+    failed.finished_at = Some(Instant::now() - Duration::from_secs(1));
+    let running = leaf("running", ExecutionState::Running);
+    let node = group(
+      TaskKind::Solution,
+      "std",
+      &[finished_a, finished_b, failed, running],
+    );
+
+    let labels = visible_children(&node)
+      .into_iter()
+      .map(|child| child.label.clone())
+      .collect::<Vec<_>>();
+    assert_eq!(labels[0], "running");
+    assert_eq!(labels[1], "failed");
+    assert_eq!(labels[2], "finished-b");
+    assert_eq!(labels[3], "finished-a");
+  }
+
+  #[test]
+  fn problem_items_render_as_nested_problem_nodes() {
+    let child_solution = group(
+      TaskKind::Solution,
+      "std",
+      &[leaf("case1", ExecutionState::Running)],
+    );
+    let mut problem_item = leaf("aPlusB", ExecutionState::Pending);
+    problem_item
+      .children
+      .insert(child_solution.label.clone(), child_solution);
+    let root = group(TaskKind::Problem, "contest", &[problem_item]);
+
+    let rendered = render_node_tree(&root, true, "").join("\n");
+    assert!(rendered.contains("Problems contest"));
+    assert!(rendered.contains("Problem aPlusB"));
+    assert!(rendered.contains("Solution std"));
+  }
+
+  #[test]
+  fn labels_and_phase_names_remain_stable() {
+    assert_eq!(task_label(TaskKind::Problem), "Problems");
+    assert_eq!(task_label(TaskKind::Validator), "Validator tests");
+    assert_eq!(phase_label(PhaseKind::NixPrepare), "Nix prepare");
+    assert_eq!(phase_label(PhaseKind::NixBuild), "Nix build");
+  }
+}

@@ -842,3 +842,108 @@ fn resolve_test_input(
     .with_context(|| format!("Failed to write generated input {}", path.display()))?;
   Ok(path)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::runtime::{ArtifactSpec, JudgerSpec, ProgramSpec, SubtaskSpec};
+
+  fn judge_report(status: &str, score: f64) -> JudgeReport {
+    JudgeReport {
+      status: status.to_string(),
+      score,
+      message: String::new(),
+      tick: 0,
+      memory: 0,
+      outputs: String::new(),
+    }
+  }
+
+  fn problem_with_subtasks(scoring_method: &str) -> ProblemSpec {
+    ProblemSpec {
+      name: "p".to_string(),
+      tick_limit: 1,
+      memory_limit: 1,
+      full_score: 1.0,
+      checker: ProgramSpec {
+        src: None,
+        wasm: None,
+      },
+      validator: ProgramSpec {
+        src: None,
+        wasm: None,
+      },
+      generators: BTreeMap::new(),
+      main_correct_solution: "std".to_string(),
+      judger: JudgerSpec {
+        generate_outputs_runner: ArtifactSpec {
+          path: String::new(),
+          drv_path: None,
+        },
+        judge_runner: ArtifactSpec {
+          path: String::new(),
+          drv_path: None,
+        },
+      },
+      test_cases: Vec::new(),
+      subtasks: vec![SubtaskSpec {
+        full_score: 0.5,
+        scoring_method: scoring_method.to_string(),
+        test_cases: vec!["a".to_string(), "b".to_string()],
+      }],
+      solutions: Vec::new(),
+      checker_tests: Vec::new(),
+      validator_tests: Vec::new(),
+    }
+  }
+
+  #[test]
+  fn fatal_status_helpers_only_treat_internal_error_as_fatal() {
+    assert!(is_fatal_judge_status("internal_error"));
+    assert!(!is_fatal_judge_status("memory_limit_exceeded"));
+    assert!(is_fatal_validation_status("internal_error"));
+    assert!(!is_fatal_validation_status("invalid"));
+    assert!(is_fatal_checker_status("internal_error"));
+    assert!(!is_fatal_checker_status("wrong_answer"));
+  }
+
+  #[test]
+  fn aggregate_subtask_results_uses_min_for_non_sum_scoring() {
+    let problem = problem_with_subtasks("min");
+    let reports = BTreeMap::from([
+      ("a".to_string(), judge_report("accepted", 1.0)),
+      ("b".to_string(), judge_report("wrong_answer", 0.25)),
+    ]);
+
+    let result = aggregate_subtask_results(&problem, &reports);
+    assert_eq!(result.len(), 1);
+    assert!((result[0].raw_score - 0.25).abs() < 1e-9);
+    assert!((result[0].scaled_score - 0.125).abs() < 1e-9);
+    assert_eq!(result[0].statuses, vec!["accepted", "wrong_answer"]);
+  }
+
+  #[test]
+  fn aggregate_subtask_results_uses_average_for_sum_scoring() {
+    let problem = problem_with_subtasks("sum");
+    let reports = BTreeMap::from([
+      ("a".to_string(), judge_report("accepted", 1.0)),
+      ("b".to_string(), judge_report("partially_correct", 0.5)),
+    ]);
+
+    let result = aggregate_subtask_results(&problem, &reports);
+    assert_eq!(result.len(), 1);
+    assert!((result[0].raw_score - 0.75).abs() < 1e-9);
+    assert!((result[0].scaled_score - 0.375).abs() < 1e-9);
+  }
+
+  #[test]
+  fn aggregate_subtask_results_ignores_missing_test_cases() {
+    let problem = problem_with_subtasks("min");
+    let reports = BTreeMap::from([("a".to_string(), judge_report("accepted", 1.0))]);
+
+    let result = aggregate_subtask_results(&problem, &reports);
+    assert_eq!(result[0].test_cases.len(), 1);
+    assert_eq!(result[0].statuses, vec!["accepted"]);
+    assert!((result[0].raw_score - 1.0).abs() < 1e-9);
+  }
+}
