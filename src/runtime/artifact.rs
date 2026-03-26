@@ -148,7 +148,12 @@ pub fn cache_native_module(module_path: &str) -> Result<String> {
   hasher.update(std::env::consts::ARCH.as_bytes());
   hasher.update(std::env::consts::OS.as_bytes());
   hasher.update(&module_bytes);
-  let cache_key = format!("{:x}", hasher.finalize());
+  let cache_key = hasher
+    .finalize()
+    .as_slice()
+    .iter()
+    .map(|byte| format!("{byte:02x}"))
+    .collect::<String>();
   let cached_path = cache_dir.join(format!("{cache_key}.cwasm"));
 
   if cached_path.exists() {

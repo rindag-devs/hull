@@ -1058,7 +1058,6 @@ mod tests {
 
     let rendered = render_node_tree(&root, true, "").join("\n");
     let rendered = console::strip_ansi_codes(&rendered);
-    dbg!(&rendered);
     assert!(rendered.contains("Problems contest"));
     assert!(rendered.contains("Problem aPlusB"));
     assert!(rendered.contains("Solution std"));
