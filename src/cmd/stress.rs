@@ -103,11 +103,30 @@ pub fn run(opts: &StressOpts) -> Result<()> {
 
   let mut problem = load_problem_spec(&opts.problem)?;
   let progress = interactive::create_problem_progress(&problem.name);
+  let available_solutions = problem
+    .solutions
+    .iter()
+    .map(|solution| solution.name.clone())
+    .collect::<std::collections::BTreeSet<_>>();
   if let Some(std_name) = &opts.std {
+    if !available_solutions.contains(std_name) {
+      anyhow::bail!("Standard solution `{std_name}` does not exist in problem metadata");
+    }
     problem.main_correct_solution = std_name.clone();
   }
 
   let solutions_to_test = opts.solutions.clone();
+  let missing_solutions = solutions_to_test
+    .iter()
+    .filter(|name| !available_solutions.contains(name.as_str()))
+    .cloned()
+    .collect::<Vec<_>>();
+  if !missing_solutions.is_empty() {
+    anyhow::bail!(
+      "Unknown stress solutions: {}",
+      missing_solutions.join(", ")
+    );
+  }
   problem.solutions.retain(|solution| {
     solution.name == problem.main_correct_solution || solutions_to_test.contains(&solution.name)
   });
