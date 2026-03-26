@@ -56,7 +56,7 @@ pub enum PhaseKind {
   NixBuild,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskKind {
   Problem,
   Validator,
@@ -106,21 +106,24 @@ impl InteractiveSettings {
 
 #[derive(Clone, Debug)]
 pub struct ProblemProgressHandle {
-  inner: Arc<Mutex<State>>,
-  parent_item: Option<String>,
+  inner: Arc<Mutex<InteractiveState>>,
+  scope: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct TaskHandle {
-  inner: Arc<Mutex<State>>,
-  key: TaskKey,
+  inner: Arc<Mutex<InteractiveState>>,
+  task_id: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct TaskKey {
-  parent_item: Option<String>,
-  kind: TaskKind,
-  name: String,
+#[derive(Clone, Debug)]
+struct InteractiveState {
+  enabled: bool,
+  title_label: String,
+  title_name: Option<String>,
+  phase: Option<PhaseState>,
+  roots: BTreeMap<String, TreeNode>,
+  last_rendered_lines: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -131,36 +134,28 @@ struct PhaseState {
 }
 
 #[derive(Clone, Debug)]
-struct State {
-  enabled: bool,
-  title_label: String,
-  title_name: Option<String>,
-  phase: Option<PhaseState>,
-  tasks: BTreeMap<TaskKey, TaskProgress>,
-  last_rendered_lines: usize,
-}
-
-#[derive(Clone, Debug)]
-struct TaskProgress {
-  parent_item: Option<String>,
-  kind: TaskKind,
-  name: String,
-  score: Option<f64>,
-  items: BTreeMap<String, TaskItem>,
-}
-
-#[derive(Clone, Debug)]
-struct TaskItem {
-  name: String,
+struct TreeNode {
+  id: String,
+  kind: NodeKind,
+  label: String,
   state: ExecutionState,
+  score: Option<f64>,
   report: TaskItemReport,
   started_at: Option<Instant>,
   finished_at: Option<Instant>,
+  children: BTreeMap<String, TreeNode>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NodeKind {
+  Group(TaskKind),
+  Item,
 }
 
 static SETTINGS: OnceLock<InteractiveSettings> = OnceLock::new();
 static OUTPUT_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
-static ACTIVE_PROGRESS: OnceLock<Arc<Mutex<Option<Weak<Mutex<State>>>>>> = OnceLock::new();
+static ACTIVE_PROGRESS: OnceLock<Arc<Mutex<Option<Weak<Mutex<InteractiveState>>>>>> =
+  OnceLock::new();
 
 pub fn init(settings: InteractiveSettings) {
   let _ = SETTINGS.set(settings);
@@ -194,12 +189,12 @@ pub fn resume_live_render(separate_line: bool) {
 }
 
 pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
-  let inner = Arc::new(Mutex::new(State {
+  let inner = Arc::new(Mutex::new(InteractiveState {
     enabled: current_settings().enabled(),
     title_label: "Problem".to_string(),
     title_name: Some(name.to_string()),
     phase: None,
-    tasks: BTreeMap::new(),
+    roots: BTreeMap::new(),
     last_rendered_lines: 0,
   }));
 
@@ -213,29 +208,30 @@ pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
     spawn_refresh_thread(&inner);
   }
 
-  ProblemProgressHandle {
-    inner,
-    parent_item: None,
-  }
+  ProblemProgressHandle { inner, scope: None }
 }
 
 impl ProblemProgressHandle {
   pub fn disabled() -> Self {
     Self {
-      inner: Arc::new(Mutex::new(State {
+      inner: Arc::new(Mutex::new(InteractiveState {
         enabled: false,
         title_label: "Problem".to_string(),
         title_name: None,
         phase: None,
-        tasks: BTreeMap::new(),
+        roots: BTreeMap::new(),
         last_rendered_lines: 0,
       })),
-      parent_item: None,
+      scope: None,
     }
   }
 
   pub fn enabled(&self) -> bool {
     self.inner.lock().unwrap().enabled
+  }
+
+  pub fn reset(&self, name: impl Into<String>) {
+    self.set_title("Problem", name);
   }
 
   pub fn set_title(&self, label: impl Into<String>, name: impl Into<String>) {
@@ -244,16 +240,16 @@ impl ProblemProgressHandle {
       state.title_label = label.into();
       state.title_name = Some(name.into());
       state.phase = None;
-      state.tasks.clear();
+      state.roots.clear();
       state.last_rendered_lines = 0;
     }
     render(&self.inner);
   }
 
-  pub fn child_scope(&self, item_name: impl Into<String>) -> Self {
+  pub fn child_scope(&self, name: impl Into<String>) -> Self {
     Self {
       inner: self.inner.clone(),
-      parent_item: Some(item_name.into()),
+      scope: Some(name.into()),
     }
   }
 
@@ -273,7 +269,7 @@ impl ProblemProgressHandle {
     {
       let mut state = self.inner.lock().unwrap();
       state.phase = None;
-      state.tasks.clear();
+      state.roots.clear();
     }
     render(&self.inner);
   }
@@ -286,46 +282,47 @@ impl ProblemProgressHandle {
     score: Option<f64>,
   ) -> TaskHandle {
     let name = name.into();
-    let key = TaskKey {
-      parent_item: self.parent_item.clone(),
-      kind,
-      name: name.clone(),
+    let task_id = scoped_id(self.scope.as_deref(), &name);
+    let node = TreeNode {
+      id: task_id.clone(),
+      kind: NodeKind::Group(kind),
+      label: name,
+      state: ExecutionState::Pending,
+      score,
+      report: TaskItemReport::default(),
+      started_at: None,
+      finished_at: None,
+      children: item_names
+        .into_iter()
+        .map(|item_name| {
+          let item_name = item_name.into();
+          (
+            item_name.clone(),
+            TreeNode {
+              id: scoped_id(Some(&task_id), &item_name),
+              kind: NodeKind::Item,
+              label: item_name,
+              state: ExecutionState::Pending,
+              score: None,
+              report: TaskItemReport::default(),
+              started_at: None,
+              finished_at: None,
+              children: BTreeMap::new(),
+            },
+          )
+        })
+        .collect(),
     };
-    let items = item_names
-      .into_iter()
-      .map(|item_name| {
-        let item_name = item_name.into();
-        (
-          item_name.clone(),
-          TaskItem {
-            name: item_name,
-            state: ExecutionState::Pending,
-            report: TaskItemReport::default(),
-            started_at: None,
-            finished_at: None,
-          },
-        )
-      })
-      .collect();
 
     {
       let mut state = self.inner.lock().unwrap();
-      state.tasks.insert(
-        key.clone(),
-        TaskProgress {
-          parent_item: self.parent_item.clone(),
-          kind,
-          name,
-          score,
-          items,
-        },
-      );
+      insert_group(&mut state, self.scope.as_deref(), node);
     }
     render(&self.inner);
 
     TaskHandle {
       inner: self.inner.clone(),
-      key,
+      task_id,
     }
   }
 
@@ -371,7 +368,7 @@ impl TaskHandle {
   }
 
   pub fn start_item(&self, name: &str) {
-    update_item(&self.inner, &self.key, name, |item| {
+    update_item(&self.inner, &self.task_id, name, |item| {
       item.state = ExecutionState::Running;
       item.report = TaskItemReport::default();
       item.started_at = Some(Instant::now());
@@ -380,7 +377,7 @@ impl TaskHandle {
   }
 
   pub fn finish_item_with_report(&self, name: &str, success: bool, report: TaskItemReport) {
-    update_item(&self.inner, &self.key, name, |item| {
+    update_item(&self.inner, &self.task_id, name, |item| {
       item.state = if success {
         ExecutionState::Passed
       } else {
@@ -398,38 +395,83 @@ impl TaskHandle {
   pub fn set_score(&self, score: f64) {
     {
       let mut state = self.inner.lock().unwrap();
-      if let Some(task) = state.tasks.get_mut(&self.key) {
-        task.score = Some(score);
+      if let Some(node) = find_node_mut_by_id(&mut state.roots, &self.task_id) {
+        node.score = Some(score);
       }
     }
     render(&self.inner);
   }
 }
 
+fn insert_group(state: &mut InteractiveState, scope: Option<&str>, node: TreeNode) {
+  if let Some(scope) = scope {
+    if let Some(parent_item) = find_item_mut_by_label(&mut state.roots, scope) {
+      parent_item.children.insert(node.id.clone(), node);
+      return;
+    }
+  }
+  state.roots.insert(node.id.clone(), node);
+}
+
 fn update_item(
-  inner: &Arc<Mutex<State>>,
-  key: &TaskKey,
-  name: &str,
-  update: impl FnOnce(&mut TaskItem),
+  inner: &Arc<Mutex<InteractiveState>>,
+  task_id: &str,
+  item_name: &str,
+  update: impl FnOnce(&mut TreeNode),
 ) {
   {
     let mut state = inner.lock().unwrap();
-    if let Some(item) = state
-      .tasks
-      .get_mut(key)
-      .and_then(|task| task.items.get_mut(name))
-    {
-      update(item);
+    if let Some(task) = find_node_mut_by_id(&mut state.roots, task_id) {
+      if let Some(item) = task.children.get_mut(item_name) {
+        update(item);
+      }
     }
   }
   render(inner);
 }
 
-fn render(inner: &Arc<Mutex<State>>) {
+fn find_node_mut_by_id<'a>(
+  roots: &'a mut BTreeMap<String, TreeNode>,
+  id: &str,
+) -> Option<&'a mut TreeNode> {
+  for node in roots.values_mut() {
+    if node.id == id {
+      return Some(node);
+    }
+    if let Some(found) = find_node_mut_by_id(&mut node.children, id) {
+      return Some(found);
+    }
+  }
+  None
+}
+
+fn find_item_mut_by_label<'a>(
+  roots: &'a mut BTreeMap<String, TreeNode>,
+  label: &str,
+) -> Option<&'a mut TreeNode> {
+  for node in roots.values_mut() {
+    if node.kind == NodeKind::Item && node.label == label {
+      return Some(node);
+    }
+    if let Some(found) = find_item_mut_by_label(&mut node.children, label) {
+      return Some(found);
+    }
+  }
+  None
+}
+
+fn scoped_id(scope: Option<&str>, name: &str) -> String {
+  match scope {
+    Some(scope) => format!("{scope}/{name}"),
+    None => name.to_string(),
+  }
+}
+
+fn render(inner: &Arc<Mutex<InteractiveState>>) {
   with_output_lock(|| render_locked(inner));
 }
 
-fn render_locked(inner: &Arc<Mutex<State>>) {
+fn render_locked(inner: &Arc<Mutex<InteractiveState>>) {
   let mut state = inner.lock().unwrap();
   if !state.enabled {
     return;
@@ -448,7 +490,7 @@ fn render_locked(inner: &Arc<Mutex<State>>) {
   state.last_rendered_lines = lines.len();
 }
 
-fn render_lines(state: &State) -> Vec<String> {
+fn render_lines(state: &InteractiveState) -> Vec<String> {
   let mut lines = Vec::new();
 
   if let Some(name) = &state.title_name {
@@ -472,301 +514,115 @@ fn render_lines(state: &State) -> Vec<String> {
     ));
   }
 
-  let root_tasks = state
-    .tasks
-    .values()
-    .filter(|task| task.parent_item.is_none())
-    .collect::<Vec<_>>();
-
-  for (index, task) in root_tasks.iter().enumerate() {
-    let is_last = index + 1 == root_tasks.len();
-    lines.push(render_task_line(state, task, is_last));
-    lines.extend(render_child_lines(state, task, is_last, ""));
+  let roots = state.roots.values().collect::<Vec<_>>();
+  for (index, node) in roots.iter().enumerate() {
+    let is_last = index + 1 == roots.len();
+    lines.extend(render_node_tree(node, is_last, ""));
   }
 
   lines
 }
 
-fn render_child_lines(
-  state: &State,
-  task: &TaskProgress,
-  parent_is_last: bool,
-  ancestor_prefix: &str,
-) -> Vec<String> {
-  let prefix = format!(
-    "{}{}",
-    ancestor_prefix,
-    if parent_is_last { "  " } else { "│ " }
-  );
-  let child_tasks = child_tasks_for(state, task);
-
-  if !child_tasks.is_empty() {
-    let mut lines = Vec::new();
-    for (index, child) in child_tasks.iter().enumerate() {
-      let is_last = index + 1 == child_tasks.len();
-      let branch = if is_last { "└─" } else { "├─" };
-      lines.push(format!(
-        "{}{} {}",
-        prefix,
-        Style::new().cyan().apply_to(branch),
-        render_task_summary(state, child)
-      ));
-      lines.extend(render_child_lines(state, child, is_last, &prefix));
-    }
-    return lines;
-  }
-
-  let child_items = task
-    .items
-    .values()
-    .filter(|item| !child_tasks_for_item(state, &item.name).is_empty())
-    .collect::<Vec<_>>();
-  if !child_items.is_empty() {
-    let mut lines = Vec::new();
-    for (index, item) in child_items.iter().enumerate() {
-      let is_last = index + 1 == child_items.len();
-      let branch = if is_last { "└─" } else { "├─" };
-      lines.push(format!(
-        "{}{} {}",
-        prefix,
-        Style::new().cyan().apply_to(branch),
-        render_item_group_line(state, item)
-      ));
-      lines.extend(render_item_child_lines(state, &item.name, is_last, &prefix));
-    }
-    return lines;
-  }
-
-  render_recent_items(state, task, parent_is_last, ancestor_prefix)
-}
-
-fn child_tasks_for<'a>(state: &'a State, task: &TaskProgress) -> Vec<&'a TaskProgress> {
-  state
-    .tasks
-    .values()
-    .filter(|candidate| candidate.parent_item.as_deref() == Some(task.name.as_str()))
-    .collect()
-}
-
-fn child_tasks_for_item<'a>(state: &'a State, item_name: &str) -> Vec<&'a TaskProgress> {
-  state
-    .tasks
-    .values()
-    .filter(|candidate| candidate.parent_item.as_deref() == Some(item_name))
-    .collect()
-}
-
-fn render_item_child_lines(
-  state: &State,
-  item_name: &str,
-  parent_is_last: bool,
-  ancestor_prefix: &str,
-) -> Vec<String> {
-  let prefix = format!(
-    "{}{}",
-    ancestor_prefix,
-    if parent_is_last { "  " } else { "│ " }
-  );
-  let child_tasks = child_tasks_for_item(state, item_name);
-  let mut lines = Vec::new();
-  for (index, child) in child_tasks.iter().enumerate() {
-    let is_last = index + 1 == child_tasks.len();
-    let branch = if is_last { "└─" } else { "├─" };
-    lines.push(format!(
-      "{}{} {}",
-      prefix,
-      Style::new().cyan().apply_to(branch),
-      render_task_summary(state, child)
-    ));
-    lines.extend(render_child_lines(state, child, is_last, &prefix));
-  }
-  lines
-}
-
-fn render_task_line(state: &State, task: &TaskProgress, is_last: bool) -> String {
+fn render_node_tree(node: &TreeNode, is_last: bool, prefix: &str) -> Vec<String> {
   let branch = if is_last { "└─" } else { "├─" };
-  format!(
-    "{} {}",
+  let mut lines = vec![format!(
+    "{}{} {}",
+    prefix,
     Style::new().cyan().apply_to(branch),
-    render_task_summary(state, task)
-  )
-}
+    render_node_summary(node)
+  )];
 
-fn render_task_summary(state: &State, task: &TaskProgress) -> String {
-  let (done, running, pending, failed) = task_counts(state, task);
-  let mut text = format!(
-    "{} {} {}",
-    Style::new().bold().apply_to(task_label(task.kind)),
-    Style::new().yellow().bold().apply_to(&task.name),
-    render_counter(done, running, pending, failed)
-  );
-  if let Some(score) = task.score {
-    text.push(' ');
-    text.push_str(
-      &Style::new()
-        .green()
-        .apply_to(format!("{score:.3} / 1.000 pts"))
-        .to_string(),
-    );
-  }
-  text
-}
-
-fn render_item_group_line(state: &State, item: &TaskItem) -> String {
-  let (done, running, pending, failed) = counts_for_item_children(state, &item.name);
-  format!(
-    "{} {} {}",
-    Style::new().bold().apply_to("Problem"),
-    Style::new().yellow().bold().apply_to(&item.name),
-    render_counter(done, running, pending, failed)
-  )
-}
-
-fn render_recent_items(
-  state: &State,
-  task: &TaskProgress,
-  parent_is_last: bool,
-  ancestor_prefix: &str,
-) -> Vec<String> {
-  let (_, running_count, pending_count, failed_count) = task_counts(state, task);
-  if pending_count == 0 && running_count == 0 && failed_count == 0 {
-    return Vec::new();
+  let child_prefix = format!("{}{}", prefix, if is_last { "  " } else { "│ " });
+  let visible_children = visible_children(node);
+  for (index, child) in visible_children.iter().enumerate() {
+    let child_is_last = index + 1 == visible_children.len();
+    lines.extend(render_node_tree(child, child_is_last, &child_prefix));
   }
 
-  let prefix = format!(
-    "{}{}",
-    ancestor_prefix,
-    if parent_is_last { "  " } else { "│ " }
-  );
-  let mut running = Vec::new();
-  let mut failed = Vec::new();
-  let mut finished = Vec::new();
-  let mut pending = 0usize;
-
-  for item in task.items.values() {
-    match item.state {
-      ExecutionState::Running => running.push(item),
-      ExecutionState::Failed => failed.push(item),
-      ExecutionState::Passed => finished.push(item),
-      ExecutionState::Pending => pending += 1,
-    }
-  }
-
-  sort_recent(&mut failed);
-  sort_recent(&mut finished);
-
-  let mut visible = Vec::new();
-  visible.extend(running);
-  visible.extend(failed);
-  if visible.len() < 4 {
-    visible.extend(finished.into_iter().take(4 - visible.len()));
-  }
-  visible.truncate(4);
-
-  let mut lines = Vec::new();
-  for (index, item) in visible.iter().enumerate() {
-    let is_last = index + 1 == visible.len() && pending == 0;
-    let branch = if is_last { "└─" } else { "├─" };
+  if should_show_pending_suffix(node, visible_children.len()) {
     lines.push(format!(
       "{}{} {}",
-      prefix,
-      Style::new().cyan().apply_to(branch),
-      render_item_line(item)
-    ));
-  }
-
-  if pending > 0 {
-    lines.push(format!(
-      "{}{} {}",
-      prefix,
+      child_prefix,
       Style::new().cyan().apply_to("└─"),
-      Style::new()
-        .dim()
-        .apply_to(format!("{pending} more pending"))
+      Style::new().dim().apply_to(format!(
+        "{} more pending",
+        hidden_pending_count(node, visible_children.len())
+      ))
     ));
   }
 
   lines
 }
 
-fn sort_recent(items: &mut Vec<&TaskItem>) {
-  items.sort_by_key(|item| item.finished_at.unwrap_or_else(Instant::now));
-  items.reverse();
-}
-
-fn task_counts(state: &State, task: &TaskProgress) -> (usize, usize, usize, usize) {
-  let child_tasks = child_tasks_for(state, task);
-  if !child_tasks.is_empty() {
-    return child_tasks.into_iter().fold((0, 0, 0, 0), |acc, child| {
-      let counts = task_counts(state, child);
-      (
-        acc.0 + counts.0,
-        acc.1 + counts.1,
-        acc.2 + counts.2,
-        acc.3 + counts.3,
-      )
-    });
-  }
-
-  let child_items = task
-    .items
-    .values()
-    .filter(|item| !child_tasks_for_item(state, &item.name).is_empty())
-    .collect::<Vec<_>>();
-  if !child_items.is_empty() {
-    return child_items.into_iter().fold((0, 0, 0, 0), |acc, item| {
-      let counts = counts_for_item_children(state, &item.name);
-      (
-        acc.0 + counts.0,
-        acc.1 + counts.1,
-        acc.2 + counts.2,
-        acc.3 + counts.3,
-      )
-    });
-  }
-
-  task.items.values().fold((0, 0, 0, 0), |mut acc, item| {
-    match item.state {
-      ExecutionState::Pending => acc.2 += 1,
-      ExecutionState::Running => acc.1 += 1,
-      ExecutionState::Passed => acc.0 += 1,
-      ExecutionState::Failed => {
-        acc.0 += 1;
-        acc.3 += 1;
+fn render_node_summary(node: &TreeNode) -> String {
+  match node.kind {
+    NodeKind::Group(kind) => {
+      let summary = summary_counts(node);
+      let mut text = format!(
+        "{} {} {}",
+        Style::new().bold().apply_to(task_label(kind)),
+        Style::new().yellow().bold().apply_to(&node.label),
+        render_counter(
+          summary.done,
+          summary.running,
+          summary.pending,
+          summary.failed
+        )
+      );
+      if let Some(score) = node.score {
+        text.push(' ');
+        text.push_str(
+          &Style::new()
+            .green()
+            .apply_to(format!("{score:.3} / 1.000 pts"))
+            .to_string(),
+        );
       }
+      text
     }
-    acc
-  })
+    NodeKind::Item => render_item_summary(node),
+  }
 }
 
-fn counts_for_item_children(state: &State, item_name: &str) -> (usize, usize, usize, usize) {
-  child_tasks_for_item(state, item_name)
-    .into_iter()
-    .fold((0, 0, 0, 0), |acc, task| {
-      let counts = task_counts(state, task);
-      (
-        acc.0 + counts.0,
-        acc.1 + counts.1,
-        acc.2 + counts.2,
-        acc.3 + counts.3,
+fn render_item_summary(node: &TreeNode) -> String {
+  if node.children.is_empty() {
+    let marker = match node.state {
+      ExecutionState::Pending => Style::new().dim().apply_to("P").to_string(),
+      ExecutionState::Running => Style::new().blue().bold().apply_to("R").to_string(),
+      ExecutionState::Passed => Style::new().green().bold().apply_to("D").to_string(),
+      ExecutionState::Failed => Style::new().red().bold().apply_to("D").to_string(),
+    };
+    let name = Style::new().yellow().apply_to(&node.label).to_string();
+    let status = status_text(node);
+    let details = detail_parts(node);
+    if details.is_empty() {
+      format!("[{marker}] {name} {status}")
+    } else {
+      format!("[{marker}] {name} {status} - {}", details.join(" - "))
+    }
+  } else {
+    let summary = summary_counts(node);
+    format!(
+      "{} {} {}",
+      Style::new().bold().apply_to("Problem"),
+      Style::new().yellow().bold().apply_to(&node.label),
+      render_counter(
+        summary.done,
+        summary.running,
+        summary.pending,
+        summary.failed
       )
-    })
+    )
+  }
 }
 
-fn render_item_line(item: &TaskItem) -> String {
-  let marker = match item.state {
-    ExecutionState::Pending => Style::new().dim().apply_to("P").to_string(),
-    ExecutionState::Running => Style::new().blue().bold().apply_to("R").to_string(),
-    ExecutionState::Passed => Style::new().green().bold().apply_to("D").to_string(),
-    ExecutionState::Failed => Style::new().red().bold().apply_to("D").to_string(),
-  };
-
-  let status = item
+fn status_text(node: &TreeNode) -> String {
+  node
     .report
     .status
     .as_ref()
     .map(|status| {
-      let style = match item.state {
+      let style = match node.state {
         ExecutionState::Pending => Style::new().dim(),
         ExecutionState::Running => Style::new().blue(),
         ExecutionState::Passed => Style::new().green(),
@@ -774,18 +630,20 @@ fn render_item_line(item: &TaskItem) -> String {
       };
       style.apply_to(to_title_case(status)).to_string()
     })
-    .unwrap_or_else(|| match item.state {
+    .unwrap_or_else(|| match node.state {
       ExecutionState::Pending => Style::new().dim().apply_to("Pending").to_string(),
       ExecutionState::Running => Style::new().blue().apply_to("Running").to_string(),
       ExecutionState::Passed => Style::new().green().apply_to("Accepted").to_string(),
       ExecutionState::Failed => Style::new().red().apply_to("Failed").to_string(),
-    });
+    })
+}
 
+fn detail_parts(node: &TreeNode) -> Vec<String> {
   let mut details = Vec::new();
-  if let Some(duration) = item
+  if let Some(duration) = node
     .report
     .duration
-    .or_else(|| item.started_at.map(|started| started.elapsed()))
+    .or_else(|| node.started_at.map(|started| started.elapsed()))
   {
     details.push(
       Style::new()
@@ -794,7 +652,7 @@ fn render_item_line(item: &TaskItem) -> String {
         .to_string(),
     );
   }
-  if let Some(score) = item.report.score {
+  if let Some(score) = node.report.score {
     details.push(
       Style::new()
         .green()
@@ -802,7 +660,7 @@ fn render_item_line(item: &TaskItem) -> String {
         .to_string(),
     );
   }
-  if let Some(tick) = item.report.tick {
+  if let Some(tick) = node.report.tick {
     details.push(
       Style::new()
         .dim()
@@ -810,7 +668,7 @@ fn render_item_line(item: &TaskItem) -> String {
         .to_string(),
     );
   }
-  if let Some(memory) = item.report.memory {
+  if let Some(memory) = node.report.memory {
     details.push(
       Style::new()
         .dim()
@@ -818,13 +676,149 @@ fn render_item_line(item: &TaskItem) -> String {
         .to_string(),
     );
   }
+  details
+}
 
-  let name = Style::new().yellow().apply_to(&item.name).to_string();
-  if details.is_empty() {
-    format!("[{marker}] {name} {status}")
-  } else {
-    format!("[{marker}] {name} {status} - {}", details.join(" - "))
+fn visible_children(node: &TreeNode) -> Vec<&TreeNode> {
+  let summary = summary_counts(node);
+  if node.kind == NodeKind::Group(TaskKind::Solution)
+    && summary.pending == 0
+    && summary.running == 0
+    && summary.failed == 0
+  {
+    return Vec::new();
   }
+  if matches!(
+    node.kind,
+    NodeKind::Group(TaskKind::Validator | TaskKind::Checker)
+  ) && summary.pending == 0
+    && summary.running == 0
+    && summary.failed == 0
+  {
+    return Vec::new();
+  }
+
+  let mut running = Vec::new();
+  let mut failed = Vec::new();
+  let mut finished = Vec::new();
+  let mut groups = Vec::new();
+
+  for child in node.children.values() {
+    if !child.children.is_empty() {
+      groups.push(child);
+      continue;
+    }
+    match child.state {
+      ExecutionState::Running => running.push(child),
+      ExecutionState::Failed => failed.push(child),
+      ExecutionState::Passed => finished.push(child),
+      ExecutionState::Pending => {}
+    }
+  }
+
+  if !groups.is_empty() {
+    groups
+  } else {
+    sort_by_recent_finish(&mut failed);
+    sort_by_recent_finish(&mut finished);
+    let mut visible = Vec::new();
+    visible.extend(running);
+    visible.extend(failed);
+    if visible.len() < 4 {
+      visible.extend(finished.into_iter().take(4 - visible.len()));
+    }
+    visible.truncate(4);
+    visible
+  }
+}
+
+fn should_show_pending_suffix(node: &TreeNode, visible_count: usize) -> bool {
+  let summary = summary_counts(node);
+  !has_group_children(node) && summary.pending > 0 && hidden_pending_count(node, visible_count) > 0
+}
+
+fn hidden_pending_count(node: &TreeNode, visible_count: usize) -> usize {
+  let pending = node
+    .children
+    .values()
+    .filter(|child| child.state == ExecutionState::Pending && child.children.is_empty())
+    .count();
+  pending.saturating_sub(0.max(visible_count.saturating_sub(visible_leaf_count(node))))
+}
+
+fn visible_leaf_count(node: &TreeNode) -> usize {
+  visible_children(node)
+    .into_iter()
+    .filter(|child| child.children.is_empty())
+    .count()
+}
+
+fn has_group_children(node: &TreeNode) -> bool {
+  node
+    .children
+    .values()
+    .any(|child| !child.children.is_empty())
+}
+
+fn sort_by_recent_finish(nodes: &mut Vec<&TreeNode>) {
+  nodes.sort_by_key(|node| node.finished_at.unwrap_or_else(Instant::now));
+  nodes.reverse();
+}
+
+#[derive(Clone, Copy)]
+struct SummaryCounts {
+  done: usize,
+  running: usize,
+  pending: usize,
+  failed: usize,
+}
+
+fn summary_counts(node: &TreeNode) -> SummaryCounts {
+  if node.children.is_empty() {
+    return match node.state {
+      ExecutionState::Pending => SummaryCounts {
+        done: 0,
+        running: 0,
+        pending: 1,
+        failed: 0,
+      },
+      ExecutionState::Running => SummaryCounts {
+        done: 0,
+        running: 1,
+        pending: 0,
+        failed: 0,
+      },
+      ExecutionState::Passed => SummaryCounts {
+        done: 1,
+        running: 0,
+        pending: 0,
+        failed: 0,
+      },
+      ExecutionState::Failed => SummaryCounts {
+        done: 1,
+        running: 0,
+        pending: 0,
+        failed: 1,
+      },
+    };
+  }
+
+  node.children.values().fold(
+    SummaryCounts {
+      done: 0,
+      running: 0,
+      pending: 0,
+      failed: 0,
+    },
+    |mut acc, child| {
+      let counts = summary_counts(child);
+      acc.done += counts.done;
+      acc.running += counts.running;
+      acc.pending += counts.pending;
+      acc.failed += counts.failed;
+      acc
+    },
+  )
 }
 
 fn render_counter(done: usize, running: usize, pending: usize, failed: usize) -> String {
@@ -883,7 +877,7 @@ fn redraw_active_render_locked() {
   }
 }
 
-fn active_progress() -> Option<Arc<Mutex<State>>> {
+fn active_progress() -> Option<Arc<Mutex<InteractiveState>>> {
   let active = ACTIVE_PROGRESS.get_or_init(|| Arc::new(Mutex::new(None)));
   let mut guard = active.lock().unwrap();
   let upgraded = guard.as_ref().and_then(Weak::upgrade);
@@ -893,7 +887,7 @@ fn active_progress() -> Option<Arc<Mutex<State>>> {
   upgraded
 }
 
-fn spawn_refresh_thread(inner: &Arc<Mutex<State>>) {
+fn spawn_refresh_thread(inner: &Arc<Mutex<InteractiveState>>) {
   let weak = Arc::downgrade(inner);
   thread::spawn(move || {
     loop {
@@ -901,24 +895,19 @@ fn spawn_refresh_thread(inner: &Arc<Mutex<State>>) {
       let Some(inner) = weak.upgrade() else {
         break;
       };
-      let refresh = {
+      let should_refresh = {
         let state = inner.lock().unwrap();
-        state.enabled && has_running_items(&state)
+        state.enabled && state.roots.values().any(has_running_nodes)
       };
-      if refresh {
+      if should_refresh {
         render(&inner);
       }
     }
   });
 }
 
-fn has_running_items(state: &State) -> bool {
-  state.tasks.values().any(|task| {
-    task
-      .items
-      .values()
-      .any(|item| item.state == ExecutionState::Running)
-  })
+fn has_running_nodes(node: &TreeNode) -> bool {
+  node.state == ExecutionState::Running || node.children.values().any(has_running_nodes)
 }
 
 fn clear_previous_lines(out: &mut impl Write, line_count: usize) {
