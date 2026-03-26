@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Lix
+        uses: canidae-solutions/lix-quick-install-action@v4
+
+      - name: Run cargo tests in dev shell
+        run: nix develop .#default --command cargo test
+
+      - name: Build all test problems contest
+        run: nix run . -- build-contest --contest test.allProblems
