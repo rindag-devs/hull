@@ -38,6 +38,7 @@ const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
 const TOOL_MEMORY_LIMIT: u64 = u32::MAX as u64;
 
 type TestCaseRunMap = BTreeMap<String, (RuntimeTestCaseData, BTreeMap<String, JudgeReport>)>;
+type TestCaseTraitsMap = BTreeMap<String, BTreeMap<String, bool>>;
 
 struct JudgerInvocation<'a> {
   runner: &'a ArtifactSpec,
@@ -48,6 +49,11 @@ struct JudgerInvocation<'a> {
   outputs_dir: &'a Path,
   judge_context: Option<(&'a Path, &'a Path)>,
   work_dir: &'a Path,
+}
+
+struct LiveScoreState {
+  per_solution_reports: BTreeMap<String, BTreeMap<String, JudgeReport>>,
+  test_case_traits: TestCaseTraitsMap,
 }
 
 // Execute the full runtime analysis for one problem and return the data that
@@ -130,6 +136,10 @@ fn analyze_problem_in_pool(
     .into_iter()
     .map(|(test_case_name, (_, reports))| (test_case_name, reports))
     .collect::<BTreeMap<_, _>>();
+  let test_case_traits = test_case_runtime
+    .iter()
+    .map(|(name, test_case)| (name.clone(), test_case.input_validation.traits.clone()))
+    .collect::<BTreeMap<_, _>>();
 
   let solutions_runtime = problem
     .solutions
@@ -148,7 +158,8 @@ fn analyze_problem_in_pool(
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
 
-      let subtask_results = aggregate_subtask_results(problem, &test_case_results);
+      let subtask_results =
+        aggregate_subtask_results(problem, &test_case_results, &test_case_traits);
       let score = subtask_results
         .iter()
         .map(|result| result.scaled_score)
@@ -370,7 +381,10 @@ fn run_test_cases(
         .collect::<BTreeMap<_, _>>()
     })
   };
-  let live_scores = Arc::new(Mutex::new(BTreeMap::<String, (f64, usize)>::new()));
+  let live_scores = Arc::new(Mutex::new(LiveScoreState {
+    per_solution_reports: BTreeMap::new(),
+    test_case_traits: BTreeMap::new(),
+  }));
 
   problem
     .test_cases
@@ -395,6 +409,18 @@ fn run_test_cases(
         input_file: Some(input_path_string.clone()),
         ..test_case.clone()
       };
+      {
+        let mut live_scores = live_scores.lock().unwrap();
+        // IMPORTANT: never trust `test_case.traits` from problem metadata here.
+        // Those values are author declarations, while subtask membership must be
+        // computed from the validator-derived traits we actually observed at
+        // runtime. Using the declared traits here would reintroduce the exact
+        // regression where empty/mismatched subtasks looked valid in metadata but
+        // were wrong during evaluation.
+        live_scores
+          .test_case_traits
+          .insert(test_case.name.clone(), validation.traits.clone());
+      }
       let outputs_dir = run_generate_outputs(
         problem,
         &concrete_test_case,
@@ -424,10 +450,23 @@ fn run_test_cases(
           {
             let current_score = {
               let mut live_scores = live_scores.lock().unwrap();
-              let entry = live_scores.entry(solution.name.clone()).or_insert((0.0, 0));
-              entry.0 += report.score;
-              entry.1 += 1;
-              entry.0 / problem.test_cases.len().max(1) as f64
+              live_scores
+                .per_solution_reports
+                .entry(solution.name.clone())
+                .or_default()
+                .insert(test_case.name.clone(), report.clone());
+
+              aggregate_subtask_results(
+                problem,
+                live_scores
+                  .per_solution_reports
+                  .get(&solution.name)
+                  .expect("live score reports must exist after insertion"),
+                &live_scores.test_case_traits,
+              )
+              .iter()
+              .map(|result| result.scaled_score)
+              .sum()
             };
             if let Some(guard) = guard {
               guard.finish(
@@ -758,13 +797,27 @@ fn realize_runner(runner: &ArtifactSpec) -> Result<String> {
 fn aggregate_subtask_results(
   problem: &ProblemSpec,
   test_case_results: &BTreeMap<String, JudgeReport>,
+  test_case_traits: &TestCaseTraitsMap,
 ) -> Vec<SubtaskRuntimeReport> {
   problem
     .subtasks
     .iter()
     .map(|subtask| {
-      let test_cases: BTreeMap<_, _> = subtask
+      let matching_test_case_names = problem
         .test_cases
+        .iter()
+        .filter(|test_case| {
+          subtask.traits.iter().all(|(name, value)| {
+            test_case_traits
+              .get(&test_case.name)
+              .and_then(|traits| traits.get(name))
+              == Some(value)
+          })
+        })
+        .map(|test_case| test_case.name.clone())
+        .collect::<Vec<_>>();
+
+      let test_cases: BTreeMap<_, _> = matching_test_case_names
         .iter()
         .filter_map(|test_case_name| {
           test_case_results
@@ -888,11 +941,32 @@ mod tests {
           drv_path: None,
         },
       },
-      test_cases: Vec::new(),
+      test_cases: vec![
+        TestCaseSpec {
+          name: "a".to_string(),
+          input_file: None,
+          tick_limit: 1,
+          memory_limit: 1,
+          groups: Vec::new(),
+          traits: BTreeMap::new(),
+          generator: None,
+          arguments: None,
+        },
+        TestCaseSpec {
+          name: "b".to_string(),
+          input_file: None,
+          tick_limit: 1,
+          memory_limit: 1,
+          groups: Vec::new(),
+          traits: BTreeMap::new(),
+          generator: None,
+          arguments: None,
+        },
+      ],
       subtasks: vec![SubtaskSpec {
         full_score: 0.5,
         scoring_method: scoring_method.to_string(),
-        test_cases: vec!["a".to_string(), "b".to_string()],
+        traits: BTreeMap::new(),
       }],
       solutions: Vec::new(),
       checker_tests: Vec::new(),
@@ -901,7 +975,7 @@ mod tests {
   }
 
   #[test]
-  fn fatal_status_helpers_only_treat_internal_error_as_fatal() {
+  fn fatal_status_helpers_match() {
     assert!(is_fatal_judge_status("internal_error"));
     assert!(!is_fatal_judge_status("memory_limit_exceeded"));
     assert!(is_fatal_validation_status("internal_error"));
@@ -911,14 +985,18 @@ mod tests {
   }
 
   #[test]
-  fn aggregate_subtask_results_uses_min_for_non_sum_scoring() {
+  fn subtask_results_use_min_scoring() {
     let problem = problem_with_subtasks("min");
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report("accepted", 1.0)),
       ("b".to_string(), judge_report("wrong_answer", 0.25)),
     ]);
+    let traits = BTreeMap::from([
+      ("a".to_string(), BTreeMap::new()),
+      ("b".to_string(), BTreeMap::new()),
+    ]);
 
-    let result = aggregate_subtask_results(&problem, &reports);
+    let result = aggregate_subtask_results(&problem, &reports, &traits);
     assert_eq!(result.len(), 1);
     assert!((result[0].raw_score - 0.25).abs() < 1e-9);
     assert!((result[0].scaled_score - 0.125).abs() < 1e-9);
@@ -926,27 +1004,65 @@ mod tests {
   }
 
   #[test]
-  fn aggregate_subtask_results_uses_average_for_sum_scoring() {
+  fn subtask_results_use_average_for_sum() {
     let problem = problem_with_subtasks("sum");
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report("accepted", 1.0)),
       ("b".to_string(), judge_report("partially_correct", 0.5)),
     ]);
+    let traits = BTreeMap::from([
+      ("a".to_string(), BTreeMap::new()),
+      ("b".to_string(), BTreeMap::new()),
+    ]);
 
-    let result = aggregate_subtask_results(&problem, &reports);
+    let result = aggregate_subtask_results(&problem, &reports, &traits);
     assert_eq!(result.len(), 1);
     assert!((result[0].raw_score - 0.75).abs() < 1e-9);
     assert!((result[0].scaled_score - 0.375).abs() < 1e-9);
   }
 
   #[test]
-  fn aggregate_subtask_results_ignores_missing_test_cases() {
+  fn subtask_results_ignore_missing_cases() {
     let problem = problem_with_subtasks("min");
     let reports = BTreeMap::from([("a".to_string(), judge_report("accepted", 1.0))]);
+    let traits = BTreeMap::from([
+      ("a".to_string(), BTreeMap::new()),
+      ("b".to_string(), BTreeMap::new()),
+    ]);
 
-    let result = aggregate_subtask_results(&problem, &reports);
+    let result = aggregate_subtask_results(&problem, &reports, &traits);
     assert_eq!(result[0].test_cases.len(), 1);
     assert_eq!(result[0].statuses, vec!["accepted"]);
     assert!((result[0].raw_score - 1.0).abs() < 1e-9);
+  }
+
+  #[test]
+  fn subtasks_match_trait_subsets() {
+    let mut problem = problem_with_subtasks("min");
+    problem.subtasks = vec![SubtaskSpec {
+      full_score: 1.0,
+      scoring_method: "min".to_string(),
+      traits: BTreeMap::from([("x".to_string(), true)]),
+    }];
+    problem.test_cases[0].traits =
+      BTreeMap::from([("x".to_string(), true), ("y".to_string(), true)]);
+    problem.test_cases[1].traits = BTreeMap::from([("y".to_string(), true)]);
+
+    let reports = BTreeMap::from([
+      ("a".to_string(), judge_report("accepted", 1.0)),
+      ("b".to_string(), judge_report("wrong_answer", 0.0)),
+    ]);
+    let traits = BTreeMap::from([
+      (
+        "a".to_string(),
+        BTreeMap::from([("x".to_string(), true), ("y".to_string(), true)]),
+      ),
+      ("b".to_string(), BTreeMap::from([("y".to_string(), true)])),
+    ]);
+
+    let result = aggregate_subtask_results(&problem, &reports, &traits);
+    assert_eq!(result[0].test_cases.len(), 1);
+    assert!(result[0].test_cases.contains_key("a"));
+    assert_eq!(result[0].statuses, vec!["accepted"]);
   }
 }

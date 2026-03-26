@@ -130,8 +130,7 @@ let
         arguments = tc.arguments;
       }) (builtins.attrValues problemConfig.testCases);
       subtasks = map (st: {
-        inherit (st) fullScore scoringMethod;
-        testCases = map ({ name, ... }: name) st.testCases;
+        inherit (st) fullScore scoringMethod traits;
       }) problemConfig.subtasks;
       solutions = map (solution: {
         inherit (solution)

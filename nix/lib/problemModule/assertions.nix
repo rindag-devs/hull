@@ -262,6 +262,30 @@
             '';
         };
 
+        subtasksWithoutTestCases = lib.filterAttrs (name: subtask: builtins.length subtask.testCases == 0) (
+          lib.listToAttrs (
+            lib.imap0 (index: subtask: {
+              name = toString index;
+              value = subtask;
+            }) config.subtasks
+          )
+        );
+        emptySubtaskAssertion = {
+          assertion = subtasksWithoutTestCases == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (index: subtask: ''
+                - ${getSubtaskName (lib.toIntBase10 index) subtask}
+              '') subtasksWithoutTestCases;
+            in
+            ''
+              Problem `${config.name}` has subtasks with zero matched test cases.
+              This usually means the declared subtask traits do not match any validator-derived test case traits.
+              Details:
+              ${report}
+            '';
+        };
+
         # Assertion: Checker tests must pass.
         failingCheckerTests = lib.filterAttrs (name: test: !test.predictionHolds) config.checker.tests;
         checkerTestsAssertion = {
@@ -306,6 +330,7 @@
         undeclaredTestCaseTraitsAssertion
         mismatchedTestCaseTraitsAssertion
         undeclaredSubtaskTraitsAssertion
+        emptySubtaskAssertion
         subtaskPredictionAssertion
         checkerTestsAssertion
         validatorTestsAssertion

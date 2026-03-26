@@ -260,7 +260,7 @@ fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTe
           dynamic_problem.subtasks = vec![SubtaskSpec {
             full_score: 1.0,
             scoring_method: "min".to_string(),
-            test_cases: vec![test_case_name.clone()],
+            traits: BTreeMap::new(),
           }];
 
           let workspace = RuntimeWorkspace::new(

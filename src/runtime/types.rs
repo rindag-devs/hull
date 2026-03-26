@@ -95,7 +95,7 @@ pub struct TestCaseSpec {
 pub struct SubtaskSpec {
   pub full_score: f64,
   pub scoring_method: String,
-  pub test_cases: Vec<String>,
+  pub traits: BTreeMap<String, bool>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

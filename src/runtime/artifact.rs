@@ -324,7 +324,7 @@ mod tests {
       subtasks: vec![SubtaskSpec {
         full_score: 1.0,
         scoring_method: "min".to_string(),
-        test_cases: vec!["case1".to_string()],
+        traits: BTreeMap::new(),
       }],
       solutions: vec![
         SolutionSpec {
@@ -367,7 +367,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_problem_realize_builds_includes_all_runtime_artifact_kinds() {
+  fn collect_builds_includes_all_runtime_artifacts() {
     let problem = problem_with_artifacts();
     let commands = collect_problem_realize_builds(&problem)
       .into_iter()
@@ -407,7 +407,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_problem_realize_builds_deduplicates_identical_builds() {
+  fn collect_builds_deduplicates_identical_entries() {
     let problem = problem_with_artifacts();
     let commands = collect_problem_realize_builds(&problem)
       .into_iter()
@@ -422,7 +422,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_problem_realize_builds_uses_parent_path_when_drv_path_is_missing() {
+  fn collect_builds_fall_back_to_parent_path() {
     let mut problem = problem_with_artifacts();
     problem.validator.wasm = Some(artifact("/tmp/hull/validator/output.wasm", None));
     let commands = collect_problem_realize_builds(&problem)

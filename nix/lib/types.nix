@@ -482,9 +482,10 @@ in
             description = "A list of test cases that match the traits defined for this subtask.";
             default = builtins.filter (
               tc:
-              builtins.all ({ name, value }: builtins.hasAttr name tc.traits && tc.traits.${name} == value) (
-                lib.attrsToList config.traits
-              )
+              builtins.all (
+                { name, value }:
+                builtins.hasAttr name tc.inputValidation.traits && tc.inputValidation.traits.${name} == value
+              ) (lib.attrsToList config.traits)
             ) (builtins.attrValues problem.testCases);
             defaultText = "A filtered list of `problem.testCases` matching the subtask's traits.";
           };
