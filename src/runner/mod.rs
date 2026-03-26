@@ -178,7 +178,19 @@ pub fn run(
 
   let start_func = match setup_instance(&mut linker, &mut store, &main_module) {
     Ok(x) => x,
-    Err(err) => return RunResult::new_internal_error(err),
+    Err(err) => {
+      let memory_limiter = store.data().memory_limiter.clone();
+      if memory_limiter.memory_limit_exceeded {
+        return RunResult {
+          status: RunStatus::MemoryLimitExceeded,
+          tick: 0,
+          memory: memory_limiter.memory_max_used_bytes.try_into().unwrap(),
+          exit_code: -1,
+          error_message: "Memory limit exceeded".to_string(),
+        };
+      }
+      return RunResult::new_internal_error(err);
+    }
   };
 
   execute_and_get_results(store, start_func, tick_limit)

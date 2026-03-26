@@ -23,7 +23,7 @@ use comfy_table::{Cell, Color, Table};
 use serde::{Deserialize, Serialize};
 
 use crate::interactive;
-use crate::runtime::{analyze_problem, load_ad_hoc_problem_spec, RuntimeOptions, RuntimeWorkspace};
+use crate::runtime::{RuntimeOptions, RuntimeWorkspace, analyze_problem, load_ad_hoc_problem_spec};
 use crate::utils::{format_size, format_tick, to_title_case};
 
 #[derive(Parser)]

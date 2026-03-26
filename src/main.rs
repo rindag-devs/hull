@@ -35,9 +35,10 @@ fn main() -> Result<()> {
         .unwrap_or_else(|_| format!("{}=debug", env!("CARGO_CRATE_NAME")).into()),
     )
     .with(
-      tracing_subscriber::fmt::layer().without_time().with_ansi(false).with_writer(|| {
-        crate::interactive::LogWriter
-      }),
+      tracing_subscriber::fmt::layer()
+        .without_time()
+        .with_ansi(false)
+        .with_writer(|| crate::interactive::LogWriter),
     )
     .init();
 

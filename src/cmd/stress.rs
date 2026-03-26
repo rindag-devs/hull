@@ -18,14 +18,14 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use clap::Parser;
 use rand::Rng;
-use rayon::{prelude::*, ThreadPoolBuilder};
+use rayon::{ThreadPoolBuilder, prelude::*};
 use tracing::info;
 
 use crate::{
   interactive,
   runtime::{
-    analyze_problem, load_problem_spec, run_wasm_for_stdio, ProblemSpec, RuntimeOptions,
-    RuntimeWorkspace, SubtaskSpec, TestCaseSpec,
+    ProblemSpec, RuntimeOptions, RuntimeWorkspace, SubtaskSpec, TestCaseSpec, analyze_problem,
+    load_problem_spec, run_wasm_for_stdio,
   },
   utils::{format_size, format_tick},
 };
@@ -122,10 +122,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
     .cloned()
     .collect::<Vec<_>>();
   if !missing_solutions.is_empty() {
-    anyhow::bail!(
-      "Unknown stress solutions: {}",
-      missing_solutions.join(", ")
-    );
+    anyhow::bail!("Unknown stress solutions: {}", missing_solutions.join(", "));
   }
   problem.solutions.retain(|solution| {
     solution.name == problem.main_correct_solution || solutions_to_test.contains(&solution.name)
