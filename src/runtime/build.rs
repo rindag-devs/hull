@@ -110,6 +110,9 @@ pub fn build_problem(
     PhaseKind::NixEval,
     format!("Loading metadata for {problem}"),
   );
+  if options.progress.enabled() {
+    options.progress.finish();
+  }
   let spec = load_problem_spec(problem)?;
   options.progress.finish_phase();
 
@@ -117,6 +120,9 @@ pub fn build_problem(
     PhaseKind::NixPrepare,
     format!("Realizing toolchains and prepared artifacts for {problem}"),
   );
+  if options.progress.enabled() {
+    options.progress.finish();
+  }
   run_build_commands(
     collect_problem_realize_builds(&spec),
     "nix prepare for runtime artifacts",
@@ -135,6 +141,9 @@ pub fn build_problem(
   options
     .progress
     .set_phase(PhaseKind::NixBuild, format!("Packaging target {}", target));
+  if options.progress.enabled() {
+    options.progress.finish();
+  }
   let result = build_problem_target(problem, target, &runtime, out_link, nix_args);
   options.progress.finish_phase();
   result
@@ -151,6 +160,9 @@ pub fn build_contest(
     PhaseKind::NixEval,
     format!("Loading contest metadata for {contest}"),
   );
+  if options.progress.enabled() {
+    options.progress.finish();
+  }
   let contest_spec = load_contest_spec(contest)?;
   options.progress.finish_phase();
 
@@ -158,6 +170,9 @@ pub fn build_contest(
     PhaseKind::NixPrepare,
     format!("Realizing toolchains and prepared artifacts for contest {contest}"),
   );
+  if options.progress.enabled() {
+    options.progress.finish();
+  }
   run_build_commands(
     contest_spec
       .problems
@@ -218,6 +233,9 @@ pub fn build_contest(
     PhaseKind::NixBuild,
     format!("Packaging contest target {}", target),
   );
+  if options.progress.enabled() {
+    options.progress.finish();
+  }
   let result = build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args);
   options.progress.finish_phase();
   result

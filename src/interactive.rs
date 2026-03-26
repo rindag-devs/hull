@@ -176,7 +176,7 @@ pub fn log_line(message: &str) {
 }
 
 pub fn suspend_live_render() {
-  with_output_lock(clear_active_render);
+  with_output_lock(detach_active_render);
 }
 
 pub fn resume_live_render(separate_line: bool) {
@@ -486,8 +486,11 @@ fn render_locked(inner: &Arc<Mutex<InteractiveState>>) {
     }
     let _ = write!(out, "{line}");
   }
+  if !lines.is_empty() {
+    let _ = writeln!(out);
+  }
   let _ = out.flush();
-  state.last_rendered_lines = lines.len();
+  state.last_rendered_lines = if lines.is_empty() { 0 } else { lines.len() + 1 };
 }
 
 fn render_lines(state: &InteractiveState) -> Vec<String> {
@@ -871,6 +874,14 @@ fn clear_active_render() {
   state.last_rendered_lines = 0;
 }
 
+fn detach_active_render() {
+  let Some(inner) = active_progress() else {
+    return;
+  };
+  let mut state = inner.lock().unwrap();
+  state.last_rendered_lines = 0;
+}
+
 fn redraw_active_render_locked() {
   if let Some(inner) = active_progress() {
     render_locked(&inner);
@@ -1046,6 +1057,8 @@ mod tests {
     let root = group(TaskKind::Problem, "contest", &[problem_item]);
 
     let rendered = render_node_tree(&root, true, "").join("\n");
+    let rendered = console::strip_ansi_codes(&rendered);
+    dbg!(&rendered);
     assert!(rendered.contains("Problems contest"));
     assert!(rendered.contains("Problem aPlusB"));
     assert!(rendered.contains("Solution std"));
