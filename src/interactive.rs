@@ -14,7 +14,7 @@
 */
 
 use std::collections::BTreeMap;
-use std::io::{IsTerminal, Write, stdout};
+use std::io::{IsTerminal, Write, stderr};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -37,7 +37,7 @@ impl Write for LogWriter {
   }
 
   fn flush(&mut self) -> std::io::Result<()> {
-    stdout().flush()
+    stderr().flush()
   }
 }
 
@@ -99,7 +99,7 @@ impl InteractiveSettings {
     match self.mode {
       InteractiveMode::Always => true,
       InteractiveMode::Never => false,
-      InteractiveMode::Auto => stdout().is_terminal(),
+      InteractiveMode::Auto => stderr().is_terminal(),
     }
   }
 }
@@ -190,7 +190,7 @@ pub fn current_settings() -> InteractiveSettings {
 pub fn log_line(message: &str) {
   with_output_lock(|| {
     clear_active_render();
-    println!("{message}");
+    eprintln!("{message}");
     redraw_active_render_locked();
   });
 }
@@ -518,7 +518,7 @@ fn render_locked(inner: &Arc<Mutex<InteractiveState>>) {
   }
 
   let lines = render_lines(&state);
-  let mut out = stdout();
+  let mut out = stderr();
   clear_previous_lines(&mut out, state.last_rendered_lines);
   for (index, line) in lines.iter().enumerate() {
     if index > 0 {
@@ -908,7 +908,7 @@ fn clear_active_render() {
   if !state.enabled || state.last_rendered_lines == 0 {
     return;
   }
-  let mut out = stdout();
+  let mut out = stderr();
   clear_previous_lines(&mut out, state.last_rendered_lines);
   let _ = out.flush();
   state.last_rendered_lines = 0;
