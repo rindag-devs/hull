@@ -13,15 +13,15 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use anyhow::{Ok, Result, bail};
+use anyhow::{bail, Ok, Result};
 use clap::Parser;
 use wasi_common::{
-  WasiFile,
   pipe::{ReadPipe, WritePipe},
+  WasiFile,
 };
 
 use crate::{
-  runner::{self, RunStatus, judge_dir::JudgeDir},
+  runner::{self, judge_dir::JudgeDir, RunStatus},
   runtime::cache_native_module,
 };
 
@@ -33,58 +33,57 @@ pub struct RunWasmOpts {
   /// Path to the WebAssembly file to execute.
   pub wasm_path: String,
 
-  /// Maximum number of ticks the WASM module can execute.
+  /// Maximum number of ticks the module may execute.
   #[arg(long, default_value_t = DEFAULT_TICK_LIMIT)]
   pub tick_limit: u64,
 
-  /// Memory limit for the WASM module in bytes.
+  /// Maximum linear memory usage in bytes.
   #[arg(long, default_value_t = DEFAULT_MEMORY_LIMIT)]
   pub memory_limit: u64,
 
-  /// Path to a file to use as stdin.
+  /// Read stdin for the module from this host file.
   #[arg(long, conflicts_with = "inherit_stdin")]
   pub stdin_path: Option<String>,
 
-  /// Path to a file to use as stdout.
+  /// Write stdout from the module to this host file.
   #[arg(long, conflicts_with = "inherit_stdout")]
   pub stdout_path: Option<String>,
 
-  /// Path to a file to use as stderr.
+  /// Write stderr from the module to this host file.
   #[arg(long, conflicts_with = "inherit_stderr")]
   pub stderr_path: Option<String>,
 
-  /// Inherit stdin from the host process.
+  /// Inherit stdin from the current process.
   #[arg(long)]
   pub inherit_stdin: bool,
 
-  /// Inherit stdout from the host process.
+  /// Inherit stdout from the current process.
   #[arg(long)]
   pub inherit_stdout: bool,
 
-  /// Inherit stderr from the host process.
+  /// Inherit stderr from the current process.
   #[arg(long)]
   pub inherit_stderr: bool,
 
-  /// A file to be made available for reading inside the WASM sandbox's root directory.
-  /// Can be specified multiple times.
+  /// Expose a host file as a readable file at the same path inside the sandbox root.
+  /// May be passed multiple times.
   #[arg(long = "read-file")]
   pub read_files: Vec<String>,
 
-  /// A file to be made available for writing inside the WASM sandbox's root directory.
-  /// Can be specified multiple times.
+  /// Create a writable file at this path inside the sandbox root and on the host.
+  /// May be passed multiple times.
   #[arg(long = "write-file")]
   pub write_files: Vec<String>,
 
-  /// Path to write report files.
-  // If not set, the report will be written to stdout.
+  /// Write the JSON run report to this file instead of stdout.
   #[arg(long)]
   pub report_path: Option<String>,
 
-  /// Whether to ensure that an "accepted" result is returned.
+  /// Exit with an error unless the run result is `accepted`.
   #[arg(long)]
   pub ensure_accepted: bool,
 
-  /// Arguments to pass to the WASM module.
+  /// Arguments to pass to the module.
   #[arg(trailing_var_arg = true)]
   pub arguments: Vec<String>,
 }

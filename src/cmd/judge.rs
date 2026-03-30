@@ -23,7 +23,7 @@ use comfy_table::{Cell, Color, Table};
 use serde::{Deserialize, Serialize};
 
 use crate::interactive;
-use crate::runtime::{RuntimeOptions, RuntimeWorkspace, analyze_problem, load_ad_hoc_problem_spec};
+use crate::runtime::{analyze_problem, load_ad_hoc_problem_spec, RuntimeOptions, RuntimeWorkspace};
 use crate::utils::{format_size, format_tick, to_title_case};
 
 #[derive(Parser)]
@@ -31,11 +31,11 @@ pub struct JudgeOpts {
   /// Path to the source file to judge.
   pub src_path: String,
 
-  /// The problem to build, e.g., "aPlusB".
+  /// Problem name that provides the judging context, e.g. `aPlusB`.
   #[arg(long, short, default_value = "default")]
   pub problem: String,
 
-  /// Output the result in JSON format.
+  /// Print the report as JSON instead of a table.
   #[arg(long)]
   pub json: bool,
 }

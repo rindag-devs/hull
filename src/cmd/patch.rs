@@ -132,17 +132,17 @@ impl Replacer {
 }
 
 #[derive(Parser)]
-pub struct PatchIncludesOpts {
+pub struct PatchOpts {
   /// Path to the input source file.
   pub input_path: String,
 
-  /// Path to the output source file.
+  /// Path to write the patched source file.
   pub output_path: String,
 
-  /// The regular expression to find.
+  /// Regex pattern to search for inside include paths.
   pub find: String,
 
-  /// The replacement string. Supports capture groups like $1, ${name}, etc.
+  /// Replacement text. Supports capture groups such as `$1` and `${name}`.
   pub replace_with: String,
 
   #[arg(short = 'f', long, verbatim_doc_comment)]
@@ -159,7 +159,7 @@ pub struct PatchIncludesOpts {
   pub flags: Option<String>,
 }
 
-pub fn run(opts: &PatchIncludesOpts) -> Result<()> {
+pub fn run(opts: &PatchOpts) -> Result<()> {
   // Initialize the replacer
   let replacer = Replacer::new(
     opts.find.clone(),

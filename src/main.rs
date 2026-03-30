@@ -50,7 +50,7 @@ fn main() -> Result<()> {
     cli::Command::Build(opts) => cmd::build::run(opts),
     cli::Command::BuildContest(opts) => cmd::build_contest::run(opts),
     cli::Command::Judge(opts) => cmd::judge::run(opts),
-    cli::Command::PatchIncludes(opts) => cmd::patch_includes::run(opts),
+    cli::Command::Patch(opts) => cmd::patch::run(opts),
     cli::Command::Run(opts) => cmd::run::run(opts),
     cli::Command::RunWasm(opts) => cmd::run_wasm::run(opts),
     cli::Command::Stress(opts) => cmd::stress::run(opts),

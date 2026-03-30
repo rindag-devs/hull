@@ -18,57 +18,57 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 use clap::Parser;
 use rand::Rng;
-use rayon::{ThreadPoolBuilder, prelude::*};
+use rayon::{prelude::*, ThreadPoolBuilder};
 use tracing::info;
 
 use crate::{
   interactive,
   runtime::{
-    ProblemSpec, RuntimeOptions, RuntimeWorkspace, SubtaskSpec, TestCaseSpec, analyze_problem,
-    load_problem_spec, run_wasm_for_stdio,
+    analyze_problem, load_problem_spec, run_wasm_for_stdio, ProblemSpec, RuntimeOptions,
+    RuntimeWorkspace, SubtaskSpec, TestCaseSpec,
   },
   utils::{format_size, format_tick},
 };
 
 #[derive(Parser)]
 pub struct StressOpts {
-  /// Name of the standard solution. If not provided, the problem's mainCorrectSolution will be used.
+  /// Standard solution name. Defaults to the problem's `mainCorrectSolution`.
   #[arg(long, short)]
   pub std: Option<String>,
 
-  /// Names of the solutions to test.
+  /// Solution names to test against the standard solution.
   #[arg(required = true)]
   pub solutions: Vec<String>,
 
-  /// Name of the generator to use.
+  /// Generator name used to produce candidate inputs.
   #[arg(long, short)]
   pub generator: String,
 
-  /// The problem to build, e.g., "aPlusB".
+  /// Problem name that provides the generator, checker, and solutions.
   #[arg(long, short, default_value = "default")]
   pub problem: String,
 
-  /// Number of parallel jobs used for stress testing.
+  /// Number of generated cases to test in parallel per round.
   #[arg(short = 'j', long = "jobs")]
   pub jobs: Option<usize>,
 
-  /// Number of rounds to run. If not set, runs indefinitely.
+  /// Number of stress rounds to run. If omitted, run until interrupted.
   #[arg(long, short)]
   pub rounds: Option<u64>,
 
-  /// The name of the argument used to pass a random salt to the generator.
+  /// Generator argument name used to pass the per-case random salt.
   #[arg(long, default_value = "salt")]
   pub salt_arg: String,
 
-  /// Override the tick limit for this run.
+  /// Override the per-test tick limit for generated cases.
   #[arg(long, short)]
   pub tick_limit: Option<u64>,
 
-  /// Override the memory limit (in bytes) for this run.
+  /// Override the per-test memory limit in bytes for generated cases.
   #[arg(long, short)]
   pub memory_limit: Option<u64>,
 
-  /// Arguments for the generator, followed by '--'.
+  /// Extra arguments to pass to the generator after `--`.
   #[arg(allow_hyphen_values = true, last = true)]
   pub args: Vec<String>,
 }

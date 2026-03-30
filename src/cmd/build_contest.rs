@@ -21,23 +21,23 @@ use crate::runtime::{self, RuntimeOptions};
 
 #[derive(Parser)]
 pub struct BuildContestOpts {
-  /// The contest to build, e.g., "day1".
+  /// Contest name to analyze and package, e.g. `day1`.
   #[arg(long, short, default_value = "default")]
   pub contest: String,
 
-  /// The target to build, e.g., "default".
+  /// Contest target name to package, e.g. `default`.
   #[arg(long, short, default_value = "default")]
   pub target: String,
 
-  /// Path to save the result link.
+  /// Symlink path to create for the packaged result.
   #[arg(long, short, default_value = "result")]
   pub out_link: String,
 
-  /// Number of parallel jobs used by the Rust runtime.
+  /// Number of parallel jobs to use during contest analysis.
   #[arg(short = 'j', long = "jobs")]
   pub jobs: Option<usize>,
 
-  /// Extra arguments passed through to the final `nix build` invocation.
+  /// Extra arguments to pass through to the final `nix build` step.
   #[arg(trailing_var_arg = true)]
   pub nix_args: Vec<String>,
 }

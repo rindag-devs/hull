@@ -20,44 +20,44 @@ use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use tracing::info;
 use wasi_common::{
-  WasiDir, WasiFile,
   pipe::{ReadPipe, WritePipe},
   sync::dir::Dir as WasiSyncDir,
+  WasiDir, WasiFile,
 };
 
 use crate::{
-  nix::{BuildCommand, get_flake_url},
+  nix::{get_flake_url, BuildCommand},
   runner,
   runtime::cache_native_module,
 };
 
 #[derive(Parser)]
 pub struct RunOpts {
-  /// The problem context to use for compilation.
+  /// Problem name that provides languages and includes for compilation.
   #[arg(long, short, default_value = "default")]
   pub problem: String,
 
-  /// The language name (e.g., "cpp.20"). Auto-detected if not provided.
+  /// Language name to compile with, e.g. `cpp.20`. Auto-detected if omitted.
   #[arg(long, short)]
   pub language: Option<String>,
 
-  /// Override the tick limit for this run.
+  /// Override the runtime tick limit for the executed program.
   #[arg(long, short)]
   pub tick_limit: Option<u64>,
 
-  /// Override the memory limit (in bytes) for this run.
+  /// Override the runtime memory limit in bytes.
   #[arg(long, short)]
   pub memory_limit: Option<u64>,
 
-  /// Show a report of the execution status (tick, memory, etc.) on stderr.
+  /// Print execution status details such as tick and memory to stderr.
   #[arg(long)]
   pub show_status: bool,
 
-  /// Whether to let nix resolve git submodules.
+  /// Let `nix` fetch flake inputs with Git submodules enabled.
   #[arg(long)]
   pub submodules: bool,
 
-  /// Path to the source file to run.
+  /// Path to the source file to compile and run.
   pub src_path: String,
 
   /// Arguments to pass to the executed program.

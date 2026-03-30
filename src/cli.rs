@@ -16,8 +16,8 @@
 use clap::{Parser, Subcommand};
 
 use crate::cmd::{
-  build::BuildOpts, build_contest::BuildContestOpts, judge::JudgeOpts,
-  patch_includes::PatchIncludesOpts, run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
+  build::BuildOpts, build_contest::BuildContestOpts, judge::JudgeOpts, patch::PatchOpts,
+  run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
 };
 use crate::interactive::InteractiveMode;
 
@@ -41,12 +41,40 @@ pub struct Opts {
 
 #[derive(Subcommand)]
 pub enum Command {
+  #[command(
+    about = "Analyze one problem and package a target",
+    long_about = "Load one problem from the current flake, realize its runtime artifacts, run validator/checker/solution analysis, and then package the selected problem target with `nix build`."
+  )]
   Build(BuildOpts),
+  #[command(
+    about = "Analyze a contest and package a target",
+    long_about = "Load one contest from the current flake, realize runtime artifacts for every problem in it, analyze each problem, and then package the selected contest target with `nix build`."
+  )]
   BuildContest(BuildContestOpts),
+  #[command(
+    about = "Judge one source file as an ad-hoc solution",
+    long_about = "Treat the given source file as an extra solution for the selected problem, run the full problem analysis for it, and print either a human-readable or JSON judging report."
+  )]
   Judge(JudgeOpts),
-  PatchIncludes(PatchIncludesOpts),
+  #[command(
+    about = "Patch source code with a regex rewrite",
+    long_about = "Parse a C or C++ source file, apply a regex replacement to the path inside each `#include \"...\"` string literal, and write the patched file to a new path."
+  )]
+  Patch(PatchOpts),
+  #[command(
+    about = "Compile a source file and run its WASM",
+    long_about = "Compile one source file in the selected problem context to a WebAssembly executable, cache a native module for it, and run it with optional tick, memory, and argv overrides."
+  )]
   Run(RunOpts),
+  #[command(
+    about = "Run a WASM module in Hull's sandbox",
+    long_about = "Execute a WebAssembly module directly with Hull's runner, configurable stdio, tick and memory limits, optional sandbox files, and a JSON run report."
+  )]
   RunWasm(RunWasmOpts),
+  #[command(
+    about = "Search for hacks with generated test cases",
+    long_about = "Run a generator repeatedly, build one temporary test case per generated input, judge the selected solutions against the problem's main correct solution, and stop when a non-accepted result is found."
+  )]
   Stress(StressOpts),
 }
 

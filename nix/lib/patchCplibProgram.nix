@@ -21,7 +21,7 @@ let
   ) extraIncludes;
   extraEmbedCommand = lib.concatMapStringsSep "\n" (h: "cat ${h} >> $out") extraEmbeds;
   includeReplacementCommand = lib.concatMapStringsSep "\n" (r: ''
-    ${lib.getExe hullPkgs.default} patch-includes old_src new_src ${lib.escapeShellArgs r}
+    ${lib.getExe hullPkgs.default} patch old_src new_src ${lib.escapeShellArgs r}
     mv new_src old_src
   '') includeReplacements;
 in
