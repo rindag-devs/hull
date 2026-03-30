@@ -112,10 +112,9 @@ pub fn run(opts: &RunOpts) -> Result<()> {
       wasm
     "#
   );
-
   let mut build_cmd = BuildCommand::new()
     .impure(true) // For srcPath
-    .expr(&nix_expr)
+    .expr_stdin(&nix_expr)
     .argstr("srcPath", src_path_str)
     .argstr("problemName", &opts.problem);
 

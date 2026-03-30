@@ -18,7 +18,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::types::{ContestSpec, ProblemSpec};
-use crate::nix::{EvalCommand, get_flake_url};
+use crate::nix::{get_flake_url, EvalCommand};
 
 pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
   let flake_ref = get_flake_url()?;
@@ -31,10 +31,9 @@ pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
   );
-
   let output = EvalCommand::new()
     .impure(true)
-    .expr(&expr)
+    .expr_stdin(&expr)
     .run_and_capture_stdout()
     .context("Failed to execute `nix eval` for runtime problem metadata")?;
 
@@ -52,10 +51,9 @@ pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
   );
-
   let output = EvalCommand::new()
     .impure(true)
-    .expr(&expr)
+    .expr_stdin(&expr)
     .run_and_capture_stdout()
     .context("Failed to execute `nix eval` for runtime contest metadata")?;
 
@@ -74,10 +72,9 @@ pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<Proble
     flake_ref = serde_json::to_string(&flake_ref)?,
     src_path = serde_json::to_string(&src_path.to_string_lossy().into_owned())?,
   );
-
   let output = EvalCommand::new()
     .impure(true)
-    .expr(&expr)
+    .expr_stdin(&expr)
     .run_and_capture_stdout()
     .context("Failed to execute `nix eval` for ad-hoc runtime problem metadata")?;
 

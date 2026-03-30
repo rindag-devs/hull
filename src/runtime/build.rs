@@ -58,7 +58,7 @@ pub fn build_problem_target(
   );
   crate::nix::BuildCommand::new()
     .impure(true)
-    .expr(&expr)
+    .expr_stdin(&expr)
     .out_link(out_link)
     .extra_args(nix_args)
     .run()
@@ -93,7 +93,7 @@ pub fn build_contest_target(
   );
   crate::nix::BuildCommand::new()
     .impure(true)
-    .expr(&expr)
+    .expr_stdin(&expr)
     .out_link(out_link)
     .extra_args(nix_args)
     .run()
