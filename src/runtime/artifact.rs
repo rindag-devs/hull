@@ -16,12 +16,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use super::types::{ArtifactSpec, RuntimeData};
 use crate::runner;
+
+static NATIVE_MODULE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn collect_problem_realize_builds(
   problem: &super::types::ProblemSpec,
@@ -161,7 +165,12 @@ pub fn cache_native_module(module_path: &str) -> Result<String> {
   }
 
   let compiled_bytes = runner::compile(&module_bytes)?;
-  let temp_path = cache_dir.join(format!("{cache_key}.{}.tmp", std::process::id()));
+  let temp_path = cache_dir.join(format!(
+    "{cache_key}.{}.{}.{}.tmp",
+    std::process::id(),
+    unique_temp_component(),
+    NATIVE_MODULE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+  ));
   fs::write(&temp_path, compiled_bytes).with_context(|| {
     format!(
       "Failed to write cached native module {}",
@@ -187,6 +196,13 @@ pub fn cache_native_module(module_path: &str) -> Result<String> {
   }
 
   Ok(cached_path.to_string_lossy().into_owned())
+}
+
+fn unique_temp_component() -> u128 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|duration| duration.as_nanos())
+    .unwrap_or(0)
 }
 
 fn native_module_cache_dir() -> Result<PathBuf> {
@@ -262,7 +278,8 @@ pub fn storeify_runtime_data(runtime: &mut RuntimeData) -> Result<()> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::collections::BTreeMap;
+  use std::collections::{BTreeMap, HashSet};
+  use std::thread;
 
   use crate::runtime::{
     CheckerTestSpec, JudgerSpec, PreparedSolutionSpec, ProblemSpec, ProgramSpec, SolutionSpec,
@@ -274,6 +291,31 @@ mod tests {
       path: path.to_string(),
       drv_path: drv_path.map(str::to_string),
     }
+  }
+
+  #[test]
+  fn native_module_temp_names_are_unique_across_threads() {
+    let cache_key = "cache-key";
+    let handles = (0..32)
+      .map(|_| {
+        thread::spawn(move || {
+          format!(
+            "{cache_key}.{}.{}.{}.tmp",
+            std::process::id(),
+            unique_temp_component(),
+            NATIVE_MODULE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+          )
+        })
+      })
+      .collect::<Vec<_>>();
+
+    let names = handles
+      .into_iter()
+      .map(|handle| handle.join().expect("temp name thread should not panic"))
+      .collect::<Vec<_>>();
+    let unique_names = names.iter().cloned().collect::<HashSet<_>>();
+
+    assert_eq!(unique_names.len(), names.len());
   }
 
   fn problem_with_artifacts() -> ProblemSpec {

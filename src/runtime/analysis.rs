@@ -106,7 +106,7 @@ fn analyze_problem_in_pool(
     })?;
 
   let (validator_test_results, (checker_test_results, test_case_outputs)) = rayon::join(
-    || run_validator_tests(problem, progress),
+    || run_validator_tests(problem, workspace, progress),
     || {
       rayon::join(
         || {
@@ -203,6 +203,7 @@ fn analyze_problem_in_pool(
 
 fn run_validator_tests(
   problem: &ProblemSpec,
+  workspace: &RuntimeWorkspace,
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<BTreeMap<String, (String, ValidationReport)>> {
   let handle = register_progress_group(
@@ -220,6 +221,7 @@ fn run_validator_tests(
       let guard = handle.as_ref().map(|handle| handle.item(test.name.clone()));
       let input_path = resolve_test_input(
         problem,
+        workspace,
         test.input_file.as_deref(),
         test.generator.as_deref(),
         test.arguments.as_deref(),
@@ -265,6 +267,7 @@ fn run_checker_tests(
       let guard = handle.as_ref().map(|handle| handle.item(test.name.clone()));
       let input_path = resolve_test_input(
         problem,
+        workspace,
         test.input_file.as_deref(),
         test.generator.as_deref(),
         test.arguments.as_deref(),
@@ -393,6 +396,7 @@ fn run_test_cases(
       info!("Preparing test case {}", test_case.name);
       let input_path = resolve_test_input(
         problem,
+        workspace,
         test_case.input_file.as_deref(),
         test_case.generator.as_deref(),
         test_case.arguments.as_deref(),
@@ -618,6 +622,7 @@ fn run_generate_outputs(
 ) -> Result<PathBuf> {
   let input_path = resolve_test_input(
     problem,
+    workspace,
     test_case.input_file.as_deref(),
     test_case.generator.as_deref(),
     test_case.arguments.as_deref(),
@@ -665,6 +670,7 @@ fn run_judge(
 ) -> Result<JudgeReport> {
   let input_path = resolve_test_input(
     problem,
+    workspace,
     test_case.input_file.as_deref(),
     test_case.generator.as_deref(),
     test_case.arguments.as_deref(),
@@ -859,6 +865,7 @@ fn aggregate_subtask_results(
 
 fn resolve_test_input(
   problem: &ProblemSpec,
+  workspace: &RuntimeWorkspace,
   input_file: Option<&str>,
   generator_name: Option<&str>,
   arguments: Option<&[String]>,
@@ -890,10 +897,9 @@ fn resolve_test_input(
     TOOL_MEMORY_LIMIT,
     &[],
   )?;
-  let path = std::env::temp_dir().join(format!(
-    "hull-generated-input-{}-{temp_name}.txt",
-    problem.name
-  ));
+  let path = workspace
+    .case_dir("input", &format!("{}-{temp_name}", problem.name))?
+    .join("input.txt");
   fs::write(&path, result.stdout)
     .with_context(|| format!("Failed to write generated input {}", path.display()))?;
   Ok(path)
