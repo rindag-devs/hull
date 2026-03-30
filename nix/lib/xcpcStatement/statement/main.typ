@@ -13,7 +13,7 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-#import "@preview/tablex:0.0.9": tablex, hlinex, cellx
+#import "@preview/tablex:0.0.9": cellx, hlinex, tablex
 #import "@preview/titleize:0.1.1": titlecase
 #import "@preview/diagraph:0.3.6"
 
@@ -29,12 +29,28 @@
 
 #show "。": "．"
 
+#let fonts = (
+  mono: "New Computer Modern Mono",
+  serif: "New Computer Modern",
+  math: "New Computer Modern Math",
+  cjk-serif: "Source Han Serif SC",
+)
+
 #set text(
   lang: language,
   font: (
-    "Libertinus Serif",
-    "Source Han Serif",
+    fonts.serif,
+    fonts.cjk-serif,
   ),
+)
+
+#show math.equation: set text(font: (fonts.math, fonts.serif, fonts.cjk-serif))
+
+#show raw: set text(
+  font: (fonts.mono, fonts.serif, fonts.cjk-serif),
+  // Typst's default styles apply a size of 0.8em to `raw` elements;
+  // setting it to 1.25em reverts this behavior.
+  size: 1.25em,
 )
 
 #set par(justify: true, leading: 0.8em, spacing: 1.5em)
@@ -147,7 +163,7 @@
   block(
     width: 100%,
     {
-      set text(font: "Dejavu Sans Mono", size: 0.8em)
+      set text(font: (fonts.mono, fonts.serif, fonts.cjk-serif))
       set par(leading: 0.6em, spacing: 0pt)
 
       grid(
@@ -256,7 +272,6 @@
 
       dot-string += "}"
 
-      // raw(dot-string)
       align(center)[
         #diagraph.render(
           width: 70%,
@@ -351,7 +366,7 @@
       header-rows: 1,
       [*\#*],
       [*#titlecase(translation.score)*],
-      ..problem.traits.keys().map(x => text(size: 0.8em, breakable-text(x))),
+      ..problem.traits.keys().map(x => breakable-text(x)),
       hlinex(),
       ..problem
         .subtasks

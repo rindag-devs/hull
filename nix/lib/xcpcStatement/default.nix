@@ -74,7 +74,9 @@ hull.document.mkProblemTypstDocument problem {
   ]
   ++ extraTypstPackages;
   fontPaths = [
+    "${pkgs.source-han-sans}/share/fonts/opentype/source-han-sans"
     "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
+    "${pkgs.newcomputermodern}/share/fonts/opentype/public"
   ]
   ++ extraFontPaths;
 }
