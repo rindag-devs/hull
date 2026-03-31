@@ -217,8 +217,10 @@ pub struct ValidationReport {
   pub status: String,
   pub message: String,
   #[serde(default)]
+  #[serde(alias = "reader_trace_stacks")]
   pub reader_trace_stacks: Vec<serde_json::Value>,
   #[serde(default = "default_json_object")]
+  #[serde(alias = "reader_trace_tree")]
   pub reader_trace_tree: serde_json::Value,
   #[serde(default)]
   pub traits: BTreeMap<String, bool>,
@@ -231,8 +233,10 @@ pub struct CheckerReport {
   pub message: String,
   pub score: f64,
   #[serde(default)]
+  #[serde(alias = "reader_trace_stacks")]
   pub reader_trace_stacks: Vec<serde_json::Value>,
   #[serde(default)]
+  #[serde(alias = "evaluator_trace_stacks")]
   pub evaluator_trace_stacks: Vec<serde_json::Value>,
 }
 

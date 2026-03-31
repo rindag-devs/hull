@@ -53,7 +53,7 @@ pub fn build_problem_target(
       lib.${{builtins.currentSystem}}.runtime.buildProblemTarget problemConfig (builtins.fromJSON {runtime_json}) {target}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
-    runtime_json = serde_json::to_string(&runtime_json)?,
+    runtime_json = format!("''{}''", runtime_json),
     target = serde_json::to_string(target)?,
   );
   crate::nix::BuildCommand::new()
@@ -88,7 +88,7 @@ pub fn build_contest_target(
       lib.${{builtins.currentSystem}}.runtime.buildContestTarget contestConfig (builtins.fromJSON {runtime_json}) {target}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
-    runtime_json = serde_json::to_string(&runtime_json)?,
+    runtime_json = format!("''{}''", runtime_json),
     target = serde_json::to_string(target)?,
   );
   crate::nix::BuildCommand::new()
