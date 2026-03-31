@@ -45,6 +45,7 @@ struct JudgerInvocation<'a> {
   mode: &'a str,
   input_path: &'a Path,
   test_case: &'a TestCaseSpec,
+  solution_name: &'a str,
   prepared_solution: &'a PreparedSolutionSpec,
   outputs_dir: &'a Path,
   judge_context: Option<(&'a Path, &'a Path)>,
@@ -290,7 +291,13 @@ fn run_checker_tests(
             arguments: None,
           };
           let outputs_dir =
-            run_generate_outputs(problem, &fake_test_case, &solution.prepared, workspace)?;
+            run_generate_outputs(
+              problem,
+              &fake_test_case,
+              &solution.name,
+              &solution.prepared,
+              workspace,
+            )?;
           outputs_dir.join(&test.output_name)
         }
         (Some(_), Some(_)) => {
@@ -320,6 +327,7 @@ fn run_checker_tests(
       let answer_dir = run_generate_outputs(
         problem,
         &fake_answer_case,
+        &main_solution.name,
         &main_solution.prepared,
         workspace,
       )?;
@@ -428,6 +436,7 @@ fn run_test_cases(
       let outputs_dir = run_generate_outputs(
         problem,
         &concrete_test_case,
+        &main_solution.name,
         &main_solution.prepared,
         workspace,
       )?;
@@ -444,6 +453,7 @@ fn run_test_cases(
           let report = run_judge(
             problem,
             &concrete_test_case,
+            &solution.name,
             &solution.prepared,
             Path::new(&outputs_path),
             workspace,
@@ -617,6 +627,7 @@ fn run_checker(
 fn run_generate_outputs(
   problem: &ProblemSpec,
   test_case: &TestCaseSpec,
+  solution_name: &str,
   prepared_solution: &PreparedSolutionSpec,
   workspace: &RuntimeWorkspace,
 ) -> Result<PathBuf> {
@@ -630,11 +641,11 @@ fn run_generate_outputs(
   )?;
   let case_dir = workspace.case_dir(
     "generate",
-    &format!("{}-{}", test_case.name, prepared_solution.src),
+    &format!("{}-{}", test_case.name, solution_name),
   )?;
   let work_dir = workspace.run_dir(
     "generate",
-    &format!("{}-{}", test_case.name, prepared_solution.src),
+    &format!("{}-{}", test_case.name, solution_name),
   )?;
   let outputs_dir = case_dir.join("outputs");
   if outputs_dir.exists() {
@@ -652,6 +663,7 @@ fn run_generate_outputs(
     mode: "generateOutputs",
     input_path: &input_path,
     test_case,
+    solution_name,
     prepared_solution,
     outputs_dir: &outputs_dir,
     judge_context: None,
@@ -664,6 +676,7 @@ fn run_generate_outputs(
 fn run_judge(
   problem: &ProblemSpec,
   test_case: &TestCaseSpec,
+  solution_name: &str,
   prepared_solution: &PreparedSolutionSpec,
   official_outputs_dir: &Path,
   workspace: &RuntimeWorkspace,
@@ -678,11 +691,11 @@ fn run_judge(
   )?;
   let case_dir = workspace.case_dir(
     "judge",
-    &format!("{}-{}", prepared_solution.src, test_case.name),
+    &format!("{}-{}", solution_name, test_case.name),
   )?;
   let work_dir = workspace.run_dir(
     "judge",
-    &format!("{}-{}", prepared_solution.src, test_case.name),
+    &format!("{}-{}", solution_name, test_case.name),
   )?;
   let outputs_dir = case_dir.join("outputs");
   if outputs_dir.exists() {
@@ -701,6 +714,7 @@ fn run_judge(
     mode: "judge",
     input_path: &input_path,
     test_case,
+    solution_name,
     prepared_solution,
     outputs_dir: &outputs_dir,
     judge_context: Some((official_outputs_dir, &report_path)),
@@ -725,7 +739,7 @@ fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<()> {
     .current_dir(invocation.work_dir)
     .env("HULL_MODE", invocation.mode)
     .env("HULL_TESTCASE_NAME", &invocation.test_case.name)
-    .env("HULL_SOLUTION_NAME", &invocation.prepared_solution.src)
+    .env("HULL_SOLUTION_NAME", invocation.solution_name)
     .env("HULL_INPUT_PATH", invocation.input_path)
     .env(
       "HULL_TICK_LIMIT",
