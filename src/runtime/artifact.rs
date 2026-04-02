@@ -95,7 +95,7 @@ pub fn realize_artifact(artifact: &ArtifactSpec) -> Result<String> {
       .with_context(|| format!("Failed to realize derivation {}", drv_path))?;
     if !output.status.success() {
       bail!(
-        "Failed to realize artifact {}. Stderr:\n{}",
+        "Failed to realize artifact {}.\nStderr:\n{}",
         artifact.path,
         String::from_utf8_lossy(&output.stderr).trim()
       );
@@ -114,7 +114,7 @@ pub fn realize_artifact(artifact: &ArtifactSpec) -> Result<String> {
       .with_context(|| format!("Failed to realize parent path {}", parent.display()))?;
     if !output.status.success() {
       bail!(
-        "Failed to realize artifact {}. Stderr:\n{}",
+        "Failed to realize artifact {}.\nStderr:\n{}",
         artifact.path,
         String::from_utf8_lossy(&output.stderr).trim()
       );
@@ -232,7 +232,7 @@ pub fn add_path_to_store(path: &str) -> Result<String> {
 
   if !output.status.success() {
     bail!(
-      "Failed to add path {} to the Nix store. Stderr:\n{}",
+      "Failed to add path {} to the Nix store.\nStderr:\n{}",
       path,
       String::from_utf8_lossy(&output.stderr).trim()
     );

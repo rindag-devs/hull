@@ -132,7 +132,8 @@ pub fn build_problem(
     );
     let workspace =
       RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;
-    analyze_problem(&spec, &workspace, options.clone())?
+    analyze_problem(&spec, &workspace, options.clone())
+      .with_context(|| format!("Runtime analysis failed for problem `{problem}`"))?
   };
 
   {
@@ -204,7 +205,13 @@ pub fn build_contest(
             spec,
             &workspace,
             RuntimeOptions::new(Some(1)).with_progress(options.progress.child_scope(&spec.name)),
-          )?;
+          )
+          .with_context(|| {
+            format!(
+              "Runtime analysis failed for contest `{contest}`, problem `{}`",
+              spec.name
+            )
+          })?;
           if let Some(guard) = guard {
             guard.finish(
               true,

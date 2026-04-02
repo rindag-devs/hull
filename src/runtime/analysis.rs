@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use anyhow::{Context, Result, bail};
-use rayon::{ThreadPoolBuilder, prelude::*};
+use anyhow::{bail, Context, Result};
+use rayon::{prelude::*, ThreadPoolBuilder};
 use tracing::info;
 
 use super::artifact::realize_artifact;
@@ -55,6 +55,22 @@ struct JudgerInvocation<'a> {
 struct LiveScoreState {
   per_solution_reports: BTreeMap<String, BTreeMap<String, JudgeReport>>,
   test_case_traits: TestCaseTraitsMap,
+}
+
+fn judge_failure_context(problem_name: &str, solution_name: &str, test_case_name: &str) -> String {
+  format!(
+    "Judge failed for problem `{problem_name}`, solution `{solution_name}`, test case `{test_case_name}`"
+  )
+}
+
+fn generate_outputs_failure_context(
+  problem_name: &str,
+  solution_name: &str,
+  test_case_name: &str,
+) -> String {
+  format!(
+    "Generate outputs failed for problem `{problem_name}`, solution `{solution_name}`, test case `{test_case_name}`"
+  )
 }
 
 // Execute the full runtime analysis for one problem and return the data that
@@ -456,7 +472,8 @@ fn run_test_cases(
             &solution.prepared,
             Path::new(&outputs_path),
             workspace,
-          )?;
+          )
+          .with_context(|| judge_failure_context(&problem.name, &solution.name, &test_case.name))?;
           if let Some(handle) = solution_handles
             .as_ref()
             .and_then(|handles| handles.get(&solution.name))
@@ -662,6 +679,9 @@ fn run_generate_outputs(
     outputs_dir: &outputs_dir,
     judge_context: None,
     work_dir: &work_dir,
+  })
+  .with_context(|| {
+    generate_outputs_failure_context(&problem.name, solution_name, &test_case.name)
   })?;
 
   Ok(outputs_dir)
@@ -707,13 +727,19 @@ fn run_judge(
     outputs_dir: &outputs_dir,
     judge_context: Some((official_outputs_dir, &report_path)),
     work_dir: &work_dir,
-  })?;
+  })
+  .with_context(|| judge_failure_context(&problem.name, solution_name, &test_case.name))?;
 
   let mut report: JudgeReport = serde_json::from_slice(
     &fs::read(&report_path)
       .with_context(|| format!("Failed to read judge report at {}", report_path.display()))?,
   )
-  .context("Failed to parse judge report JSON")?;
+  .with_context(|| {
+    format!(
+      "Failed to parse judge report JSON for problem `{}`, solution `{}`, test case `{}`",
+      problem.name, solution_name, test_case.name
+    )
+  })?;
   report.outputs = outputs_dir.to_string_lossy().into_owned();
   Ok(report)
 }
@@ -763,7 +789,7 @@ fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<()> {
     .with_context(|| format!("Failed to execute judger runner {}", runner))?;
   if !output.status.success() {
     bail!(
-      "Judger runner `{}` failed. Stdout:\n{}\nStderr:\n{}",
+      "Judger runner `{}` failed.\nStdout:\n{}\nStderr:\n{}",
       runner,
       String::from_utf8_lossy(&output.stdout).trim(),
       String::from_utf8_lossy(&output.stderr).trim()
@@ -785,7 +811,7 @@ fn realize_runner(runner: &ArtifactSpec) -> Result<String> {
       .with_context(|| format!("Failed to realize runner {}", runner.path))?;
     if !output.status.success() {
       bail!(
-        "Failed to realize runner {}. Stderr:\n{}",
+        "Failed to realize runner {}.\nStderr:\n{}",
         runner.path,
         String::from_utf8_lossy(&output.stderr).trim()
       );
@@ -980,6 +1006,22 @@ mod tests {
       checker_tests: Vec::new(),
       validator_tests: Vec::new(),
     }
+  }
+
+  #[test]
+  fn judge_failure_context_mentions_problem_solution_and_test_case() {
+    let message = judge_failure_context("aplusb", "wa", "sample-1");
+    assert!(message.contains("problem `aplusb`"));
+    assert!(message.contains("solution `wa`"));
+    assert!(message.contains("test case `sample-1`"));
+  }
+
+  #[test]
+  fn generate_outputs_failure_context_mentions_problem_solution_and_test_case() {
+    let message = generate_outputs_failure_context("wind", "std", "3");
+    assert!(message.contains("problem `wind`"));
+    assert!(message.contains("solution `std`"));
+    assert!(message.contains("test case `3`"));
   }
 
   #[test]

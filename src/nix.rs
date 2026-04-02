@@ -43,7 +43,7 @@ pub fn get_flake_url() -> Result<String> {
 
   if !output.status.success() {
     let stderr = String::from_utf8_lossy(&output.stderr);
-    bail!("Failed to get flake metadata. Stderr:\n{}", stderr.trim());
+    bail!("Failed to get flake metadata.\nStderr:\n{}", stderr.trim());
   }
 
   let metadata_str = String::from_utf8(output.stdout)
