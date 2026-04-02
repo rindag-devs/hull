@@ -644,61 +644,61 @@
                             "hull/graph": {
                               "edges": [
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "2",
                                   "w": "3"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "3",
                                   "w": "2"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "4",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "5",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "5",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "3",
                                   "w": "4"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "3",
                                   "w": "2"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "3",
                                   "w": "3"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "1",
                                   "w": "2"
@@ -1147,61 +1147,61 @@
                             "hull/graph": {
                               "edges": [
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "2",
                                   "w": "4"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "3",
                                   "w": "4"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "4",
                                   "w": "2"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "5",
                                   "w": "4"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "2",
                                   "w": "2"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "1",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "3",
                                   "w": "3"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "1",
                                   "w": "2"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "5",
                                   "w": "2"
@@ -1650,61 +1650,61 @@
                             "hull/graph": {
                               "edges": [
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "2",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "3",
                                   "w": "3"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "4",
                                   "w": "0"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "5",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "3",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "1",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "3",
                                   "w": "2"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "5",
                                   "w": "5"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "3",
                                   "w": "5"
@@ -2207,61 +2207,61 @@
                             "hull/graph": {
                               "edges": [
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "2",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "5",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "2",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "1",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "1",
                                   "w": "1"
@@ -2710,61 +2710,61 @@
                             "hull/graph": {
                               "edges": [
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "2",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "5",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "1",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "1",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "1",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "4",
                                   "w": "1"
@@ -3213,61 +3213,61 @@
                             "hull/graph": {
                               "edges": [
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "2",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "1",
                                   "v": "5",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "2",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "3",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "3",
                                   "v": "2",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "4",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "2",
                                   "v": "4",
                                   "w": "1"
                                 },
                                 {
-                                  "ordered": false,
+                                  "directed": false,
                                   "u": "5",
                                   "v": "4",
                                   "w": "1"

@@ -70,7 +70,7 @@ struct TestCaseInput {
                                    {"u", jV(std::to_string(e.u))},
                                    {"v", jV(std::to_string(e.v))},
                                    {"w", jV(std::to_string(e.w))},
-                                   {"ordered", jV(false)},
+                                   {"directed", jV(false)},
                                });
                              }) |
                              std::ranges::to<std::vector>())}}));

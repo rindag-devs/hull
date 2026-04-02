@@ -255,7 +255,7 @@
           let u = escape-dot-string(edge.u)
           let v = escape-dot-string(edge.v)
           let w = escape-dot-string(edge.w)
-          let dir = if "ordered" in edge and edge.ordered { "forward" } else { "none" }
+          let dir = if "directed" in edge and edge.directed { "forward" } else { "none" }
           dot-string += (
             "\""
               + escape-dot-string(u)

@@ -206,16 +206,16 @@
                         "hull/case": 0,
                         "hull/graph": {
                           "edges": [
-                            { "ordered": false, "u": "1", "v": "2", "w": "3" },
-                            { "ordered": false, "u": "2", "v": "3", "w": "2" },
-                            { "ordered": false, "u": "2", "v": "4", "w": "5" },
-                            { "ordered": false, "u": "4", "v": "5", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "5", "w": "5" },
-                            { "ordered": false, "u": "5", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "3", "w": "4" },
-                            { "ordered": false, "u": "5", "v": "3", "w": "2" },
-                            { "ordered": false, "u": "4", "v": "3", "w": "3" },
-                            { "ordered": false, "u": "1", "v": "1", "w": "2" }
+                            { "directed": false, "u": "1", "v": "2", "w": "3" },
+                            { "directed": false, "u": "2", "v": "3", "w": "2" },
+                            { "directed": false, "u": "2", "v": "4", "w": "5" },
+                            { "directed": false, "u": "4", "v": "5", "w": "1" },
+                            { "directed": false, "u": "1", "v": "5", "w": "5" },
+                            { "directed": false, "u": "5", "v": "4", "w": "1" },
+                            { "directed": false, "u": "1", "v": "3", "w": "4" },
+                            { "directed": false, "u": "5", "v": "3", "w": "2" },
+                            { "directed": false, "u": "4", "v": "3", "w": "3" },
+                            { "directed": false, "u": "1", "v": "1", "w": "2" }
                           ],
                           "name": "graph_0",
                           "nodes": ["1", "2", "3", "4", "5"]
@@ -413,16 +413,16 @@
                         "hull/case": 1,
                         "hull/graph": {
                           "edges": [
-                            { "ordered": false, "u": "1", "v": "2", "w": "4" },
-                            { "ordered": false, "u": "2", "v": "3", "w": "4" },
-                            { "ordered": false, "u": "2", "v": "4", "w": "2" },
-                            { "ordered": false, "u": "1", "v": "5", "w": "4" },
-                            { "ordered": false, "u": "2", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "4", "v": "2", "w": "2" },
-                            { "ordered": false, "u": "4", "v": "1", "w": "5" },
-                            { "ordered": false, "u": "1", "v": "3", "w": "3" },
-                            { "ordered": false, "u": "1", "v": "1", "w": "2" },
-                            { "ordered": false, "u": "5", "v": "5", "w": "2" }
+                            { "directed": false, "u": "1", "v": "2", "w": "4" },
+                            { "directed": false, "u": "2", "v": "3", "w": "4" },
+                            { "directed": false, "u": "2", "v": "4", "w": "2" },
+                            { "directed": false, "u": "1", "v": "5", "w": "4" },
+                            { "directed": false, "u": "2", "v": "3", "w": "1" },
+                            { "directed": false, "u": "4", "v": "2", "w": "2" },
+                            { "directed": false, "u": "4", "v": "1", "w": "5" },
+                            { "directed": false, "u": "1", "v": "3", "w": "3" },
+                            { "directed": false, "u": "1", "v": "1", "w": "2" },
+                            { "directed": false, "u": "5", "v": "5", "w": "2" }
                           ],
                           "name": "graph_1",
                           "nodes": ["1", "2", "3", "4", "5"]
@@ -620,16 +620,16 @@
                         "hull/case": 2,
                         "hull/graph": {
                           "edges": [
-                            { "ordered": false, "u": "1", "v": "2", "w": "5" },
-                            { "ordered": false, "u": "2", "v": "3", "w": "3" },
-                            { "ordered": false, "u": "1", "v": "4", "w": "0" },
-                            { "ordered": false, "u": "3", "v": "5", "w": "5" },
-                            { "ordered": false, "u": "3", "v": "3", "w": "5" },
-                            { "ordered": false, "u": "1", "v": "1", "w": "5" },
-                            { "ordered": false, "u": "1", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "3", "v": "3", "w": "2" },
-                            { "ordered": false, "u": "4", "v": "5", "w": "5" },
-                            { "ordered": false, "u": "4", "v": "3", "w": "5" }
+                            { "directed": false, "u": "1", "v": "2", "w": "5" },
+                            { "directed": false, "u": "2", "v": "3", "w": "3" },
+                            { "directed": false, "u": "1", "v": "4", "w": "0" },
+                            { "directed": false, "u": "3", "v": "5", "w": "5" },
+                            { "directed": false, "u": "3", "v": "3", "w": "5" },
+                            { "directed": false, "u": "1", "v": "1", "w": "5" },
+                            { "directed": false, "u": "1", "v": "3", "w": "1" },
+                            { "directed": false, "u": "3", "v": "3", "w": "2" },
+                            { "directed": false, "u": "4", "v": "5", "w": "5" },
+                            { "directed": false, "u": "4", "v": "3", "w": "5" }
                           ],
                           "name": "graph_2",
                           "nodes": ["1", "2", "3", "4", "5"]
@@ -856,16 +856,16 @@
                         "hull/case": 0,
                         "hull/graph": {
                           "edges": [
-                            { "ordered": false, "u": "1", "v": "2", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "4", "v": "5", "w": "1" },
-                            { "ordered": false, "u": "5", "v": "2", "w": "1" },
-                            { "ordered": false, "u": "2", "v": "1", "w": "1" },
-                            { "ordered": false, "u": "5", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "5", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "2", "v": "1", "w": "1" }
+                            { "directed": false, "u": "1", "v": "2", "w": "1" },
+                            { "directed": false, "u": "1", "v": "3", "w": "1" },
+                            { "directed": false, "u": "1", "v": "4", "w": "1" },
+                            { "directed": false, "u": "4", "v": "5", "w": "1" },
+                            { "directed": false, "u": "5", "v": "2", "w": "1" },
+                            { "directed": false, "u": "2", "v": "1", "w": "1" },
+                            { "directed": false, "u": "5", "v": "3", "w": "1" },
+                            { "directed": false, "u": "1", "v": "4", "w": "1" },
+                            { "directed": false, "u": "5", "v": "4", "w": "1" },
+                            { "directed": false, "u": "2", "v": "1", "w": "1" }
                           ],
                           "name": "graph_0",
                           "nodes": ["1", "2", "3", "4", "5"]
@@ -1063,16 +1063,16 @@
                         "hull/case": 1,
                         "hull/graph": {
                           "edges": [
-                            { "ordered": false, "u": "1", "v": "2", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "3", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "5", "w": "1" },
-                            { "ordered": false, "u": "2", "v": "1", "w": "1" },
-                            { "ordered": false, "u": "3", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "4", "v": "1", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "1", "w": "1" },
-                            { "ordered": false, "u": "3", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "2", "v": "4", "w": "1" }
+                            { "directed": false, "u": "1", "v": "2", "w": "1" },
+                            { "directed": false, "u": "1", "v": "3", "w": "1" },
+                            { "directed": false, "u": "3", "v": "4", "w": "1" },
+                            { "directed": false, "u": "1", "v": "5", "w": "1" },
+                            { "directed": false, "u": "2", "v": "1", "w": "1" },
+                            { "directed": false, "u": "3", "v": "4", "w": "1" },
+                            { "directed": false, "u": "4", "v": "1", "w": "1" },
+                            { "directed": false, "u": "1", "v": "1", "w": "1" },
+                            { "directed": false, "u": "3", "v": "3", "w": "1" },
+                            { "directed": false, "u": "2", "v": "4", "w": "1" }
                           ],
                           "name": "graph_1",
                           "nodes": ["1", "2", "3", "4", "5"]
@@ -1270,16 +1270,16 @@
                         "hull/case": 2,
                         "hull/graph": {
                           "edges": [
-                            { "ordered": false, "u": "1", "v": "2", "w": "1" },
-                            { "ordered": false, "u": "2", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "1", "v": "5", "w": "1" },
-                            { "ordered": false, "u": "3", "v": "2", "w": "1" },
-                            { "ordered": false, "u": "5", "v": "3", "w": "1" },
-                            { "ordered": false, "u": "3", "v": "2", "w": "1" },
-                            { "ordered": false, "u": "4", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "2", "v": "4", "w": "1" },
-                            { "ordered": false, "u": "5", "v": "4", "w": "1" }
+                            { "directed": false, "u": "1", "v": "2", "w": "1" },
+                            { "directed": false, "u": "2", "v": "3", "w": "1" },
+                            { "directed": false, "u": "1", "v": "4", "w": "1" },
+                            { "directed": false, "u": "1", "v": "5", "w": "1" },
+                            { "directed": false, "u": "3", "v": "2", "w": "1" },
+                            { "directed": false, "u": "5", "v": "3", "w": "1" },
+                            { "directed": false, "u": "3", "v": "2", "w": "1" },
+                            { "directed": false, "u": "4", "v": "4", "w": "1" },
+                            { "directed": false, "u": "2", "v": "4", "w": "1" },
+                            { "directed": false, "u": "5", "v": "4", "w": "1" }
                           ],
                           "name": "graph_2",
                           "nodes": ["1", "2", "3", "4", "5"]
