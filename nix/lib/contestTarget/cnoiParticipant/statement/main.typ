@@ -239,7 +239,12 @@
       block(
         width: 100%,
         {
-          set text(font: (fonts.mono, fonts.cjk-sans))
+          set text(
+            font: (fonts.mono, fonts.sans, fonts.cjk-sans),
+            slashed-zero: true,
+            ligatures: false,
+            features: (ss02: 1, ss06: 1),
+          )
           set par(leading: 0.8em, spacing: 0pt)
 
           grid(
