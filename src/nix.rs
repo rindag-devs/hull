@@ -68,7 +68,10 @@ impl EvalCommand {
       expr: None,
       impure: false,
       raw: true,
-      with_nom: interactive::current_settings().enabled(),
+      // `nix eval` for metadata loading should stay quiet. Enabling verbose
+      // internal-json logs here can flood `nom` with evaluation trace output
+      // and make lightweight metadata queries appear to hang.
+      with_nom: false,
     }
   }
 
