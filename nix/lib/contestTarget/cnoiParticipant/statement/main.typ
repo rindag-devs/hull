@@ -343,18 +343,14 @@
         for edge in graph.edges {
           let u = escape-dot-string(edge.u)
           let v = escape-dot-string(edge.v)
-          let w = escape-dot-string(edge.w)
           let dir = if "directed" in edge and edge.directed { "forward" } else { "none" }
+          let label = if "w" in edge and edge.w != "" {
+            ", label=\"" + escape-dot-string(edge.w) + "\""
+          } else {
+            ""
+          }
           dot-string += (
-            "\""
-              + escape-dot-string(u)
-              + "\" -> \""
-              + escape-dot-string(v)
-              + "\" [label=\""
-              + escape-dot-string(w)
-              + "\", dir="
-              + dir
-              + "];"
+            "\"" + u + "\" -> \"" + v + "\" [dir=" + dir + label + "];"
           )
         }
       }
@@ -365,7 +361,7 @@
       align(center)[
         #diagraph.render(
           width: 70%,
-          engine: "sfdp",
+          engine: "neato",
           dot-string,
         )
         #text(size: 0.9em, style: "italic", graph.name)
