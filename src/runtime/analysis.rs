@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
-use anyhow::{bail, Context, Result};
-use rayon::{prelude::*, ThreadPoolBuilder};
+use anyhow::{Context, Result, bail};
+use rayon::{ThreadPoolBuilder, prelude::*};
 use tracing::info;
 
 use super::artifact::realize_artifact;

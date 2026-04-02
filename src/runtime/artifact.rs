@@ -13,6 +13,7 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -247,27 +248,38 @@ pub fn add_path_to_store(path: &str) -> Result<String> {
 }
 
 pub fn storeify_runtime_data(runtime: &mut RuntimeData) -> Result<()> {
+  let mut store_path_cache = HashMap::<String, String>::new();
+
+  let mut add_cached = |path: &str| -> Result<String> {
+    if let Some(cached) = store_path_cache.get(path) {
+      return Ok(cached.clone());
+    }
+    let added = add_path_to_store(path)?;
+    store_path_cache.insert(path.to_string(), added.clone());
+    Ok(added)
+  };
+
   for path in runtime.checker.test_inputs.values_mut() {
-    *path = add_path_to_store(path)?;
+    *path = add_cached(path)?;
   }
 
   for path in runtime.validator.test_inputs.values_mut() {
-    *path = add_path_to_store(path)?;
+    *path = add_cached(path)?;
   }
 
   for test_case in runtime.test_cases.values_mut() {
-    test_case.data.input = add_path_to_store(&test_case.data.input)?;
-    test_case.data.outputs = add_path_to_store(&test_case.data.outputs)?;
+    test_case.data.input = add_cached(&test_case.data.input)?;
+    test_case.data.outputs = add_cached(&test_case.data.outputs)?;
   }
 
   for solution in runtime.solutions.values_mut() {
     for test_case_result in solution.test_case_results.values_mut() {
-      test_case_result.outputs = add_path_to_store(&test_case_result.outputs)?;
+      test_case_result.outputs = add_cached(&test_case_result.outputs)?;
     }
 
     for subtask_result in &mut solution.subtask_results {
       for test_case_result in subtask_result.test_cases.values_mut() {
-        test_case_result.outputs = add_path_to_store(&test_case_result.outputs)?;
+        test_case_result.outputs = add_cached(&test_case_result.outputs)?;
       }
     }
   }

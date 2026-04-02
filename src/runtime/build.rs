@@ -26,6 +26,13 @@ use super::workspace::RuntimeWorkspace;
 use crate::interactive::{PhaseKind, TaskItemReport, TaskKind};
 use crate::nix::{get_flake_url, run_build_commands};
 
+fn prepare_runtime_store_paths(label: &str, runtime: &mut RuntimeData) -> Result<()> {
+  crate::interactive::log_line(&format!(
+    "Importing runtime outputs into the Nix store for {label}..."
+  ));
+  storeify_runtime_data(runtime)
+}
+
 pub fn render_runtime_json(runtime: &RuntimeData) -> Result<String> {
   serde_json::to_string(runtime).context("Failed to serialize runtime analysis JSON")
 }
@@ -41,7 +48,7 @@ pub fn build_problem_target(
   // store before handing the data back to Nix target evaluation.
   let flake_ref = get_flake_url()?;
   let mut runtime = runtime.clone();
-  storeify_runtime_data(&mut runtime)?;
+  prepare_runtime_store_paths(&format!("problem `{problem}`"), &mut runtime)?;
   let runtime_json = render_runtime_json(&runtime)?;
   let expr = format!(
     r#"
@@ -74,7 +81,7 @@ pub fn build_contest_target(
   let flake_ref = get_flake_url()?;
   let mut runtime_by_problem = runtime_by_problem.clone();
   for runtime in runtime_by_problem.values_mut() {
-    storeify_runtime_data(runtime)?;
+    prepare_runtime_store_paths(&format!("contest `{contest}`"), runtime)?;
   }
   let runtime_json = serde_json::to_string(&runtime_by_problem)
     .context("Failed to serialize contest runtime analysis JSON")?;
