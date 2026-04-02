@@ -18,7 +18,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::types::{ContestSpec, ProblemSpec};
-use crate::nix::{get_flake_url, EvalCommand};
+use crate::nix::{EvalCommand, get_flake_url};
 
 pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
   let flake_ref = get_flake_url()?;

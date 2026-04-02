@@ -20,13 +20,13 @@ use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use tracing::info;
 use wasi_common::{
+  WasiDir, WasiFile,
   pipe::{ReadPipe, WritePipe},
   sync::dir::Dir as WasiSyncDir,
-  WasiDir, WasiFile,
 };
 
 use crate::{
-  nix::{get_flake_url, BuildCommand},
+  nix::{BuildCommand, get_flake_url},
   runner,
   runtime::cache_native_module,
 };

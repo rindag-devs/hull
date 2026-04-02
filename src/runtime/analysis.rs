@@ -290,14 +290,13 @@ fn run_checker_tests(
             generator: None,
             arguments: None,
           };
-          let outputs_dir =
-            run_generate_outputs(
-              problem,
-              &fake_test_case,
-              &solution.name,
-              &solution.prepared,
-              workspace,
-            )?;
+          let outputs_dir = run_generate_outputs(
+            problem,
+            &fake_test_case,
+            &solution.name,
+            &solution.prepared,
+            workspace,
+          )?;
           outputs_dir.join(&test.output_name)
         }
         (Some(_), Some(_)) => {
@@ -639,14 +638,9 @@ fn run_generate_outputs(
     test_case.arguments.as_deref(),
     &test_case.name,
   )?;
-  let case_dir = workspace.case_dir(
-    "generate",
-    &format!("{}-{}", test_case.name, solution_name),
-  )?;
-  let work_dir = workspace.run_dir(
-    "generate",
-    &format!("{}-{}", test_case.name, solution_name),
-  )?;
+  let case_dir =
+    workspace.case_dir("generate", &format!("{}-{}", test_case.name, solution_name))?;
+  let work_dir = workspace.run_dir("generate", &format!("{}-{}", test_case.name, solution_name))?;
   let outputs_dir = case_dir.join("outputs");
   if outputs_dir.exists() {
     fs::remove_dir_all(&outputs_dir).with_context(|| {
@@ -689,14 +683,8 @@ fn run_judge(
     test_case.arguments.as_deref(),
     &test_case.name,
   )?;
-  let case_dir = workspace.case_dir(
-    "judge",
-    &format!("{}-{}", solution_name, test_case.name),
-  )?;
-  let work_dir = workspace.run_dir(
-    "judge",
-    &format!("{}-{}", solution_name, test_case.name),
-  )?;
+  let case_dir = workspace.case_dir("judge", &format!("{}-{}", solution_name, test_case.name))?;
+  let work_dir = workspace.run_dir("judge", &format!("{}-{}", solution_name, test_case.name))?;
   let outputs_dir = case_dir.join("outputs");
   if outputs_dir.exists() {
     fs::remove_dir_all(&outputs_dir).with_context(|| {

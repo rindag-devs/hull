@@ -13,15 +13,15 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use anyhow::{bail, Ok, Result};
+use anyhow::{Ok, Result, bail};
 use clap::Parser;
 use wasi_common::{
-  pipe::{ReadPipe, WritePipe},
   WasiFile,
+  pipe::{ReadPipe, WritePipe},
 };
 
 use crate::{
-  runner::{self, judge_dir::JudgeDir, RunStatus},
+  runner::{self, RunStatus, judge_dir::JudgeDir},
   runtime::cache_native_module,
 };
 

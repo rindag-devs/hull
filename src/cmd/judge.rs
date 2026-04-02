@@ -18,12 +18,12 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use comfy_table::presets::UTF8_FULL;
+use comfy_table::presets::UTF8_FULL_CONDENSED;
 use comfy_table::{Cell, Color, Table};
 use serde::{Deserialize, Serialize};
 
 use crate::interactive;
-use crate::runtime::{analyze_problem, load_ad_hoc_problem_spec, RuntimeOptions, RuntimeWorkspace};
+use crate::runtime::{RuntimeOptions, RuntimeWorkspace, analyze_problem, load_ad_hoc_problem_spec};
 use crate::utils::{format_size, format_tick, to_title_case};
 
 #[derive(Parser)]
@@ -34,6 +34,10 @@ pub struct JudgeOpts {
   /// Problem name that provides the judging context, e.g. `aPlusB`.
   #[arg(long, short, default_value = "default")]
   pub problem: String,
+
+  /// Number of parallel jobs to use during runtime analysis.
+  #[arg(short = 'j', long = "jobs")]
+  pub jobs: Option<usize>,
 
   /// Print the report as JSON instead of a table.
   #[arg(long)]
@@ -101,7 +105,7 @@ fn print_human_readable_report(report: &JudgeReport) {
 
   // Subtasks table
   let mut subtask_table = Table::new();
-  subtask_table.load_preset(UTF8_FULL);
+  subtask_table.load_preset(UTF8_FULL_CONDENSED);
   subtask_table.set_header(vec!["#", "Status", "Score", "Full Score"]);
 
   for (i, subtask) in report.subtask_results.iter().enumerate() {
@@ -127,7 +131,7 @@ fn print_human_readable_report(report: &JudgeReport) {
 
   // Test cases table
   let mut test_case_table = Table::new();
-  test_case_table.load_preset(UTF8_FULL);
+  test_case_table.load_preset(UTF8_FULL_CONDENSED);
   test_case_table.set_header(vec!["Name", "Status", "Score", "Tick", "Memory"]);
 
   // Sort test cases by name for consistent output
@@ -166,7 +170,7 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   let runtime = analyze_problem(
     &problem,
     &workspace,
-    RuntimeOptions::new(None).with_progress(progress),
+    RuntimeOptions::new(judge_opts.jobs).with_progress(progress),
   )?;
   let solution = runtime
     .solutions
