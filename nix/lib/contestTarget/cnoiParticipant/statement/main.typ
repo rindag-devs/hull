@@ -466,7 +466,7 @@
         .enumerate(start: 1)
         .map(((id, st)) => {
           (
-            ([#id], $#str(st.full-score * 100)$)
+            ([#id], $#str(calc.round(st.full-score * 100, digits: 4))$)
               + problem
                 .traits
                 .keys()
@@ -518,7 +518,9 @@
     [*#titlecase(translation.memory-limit)*], ..problems.map(p => translation.bytes(
       p.memory-limit,
     )),
-    [*#titlecase(translation.full-score)*], ..problems.map(p => [$#(p.full-score * 100)$]),
+    [*#titlecase(translation.full-score)*], ..problems.map(
+      p => [$#(calc.round(p.full-score * 100, digits: 4))$],
+    ),
   )
 
   [*#titlecase(translation.source-program-file-name)*]
