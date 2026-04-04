@@ -96,22 +96,33 @@ pub fn analyze_problem(
   workspace: &RuntimeWorkspace,
   options: RuntimeOptions,
 ) -> Result<RuntimeData> {
-  let progress = options.progress.clone();
-  install_with_pool(options, || {
-    analyze_problem_in_pool(problem, workspace, Some(&progress))
+  install_with_pool(options.clone(), || {
+    analyze_problem_in_pool(problem, workspace, &options)
   })
 }
 
 fn analyze_problem_in_pool(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
-  progress: Option<&ProblemProgressHandle>,
+  options: &RuntimeOptions,
 ) -> Result<RuntimeData> {
+  let progress = Some(&options.progress);
   let solutions_by_name: BTreeMap<_, _> = problem
     .solutions
     .iter()
     .map(|solution| (solution.name.clone(), solution.clone()))
     .collect();
+  let judged_solutions = problem
+    .solutions
+    .iter()
+    .filter(|solution| {
+      options
+        .solution_names
+        .as_ref()
+        .is_none_or(|solution_names| solution_names.contains(&solution.name))
+    })
+    .cloned()
+    .collect::<Vec<_>>();
 
   let main_solution = solutions_by_name
     .get(&problem.main_correct_solution)
@@ -135,7 +146,7 @@ fn analyze_problem_in_pool(
             progress,
           )
         },
-        || run_test_cases(problem, workspace, progress),
+        || run_test_cases(problem, workspace, &judged_solutions, progress),
       )
     },
   );
@@ -158,8 +169,7 @@ fn analyze_problem_in_pool(
     .map(|(name, test_case)| (name.clone(), test_case.input_validation.traits.clone()))
     .collect::<BTreeMap<_, _>>();
 
-  let solutions_runtime = problem
-    .solutions
+  let solutions_runtime = judged_solutions
     .iter()
     .map(|solution| {
       let test_case_results = solution_reports_by_test_case
@@ -373,12 +383,18 @@ fn run_checker_tests(
 fn run_test_cases(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
+  solutions: &[super::types::SolutionSpec],
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<TestCaseRunMap> {
-  let solutions = &problem.solutions;
   let main_solution = solutions
     .iter()
     .find(|solution| solution.name == problem.main_correct_solution)
+    .or_else(|| {
+      problem
+        .solutions
+        .iter()
+        .find(|solution| solution.name == problem.main_correct_solution)
+    })
     .with_context(|| {
       format!(
         "Main correct solution `{}` not found in runtime metadata",

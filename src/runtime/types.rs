@@ -13,7 +13,7 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,7 @@ use crate::interactive::ProblemProgressHandle;
 pub struct RuntimeOptions {
   pub jobs: usize,
   pub progress: ProblemProgressHandle,
+  pub solution_names: Option<BTreeSet<String>>,
 }
 
 impl RuntimeOptions {
@@ -30,11 +31,17 @@ impl RuntimeOptions {
     Self {
       jobs: jobs.unwrap_or_else(num_cpus::get).max(1),
       progress: ProblemProgressHandle::disabled(),
+      solution_names: None,
     }
   }
 
   pub fn with_progress(mut self, progress: ProblemProgressHandle) -> Self {
     self.progress = progress;
+    self
+  }
+
+  pub fn with_solution_names(mut self, solution_names: impl IntoIterator<Item = String>) -> Self {
+    self.solution_names = Some(solution_names.into_iter().collect());
     self
   }
 }

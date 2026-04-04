@@ -20,9 +20,6 @@
 }:
 
 {
-  # Name of problem target.
-  problemTarget ? "default",
-
   # Display languages for documents.
   displayLanguages ? [ ],
 
@@ -37,7 +34,7 @@
 
   # Conversion rate from Hull's ticks to milliseconds.
   # `null` means no conversion and the original tick value is used directly in the statement.
-  ticksPerMs ? 1.0e7,
+  ticksPerMs ? null,
 
   # Programming languages to be displayed on the cover page of the statement.
   languages ? [

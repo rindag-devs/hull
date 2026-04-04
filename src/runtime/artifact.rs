@@ -20,7 +20,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
 use super::types::{ArtifactSpec, RuntimeData};
@@ -532,24 +532,36 @@ mod tests {
       .map(|command| command.build_command_for_debug())
       .collect::<Vec<_>>();
 
-    assert!(commands
-      .iter()
-      .any(|command| command.contains("/nix/store/checker.drv^*")));
-    assert!(commands
-      .iter()
-      .any(|command| command.contains("/nix/store/validator.drv^*")));
-    assert!(commands
-      .iter()
-      .any(|command| command.contains("/nix/store/generator.drv^*")));
-    assert!(commands
-      .iter()
-      .any(|command| command.contains("/nix/store/genout.drv^*")));
-    assert!(commands
-      .iter()
-      .any(|command| command.contains("/nix/store/judge.drv^*")));
-    assert!(commands
-      .iter()
-      .any(|command| command.contains("/nix/store/std.drv^*")));
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/checker.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/validator.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/generator.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/genout.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/judge.drv^*"))
+    );
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/nix/store/std.drv^*"))
+    );
   }
 
   #[test]
@@ -576,8 +588,10 @@ mod tests {
       .map(|command| command.build_command_for_debug())
       .collect::<Vec<_>>();
 
-    assert!(commands
-      .iter()
-      .any(|command| command.contains("/tmp/hull/validator")));
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.contains("/tmp/hull/validator"))
+    );
   }
 }

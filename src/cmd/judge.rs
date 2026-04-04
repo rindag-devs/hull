@@ -170,7 +170,9 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   let runtime = analyze_problem(
     &problem,
     &workspace,
-    RuntimeOptions::new(judge_opts.jobs).with_progress(progress),
+    RuntimeOptions::new(judge_opts.jobs)
+      .with_progress(progress)
+      .with_solution_names([ad_hoc_name.clone()]),
   )?;
   let solution = runtime
     .solutions
