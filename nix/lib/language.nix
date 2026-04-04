@@ -21,6 +21,33 @@
 }:
 
 let
+  mkCFamilyCompileScript =
+    {
+      isCpp,
+      std,
+      stackSizeInBytes,
+    }:
+    {
+      srcExpr,
+      outExpr,
+      includes,
+      extraObjects,
+      outputObject,
+    }:
+    let
+      languageFlag = if isCpp then "c++" else "c";
+      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
+      extraObjectsCmd = lib.concatMapStringsSep " " (p: "-x none ${p}") extraObjects;
+      outputFlag = lib.optionalString outputObject "-c";
+      linkerFlags = lib.optionalString (
+        !outputObject
+      ) "-lm -Wl,--strip-debug -Wl,-z,stack-size=${toString stackSizeInBytes}";
+    in
+    ''
+      ${hullPkgs.wasm32-wasi-wasip1.clang}/bin/wasm32-wasi-wasip1-clang++ -x ${languageFlag} ${srcExpr} ${outputFlag} -o ${outExpr} ${extraObjectsCmd} \
+        ${includeDirCmd} -O3 -std=${std} ${linkerFlags}
+    '';
+
   # A higher-order function that creates a configured C/C++ compiler for WASM.
   compileCFamily =
     {
@@ -36,24 +63,27 @@ let
       outputObject,
     }:
     let
-      languageFlag = if isCpp then "c++" else "c";
-      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
-      extraObjectsCmd = lib.concatMapStringsSep " " (p: "-x none ${p}") extraObjects;
-      outputFlag = lib.optionalString outputObject "-c";
       namePrefix = if outputObject then "obj" else "wasm";
       extName = if outputObject then "o" else "wasm";
-      linkerFlags = lib.optionalString (
-        !outputObject
-      ) "-lm -Wl,--strip-debug -Wl,-z,stack-size=${toString stackSizeInBytes}";
     in
-    pkgs.runCommandLocal "hull-${namePrefix}-${name}.${extName}"
-      { nativeBuildInputs = [ hullPkgs.wasm32-wasi-wasip1.clang ]; }
-      ''
-        cp ${src} src.code
-        wasm32-wasi-wasip1-clang++ -x ${languageFlag} src.code ${outputFlag} -o foo.wasm ${extraObjectsCmd} \
-          ${includeDirCmd} -O3 -std=${std} ${linkerFlags}
-        cp foo.wasm $out
-      '';
+    pkgs.runCommandLocal "hull-${namePrefix}-${name}.${extName}" { } ''
+      cp ${src} src.code
+      ${
+        (mkCFamilyCompileScript {
+          inherit isCpp stackSizeInBytes std;
+        })
+        {
+          inherit
+            includes
+            extraObjects
+            outputObject
+            ;
+          srcExpr = "src.code";
+          outExpr = "foo.wasm";
+        }
+      }
+      cp foo.wasm $out
+    '';
 
   k = 1024;
   m = k * 1024;
@@ -100,35 +130,70 @@ let
         inherit isCpp stackSizeInBytes;
         std = "${stdPrefix}${std}";
       };
+      compilerScript = mkCFamilyCompileScript {
+        inherit isCpp stackSizeInBytes;
+        std = "${stdPrefix}${std}";
+      };
     in
     {
-      compile.object =
-        {
-          name,
-          src,
-          includes,
-        }:
-        compiler {
-          inherit name src includes;
-          extraObjects = [ ];
-          outputObject = true;
-        };
-      compile.executable =
-        {
-          name,
-          src,
-          includes,
-          extraObjects,
-        }:
-        compiler {
-          inherit
-            name
-            src
-            includes
-            extraObjects
-            ;
-          outputObject = false;
-        };
+      compile.object = {
+        drv =
+          {
+            name,
+            src,
+            includes,
+          }:
+          compiler {
+            inherit name src includes;
+            extraObjects = [ ];
+            outputObject = true;
+          };
+        script =
+          {
+            srcExpr,
+            outExpr,
+            includes,
+          }:
+          compilerScript {
+            inherit srcExpr outExpr includes;
+            extraObjects = [ ];
+            outputObject = true;
+          };
+      };
+      compile.executable = {
+        drv =
+          {
+            name,
+            src,
+            includes,
+            extraObjects,
+          }:
+          compiler {
+            inherit
+              name
+              src
+              includes
+              extraObjects
+              ;
+            outputObject = false;
+          };
+        script =
+          {
+            srcExpr,
+            outExpr,
+            includes,
+            extraObjects,
+          }:
+          compilerScript {
+            inherit
+              srcExpr
+              outExpr
+              includes
+              extraObjects
+              ;
+            outputObject = false;
+          };
+      };
     };
 
   # Generates language definitions for C/C++ standards.

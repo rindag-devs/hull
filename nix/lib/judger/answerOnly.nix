@@ -23,9 +23,20 @@
 problem: {
   _type = "hullJudger";
 
-  # Answer-only problems do not execute submissions; the runner only needs the
-  # submitted file itself.
-  prepareSolution = solution: { src = solution.src; };
+  prepareSolution = pkgs.writeShellApplication {
+    name = "hull-judger-answerOnly-prepareSolution-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
+      jq -nc \
+        --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
+        '{ src: $src, executable: null }' > "$HULL_REPORT_PATH"
+    '';
+  };
 
   generateOutputs = pkgs.writeShellApplication {
     name = "hull-judger-answerOnly-generateOutputs-${problem.name}";

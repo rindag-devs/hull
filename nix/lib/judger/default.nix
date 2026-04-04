@@ -42,11 +42,29 @@ let
   getPreparedSolution =
     problem: solution:
     if problem.judger ? prepareSolution then
-      problem.judger.prepareSolution solution
+      let
+        prepareRunner = problem.judger.prepareSolution;
+      in
+      pkgs.runCommandLocal "hull-prepareSolution-${problem.name}-${solution.name}" { } ''
+        export HULL_SOLUTION_NAME=${lib.escapeShellArg solution.name}
+        export HULL_SOLUTION_SRC=${lib.escapeShellArg (toString solution.src)}
+        export HULL_PREPARED_SOLUTION_SRC_PATH=$out/prepared-src
+        export HULL_PREPARED_SOLUTION_EXECUTABLE_PATH=$out/prepared-executable
+        export HULL_REPORT_PATH=$out/report.json
+        ${
+          if builtins.isString prepareRunner || builtins.isPath prepareRunner then
+            prepareRunner
+          else
+            lib.getExe prepareRunner
+        }
+      ''
     else
       throw ''
         Judger `${problem.name}` must define `prepareSolution`.
       '';
+
+  readPreparedSolution =
+    preparedDir: builtins.fromJSON (builtins.readFile "${preparedDir}/report.json");
 
   runPackagedRunner =
     {
@@ -59,7 +77,8 @@ let
     let
       runnerExe =
         if builtins.isString runner || builtins.isPath runner then runner else lib.getExe runner;
-      preparedSolution = getPreparedSolution problem solution;
+      preparedDir = getPreparedSolution problem solution;
+      preparedSolution = readPreparedSolution preparedDir;
       outName =
         if mode == "generateOutputs" then
           "hull-generateOutput-${problem.name}-${testCase.name}"
@@ -73,8 +92,8 @@ let
       ${exportPathEnv "HULL_INPUT_PATH" testCase.data.input}
       ${exportEnv "HULL_TICK_LIMIT" (toString testCase.tickLimit)}
       ${exportEnv "HULL_MEMORY_LIMIT" (toString testCase.memoryLimit)}
-      ${exportPathEnv "HULL_SOLUTION_SRC" (preparedSolution.src or solution.src)}
-      ${exportOptionalEnv "HULL_SOLUTION_EXECUTABLE" (preparedSolution.executable or null)}
+      ${exportPathEnv "HULL_SOLUTION_SRC" preparedSolution.src}
+      ${exportOptionalEnv "HULL_SOLUTION_EXECUTABLE" ((preparedSolution.executable or { }).path or null)}
 
       ${
         if mode == "judge" then
@@ -103,7 +122,14 @@ let
     '';
 in
 {
-  batch = import ./batch.nix { inherit lib hull pkgs; };
+  batch = import ./batch.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      hullPkgs
+      ;
+  };
 
   stdioInteraction = import ./stdioInteraction.nix {
     inherit

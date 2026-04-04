@@ -46,7 +46,7 @@ impl RuntimeOptions {
   }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtifactSpec {
   pub path: String,
@@ -60,18 +60,12 @@ pub struct ProgramSpec {
   pub wasm: Option<ArtifactSpec>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JudgerSpec {
-  pub generate_outputs_runner: ArtifactSpec,
+  pub prepare_solution_runner: ArtifactSpec,
+  pub generate_outputs_runner: Option<ArtifactSpec>,
   pub judge_runner: ArtifactSpec,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreparedSolutionSpec {
-  pub src: String,
-  pub executable: Option<ArtifactSpec>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -81,7 +75,13 @@ pub struct SolutionSpec {
   pub src: String,
   pub main_correct_solution: bool,
   pub participant_visibility: bool,
-  pub prepared: PreparedSolutionSpec,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreparedSolutionSpec {
+  pub src: String,
+  pub executable: Option<ArtifactSpec>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -97,7 +97,7 @@ pub struct TestCaseSpec {
   pub arguments: Option<Vec<String>>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubtaskSpec {
   pub full_score: f64,
@@ -150,6 +150,52 @@ pub struct ProblemSpec {
 pub struct ContestSpec {
   pub name: String,
   pub problems: Vec<ProblemSpec>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfEvalContestSpec {
+  pub name: String,
+  pub problems: Vec<SelfEvalProblemSpec>,
+  pub languages: Vec<SelfEvalLanguageSpec>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfEvalProblemSpec {
+  pub name: String,
+  pub full_score: f64,
+  pub metadata_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfEvalJudgeProblemSpec {
+  pub name: String,
+  pub tick_limit: u64,
+  pub memory_limit: u64,
+  pub full_score: f64,
+  pub judger: JudgerSpec,
+  pub test_cases: Vec<SelfEvalJudgeTestCaseSpec>,
+  pub subtasks: Vec<SubtaskSpec>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfEvalJudgeTestCaseSpec {
+  pub name: String,
+  pub tick_limit: u64,
+  pub memory_limit: u64,
+  pub groups: Vec<String>,
+  pub traits: BTreeMap<String, bool>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelfEvalLanguageSpec {
+  pub display_name: String,
+  pub file_name_suffix: String,
+  pub hull_language: String,
 }
 
 #[derive(Clone, Debug, Serialize)]

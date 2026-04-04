@@ -14,7 +14,6 @@
 */
 
 {
-  pkgs,
   hullPkgs,
   lib,
   ...
@@ -90,43 +89,7 @@ let
         ${copyOutputFilesCommand}
       )
     '';
-
-  drv =
-    {
-      name,
-      wasm,
-      arguments ? [ ],
-      argumentsRaw ? null,
-      inputFiles ? { },
-      outputFiles ? [ ],
-      stdin ? null,
-      tickLimit ? null,
-      memoryLimit ? null,
-      ensureAccepted ? false,
-    }:
-
-    let
-      script' = script {
-        inherit
-          wasm
-          arguments
-          argumentsRaw
-          inputFiles
-          outputFiles
-          stdin
-          tickLimit
-          memoryLimit
-          ensureAccepted
-          ;
-      };
-    in
-    pkgs.runCommandLocal name { } ''
-      ${script'}
-      mkdir $out
-      cp -r stdout stderr report.json outputFiles $out/
-    '';
-
 in
 {
-  inherit script drv;
+  inherit script;
 }

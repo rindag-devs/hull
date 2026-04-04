@@ -13,29 +13,21 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-{
-  lib,
-  pkgs,
-  hull,
-  hullPkgs,
-  ...
-}:
+{ pkgs }:
 
-{
-  cnoiParticipant = import ./cnoiParticipant {
-    inherit
-      lib
-      pkgs
-      hull
-      hullPkgs
-      ;
-  };
+pkgs.pkgsStatic.stdenv.mkDerivation {
+  pname = "nix-user-chroot";
+  version = "1.0.0";
+  src = ./.;
 
-  common = import ./common.nix {
-    inherit lib pkgs;
-  };
+  buildPhase = ''
+    $CC -O2 -static -Wall -Wextra -o nix-user-chroot main.c
+  '';
 
-  lemon = import ./lemon.nix {
-    inherit lib pkgs;
-  };
+  installPhase = ''
+    mkdir -p $out/bin
+    cp nix-user-chroot $out/bin/nix-user-chroot
+  '';
+
+  meta.platforms = pkgs.lib.platforms.linux;
 }

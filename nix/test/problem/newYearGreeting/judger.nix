@@ -10,24 +10,38 @@
     let
       # Compile the transform program once, as it's used in both generateOutputs and judge.
       transformSrc = ./transform.20.cpp;
-      transformWasm = hull.compile.executable {
+      transformWasm = hull.compile.executable.drv {
         inherit (config) languages includes;
         src = transformSrc;
         name = "${config.name}-transform";
+        extraObjects = [ ];
+      };
+      compileExecutableScript = hull.compile.executableMatchScript {
+        languages = config.languages;
+        srcExpr = ''"$HULL_SOLUTION_SRC"'';
+        outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
+        includes = config.includes;
         extraObjects = [ ];
       };
     in
     {
       _type = "hullJudger";
 
-      prepareSolution = solution: {
-        src = solution.src;
-        executable = hull.compile.executable {
-          name = "${config.name}-solution-${solution.name}";
-          inherit (config) languages includes;
-          src = solution.src;
-          extraObjects = [ ];
-        };
+      prepareSolution = pkgs.writeShellApplication {
+        name = "hull-judger-newYearGreeting-prepareSolution-${config.name}";
+        inheritPath = false;
+        runtimeInputs = [
+          pkgs.coreutils
+          pkgs.jq
+        ];
+        text = ''
+          cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
+          ${compileExecutableScript}
+          jq -nc \
+            --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
+            --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
+            '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
+        '';
       };
 
       # This function generates the standard answer files using the main correct solution.

@@ -32,6 +32,7 @@
       in
       hull.contestTarget.cnoiParticipant {
         inherit displayLanguages;
+        archive = true;
         statements = builtins.listToAttrs (
           map (p: {
             name = p.config.name;
@@ -43,6 +44,7 @@
             );
           }) config.problems
         );
+        enableSelfEval = true;
       };
   };
 }

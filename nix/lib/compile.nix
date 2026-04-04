@@ -28,41 +28,175 @@ let
     {
       inherit languageName language;
     };
-in
-{
-  # Compiles a source file to a WASM object file.
-  object =
-    {
-      languages,
-      name,
-      src,
-      includes,
-    }:
-    let
-      langInfo = getLangInfo src languages;
-    in
-    langInfo.language.compile.object {
-      inherit name src includes;
-    };
 
-  # Compiles a source file to a WASM executable file.
-  executable =
+  sortLanguageNamesBySpecificity =
+    languages:
+    builtins.sort (
+      a: b:
+      let
+        aExt = hull.language.toFileExtension a;
+        bExt = hull.language.toFileExtension b;
+      in
+      if builtins.stringLength aExt == builtins.stringLength bExt then
+        a < b
+      else
+        builtins.stringLength aExt > builtins.stringLength bExt
+    ) (builtins.attrNames languages);
+
+  executableScriptFor =
     {
       languages,
-      name,
-      src,
+      languageName,
+      srcExpr,
+      outExpr,
       includes,
       extraObjects,
     }:
-    let
-      langInfo = getLangInfo src languages;
-    in
-    langInfo.language.compile.executable {
+    languages.${languageName}.compile.executable.script {
       inherit
-        name
-        src
+        srcExpr
+        outExpr
         includes
         extraObjects
         ;
     };
+
+  executableMatchScript =
+    {
+      languages,
+      srcExpr,
+      outExpr,
+      includes,
+      extraObjects,
+    }:
+    let
+      cases = builtins.concatStringsSep "\n" (
+        map (
+          languageName:
+          let
+            suffix = hull.language.toFileExtension languageName;
+          in
+          ''
+            *.${suffix})
+              ${executableScriptFor {
+                inherit
+                  languages
+                  languageName
+                  srcExpr
+                  outExpr
+                  includes
+                  extraObjects
+                  ;
+              }}
+              ;;
+          ''
+        ) (sortLanguageNamesBySpecificity languages)
+      );
+    in
+    ''
+      case "$(basename ${srcExpr})" in
+      ${cases}
+      *)
+        printf 'Unsupported solution language for %s\n' ${srcExpr} >&2
+        exit 1
+        ;;
+      esac
+    '';
+in
+{
+  inherit executableMatchScript;
+
+  # Compiles a source file to a WASM object file.
+  object = {
+    drv =
+      {
+        languages,
+        name,
+        src,
+        includes,
+      }:
+      let
+        langInfo = getLangInfo src languages;
+      in
+      langInfo.language.compile.object.drv {
+        inherit name src includes;
+      };
+
+    script =
+      {
+        languages,
+        src,
+        languageName ? null,
+        srcExpr,
+        outExpr,
+        includes,
+      }:
+      let
+        langInfo =
+          if languageName == null then
+            getLangInfo src languages
+          else
+            {
+              inherit languageName;
+              language = languages.${languageName};
+            };
+      in
+      langInfo.language.compile.object.script {
+        inherit srcExpr outExpr includes;
+      };
+  };
+
+  # Compiles a source file to a WASM executable file.
+  executable = {
+    drv =
+      {
+        languages,
+        name,
+        src,
+        includes,
+        extraObjects,
+      }:
+      let
+        langInfo = getLangInfo src languages;
+      in
+      langInfo.language.compile.executable.drv {
+        inherit
+          name
+          src
+          includes
+          extraObjects
+          ;
+      };
+
+    script =
+      {
+        languages,
+        src,
+        languageName ? null,
+        srcExpr,
+        outExpr,
+        includes,
+        extraObjects,
+      }:
+      let
+        langInfo =
+          if languageName == null then
+            getLangInfo src languages
+          else
+            {
+              inherit languageName;
+              language = languages.${languageName};
+            };
+      in
+      executableScriptFor {
+        inherit
+          languages
+          srcExpr
+          outExpr
+          includes
+          extraObjects
+          ;
+        languageName = langInfo.languageName;
+      };
+  };
 }

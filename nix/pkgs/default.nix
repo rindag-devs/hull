@@ -18,6 +18,8 @@
 }:
 
 {
+  nix-user-chroot = pkgs.callPackage ./nix-user-chroot { };
+
   wasm32-wasi-wasip1 = rec {
     compiler-rt = pkgs.callPackage ./compiler-rt.nix { };
     libc = pkgs.callPackage ./libc {

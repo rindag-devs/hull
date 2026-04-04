@@ -49,30 +49,7 @@ let
         '{ status: .status, score: .score, message: .message, readerTraceStacks: (.reader_trace_stacks // []), evaluatorTraceStacks: (.evaluator_trace_stacks // []) }' \
         stderr > check.json
     '';
-
-  drv =
-    {
-      name,
-      checkerWasm,
-      input,
-      output,
-      answer,
-    }:
-    let
-      checkScript = script {
-        inherit
-          checkerWasm
-          input
-          output
-          answer
-          ;
-      };
-    in
-    pkgs.runCommandLocal "hull-check-${name}" { } ''
-      ${checkScript}
-      install -Tm644 check.json $out
-    '';
 in
 {
-  inherit script drv;
+  inherit script;
 }

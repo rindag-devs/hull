@@ -17,6 +17,7 @@
   lib,
   pkgs,
   hull,
+  hullPkgs,
 }:
 
 {
@@ -41,12 +42,14 @@
     {
       displayName = "C";
       fileNameSuffix = ".c";
-      compileArguments = "gcc -lm -O3 -std=c23";
+      displayCompileArguments = "gcc -O3 -std=c23";
+      hullLanguage = "c.23.s64m";
     }
     {
       displayName = "C++";
       fileNameSuffix = ".cpp";
-      compileArguments = "g++ -lm -O3 -std=c++23";
+      displayCompileArguments = "g++ -O3 -std=c++23";
+      hullLanguage = "cpp.23.s64m";
     }
   ],
 
@@ -55,6 +58,12 @@
 
   # Extra font paths for building statement.
   statementExtraFontPaths ? [ ],
+
+  # Whether to include selfeval in the participant package.
+  enableSelfEval ? false,
+
+  # Whether the target output should be a .tar.xz archive instead of a directory.
+  archive ? false,
 }:
 
 {
@@ -66,6 +75,8 @@
       ...
     }@contest:
     let
+      nixUserChroot = hullPkgs.nix-user-chroot;
+
       mkSampleCommand =
         { samples, ... }@problem:
         lib.concatMapStringsSep "\n" (
@@ -163,6 +174,142 @@
           ${mkSolutionsCopyCommand "${pathPrefix}/solution" solutions}
         '';
 
+      selfEvalManifest = {
+        name = contest.name;
+        languages = map (
+          {
+            displayName,
+            fileNameSuffix,
+            hullLanguage,
+            ...
+          }:
+          {
+            displayName = displayName;
+            fileNameSuffix = fileNameSuffix;
+            hullLanguage = hullLanguage;
+          }
+        ) languages;
+        problems = map (problem: {
+          name = problem.config.name;
+          fullScore = problem.config.fullScore;
+          metadataPath = "problems/${problem.config.name}.json";
+        }) problems;
+      };
+
+      selfEvalData = pkgs.runCommandLocal "hull-cnoiParticipantSelfEvalData-${contest.name}" { } ''
+        mkdir -p $out
+        cp ${builtins.toFile "contest.json" (builtins.toJSON selfEvalManifest)} $out/contest.json
+        mkdir -p $out/problems
+        ${lib.concatMapStringsSep "\n" (
+          problem:
+          let
+            metadata = {
+              name = problem.config.name;
+              tickLimit = problem.config.tickLimit;
+              memoryLimit = problem.config.memoryLimit;
+              fullScore = problem.config.fullScore;
+              judger = {
+                prepareSolutionRunner = {
+                  path = builtins.unsafeDiscardStringContext (lib.getExe problem.config.judger.prepareSolution);
+                  drvPath = null;
+                };
+                generateOutputsRunner = null;
+                judgeRunner = {
+                  path = builtins.unsafeDiscardStringContext (lib.getExe problem.config.judger.judge);
+                  drvPath = null;
+                };
+              };
+              testCases = map (tc: {
+                name = tc.name;
+                tickLimit = tc.tickLimit;
+                memoryLimit = tc.memoryLimit;
+                groups = tc.groups;
+                traits = tc.traits;
+              }) problem.config.samples;
+              subtasks = map (st: {
+                fullScore = st.fullScore;
+                scoringMethod = st.scoringMethod;
+                traits = st.traits;
+              }) problem.config.subtasks;
+            };
+            metadataFile = pkgs.writeText "hull-selfeval-${problem.config.name}.json" (
+              builtins.toJSON metadata
+            );
+          in
+          "cp ${metadataFile} $out/problems/${problem.config.name}.json"
+        ) problems}
+      '';
+
+      selfEvalRunner = pkgs.writeShellScriptBin "selfeval-run" ''
+        package_root="$1"
+        shift
+        exec ${lib.getExe hullPkgs.default} self-eval --bundle-root ${selfEvalData} --package-root "$package_root" "$@"
+      '';
+
+      selfEvalTargets = [
+        selfEvalRunner
+        hullPkgs.default
+        hullPkgs.wasm32-wasi-wasip1.clang
+        selfEvalData
+        nixUserChroot
+      ]
+      ++ lib.concatMap (problem: [
+        problem.config.judger.prepareSolution
+        problem.config.judger.judge
+      ]) problems;
+
+      selfEvalClosure = pkgs.closureInfo { rootPaths = selfEvalTargets; };
+
+      nixUserChrootStorePath = builtins.unsafeDiscardStringContext (toString nixUserChroot);
+      nixUserChrootRelative = "/nix/store/${baseNameOf nixUserChrootStorePath}/bin/nix-user-chroot";
+
+      selfEvalLauncher = pkgs.writeText "hull-cnoiParticipant-selfeval-${contest.name}" ''
+        #!/usr/bin/env bash
+        set -eu
+        self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+        bundle_dir="$self_dir/.selfeval-bundle"
+        self_dest=$(printf '%s' "$self_dir" | sed 's|^/||')
+        participant_map_arg=""
+        if [ "$#" -ge 1 ] && [ -e "$1" ]; then
+          participant_root=$(realpath "$1")
+          participant_dest=$(printf '%s' "$participant_root" | sed 's|^/||')
+          participant_map_arg="-m $participant_root:$participant_dest"
+          shift
+          set -- "$participant_root" "$@"
+        fi
+        cd "$bundle_dir"
+        if [ -n "$participant_map_arg" ]; then
+          exec ".${nixUserChrootRelative}" \
+            -m "$self_dir:$self_dest" \
+            -m "$participant_root:$participant_dest" \
+            -n ./nix \
+            -- ${selfEvalRunner}/bin/selfeval-run "$self_dir" "$@"
+        else
+          exec ".${nixUserChrootRelative}" \
+            -m "$self_dir:$self_dest" \
+            -n ./nix \
+            -- ${selfEvalRunner}/bin/selfeval-run "$self_dir" "$@"
+        fi
+      '';
+
+      selfEvalCommand = lib.optionalString enableSelfEval ''
+        mkdir -p $out/.selfeval-bundle/nix/store
+        while IFS= read -r store_path; do
+          cp -a --no-preserve=ownership "$store_path" $out/.selfeval-bundle/nix/store/
+        done < ${selfEvalClosure}/store-paths
+        cp ${selfEvalLauncher} $out/selfeval
+        chmod +x $out/selfeval
+      '';
+
+      outputDir =
+        pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant-dir" { }
+          ''
+            mkdir $out
+            ${lib.concatMapStringsSep "\n" (p: mkProblemCommand p.config) problems}
+            ${statementsCommand}
+            ${selfEvalCommand}
+          '';
+
       statementsCommand = lib.concatMapStringsSep "\n" (
         let
           statementSrc = pkgs.runCommandLocal "hull-cnoiParticipantStatementSrc-${contest.name}" { } ''
@@ -185,12 +332,14 @@
               {
                 displayName,
                 fileNameSuffix,
-                compileArguments,
+                displayCompileArguments,
+                hullLanguage,
               }:
               {
                 display-name = displayName;
                 file-name-suffix = fileNameSuffix;
-                compile-arguments = compileArguments;
+                display-compile-arguments = displayCompileArguments;
+                hull-language = hullLanguage;
               }
             ) languages;
           };
@@ -242,9 +391,17 @@
         "cp ${statement} $out/statement.${displayLanguage}.pdf"
       ) displayLanguages;
     in
-    pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant" { } ''
-      mkdir $out
-      ${lib.concatMapStringsSep "\n" (p: mkProblemCommand p.config) problems}
-      ${statementsCommand}
-    '';
+    if archive then
+      pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.tar.xz" { } ''
+        tmp_archive_dir=$(mktemp -d)
+        trap 'rm -rf "$tmp_archive_dir"' EXIT
+        staged_dir="$tmp_archive_dir/${contest.name}"
+        mkdir -p "$staged_dir"
+        cp -r --no-preserve=ownership ${outputDir}/. "$staged_dir/"
+        chmod -R u+rwX,go+rX "$staged_dir"
+        rm -rf "$out"
+        tar -C "$tmp_archive_dir" -cJf "$out" "${contest.name}"
+      ''
+    else
+      outputDir;
 }

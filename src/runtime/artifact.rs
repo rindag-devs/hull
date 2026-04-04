@@ -36,14 +36,11 @@ pub fn collect_problem_realize_builds(
   let mut builds = Vec::new();
   collect_artifact_build(&mut builds, problem.validator.wasm.as_ref());
   collect_artifact_build(&mut builds, problem.checker.wasm.as_ref());
-  collect_artifact_build(&mut builds, Some(&problem.judger.generate_outputs_runner));
+  collect_artifact_build(&mut builds, problem.judger.generate_outputs_runner.as_ref());
   collect_artifact_build(&mut builds, Some(&problem.judger.judge_runner));
 
   for generator in problem.generators.values() {
     collect_artifact_build(&mut builds, generator.wasm.as_ref());
-  }
-  for solution in &problem.solutions {
-    collect_artifact_build(&mut builds, solution.prepared.executable.as_ref());
   }
 
   dedup_builds(builds)
@@ -398,8 +395,8 @@ mod tests {
   use std::thread;
 
   use crate::runtime::{
-    CheckerTestSpec, JudgerSpec, PreparedSolutionSpec, ProblemSpec, ProgramSpec, SolutionSpec,
-    SubtaskSpec, TestCaseSpec, ValidatorTestSpec,
+    CheckerTestSpec, JudgerSpec, ProblemSpec, ProgramSpec, SolutionSpec, SubtaskSpec, TestCaseSpec,
+    ValidatorTestSpec,
   };
 
   fn artifact(path: &str, drv_path: Option<&str>) -> ArtifactSpec {
@@ -466,7 +463,8 @@ mod tests {
       )]),
       main_correct_solution: "std".to_string(),
       judger: JudgerSpec {
-        generate_outputs_runner: artifact("/missing/generate", Some("/nix/store/genout.drv")),
+        prepare_solution_runner: artifact("/missing/prepare", Some("/nix/store/prepare.drv")),
+        generate_outputs_runner: Some(artifact("/missing/generate", Some("/nix/store/genout.drv"))),
         judge_runner: artifact("/missing/judge", Some("/nix/store/judge.drv")),
       },
       test_cases: vec![TestCaseSpec {
@@ -490,20 +488,12 @@ mod tests {
           src: "std.cpp".to_string(),
           main_correct_solution: true,
           participant_visibility: true,
-          prepared: PreparedSolutionSpec {
-            src: "std.cpp".to_string(),
-            executable: Some(artifact("/missing/std", Some("/nix/store/std.drv"))),
-          },
         },
         SolutionSpec {
           name: "dup".to_string(),
           src: "dup.cpp".to_string(),
           main_correct_solution: false,
           participant_visibility: true,
-          prepared: PreparedSolutionSpec {
-            src: "dup.cpp".to_string(),
-            executable: Some(artifact("/missing/std", Some("/nix/store/std.drv"))),
-          },
         },
       ],
       checker_tests: vec![CheckerTestSpec {
@@ -557,11 +547,6 @@ mod tests {
         .iter()
         .any(|command| command.contains("/nix/store/judge.drv^*"))
     );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/std.drv^*"))
-    );
   }
 
   #[test]
@@ -572,11 +557,11 @@ mod tests {
       .map(|command| command.build_command_for_debug())
       .collect::<Vec<_>>();
 
-    let std_matches = commands
+    let judge_matches = commands
       .iter()
-      .filter(|command| command.contains("/nix/store/std.drv^*"))
+      .filter(|command| command.contains("/nix/store/judge.drv^*"))
       .count();
-    assert_eq!(std_matches, 1);
+    assert_eq!(judge_matches, 1);
   }
 
   #[test]

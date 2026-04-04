@@ -42,19 +42,33 @@ let
         && (builtins.elem n solutionSpecificLanguages)
       ) problem.languages;
 
+  compileExecutableScript = hull.compile.executableMatchScript {
+    inherit languages;
+    srcExpr = ''"$HULL_SOLUTION_SRC"'';
+    outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
+    includes = problem.includes;
+    extraObjects = [ ];
+  };
+
 in
 {
   _type = "hullJudger";
 
-  prepareSolution = solution: {
-    src = solution.src;
-    executable = hull.compile.executable {
-      inherit languages;
-      name = "${problem.name}-solution-${solution.name}";
-      src = solution.src;
-      includes = problem.includes;
-      extraObjects = [ ];
-    };
+  prepareSolution = pkgs.writeShellApplication {
+    name = "hull-judger-stdioInteraction-prepareSolution-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
+      ${compileExecutableScript}
+      jq -nc \
+        --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
+        --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
+        '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
+    '';
   };
 
   judge = pkgs.writeShellApplication {

@@ -16,7 +16,6 @@
 {
   pkgs,
   hull,
-  hullPkgs,
   ...
 }:
 
@@ -43,29 +42,7 @@ let
         '{ status: .status, message: .message, readerTraceStacks: (.reader_trace_stacks // []), readerTraceTree: (.reader_trace_tree // {}), traits: (.traits // {}) }' \
         stderr > validation.json
     '';
-
-  drv =
-    {
-      problemName,
-      testCaseName,
-      validatorWasm,
-      input,
-      # 0 = NONE
-      # 1 = STACK_ONLY
-      # 2 = FULL
-      readerTraceLevel ? 1,
-    }:
-    let
-      validateScript = script { inherit validatorWasm input readerTraceLevel; };
-    in
-    pkgs.runCommandLocal "hull-validation-${problemName}-${testCaseName}"
-      { nativeBuildInputs = [ hullPkgs.default ]; }
-      ''
-        ${validateScript}
-        install -Tm644 validation.json $out
-      '';
-
 in
 {
-  inherit script drv;
+  inherit script;
 }

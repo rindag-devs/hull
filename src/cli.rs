@@ -17,7 +17,7 @@ use clap::{Parser, Subcommand};
 
 use crate::cmd::{
   build::BuildOpts, build_contest::BuildContestOpts, judge::JudgeOpts, patch::PatchOpts,
-  run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
+  run::RunOpts, run_wasm::RunWasmOpts, selfeval::SelfEvalOpts, stress::StressOpts,
 };
 use crate::interactive::InteractiveMode;
 
@@ -71,6 +71,11 @@ pub enum Command {
     long_about = "Execute a WebAssembly module directly with Hull's runner, configurable stdio, tick and memory limits, optional sandbox files, and a JSON run report."
   )]
   RunWasm(RunWasmOpts),
+  #[command(
+    about = "Evaluate participant samples offline from an exported bundle",
+    long_about = "Compile participant sources to WASM with the bundled toolchain, then judge contest samples serially with the bundled Hull runtime and exported judger artifacts."
+  )]
+  SelfEval(SelfEvalOpts),
   #[command(
     about = "Search for hacks with generated test cases",
     long_about = "Run a generator repeatedly, build one temporary test case per generated input, judge the selected solutions against the problem's main correct solution, and stop when a non-accepted result is found."

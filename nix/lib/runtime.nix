@@ -76,18 +76,6 @@ let
       specialArgs = mkSpecialArgs problemConfig.extraSpecialArgs;
     };
 
-  preparedSolution =
-    problemConfig: solution:
-    if problemConfig.judger ? prepareSolution then
-      problemConfig.judger.prepareSolution solution
-    else
-      throw "Judger `${problemConfig.name}` must define `prepareSolution`.";
-
-  serializePreparedSolution = prepared: {
-    src = toString (prepared.src or null);
-    executable = if prepared ? executable then serializeArtifact prepared.executable else null;
-  };
-
   serializeProgram = program: {
     src = toString (program.src or null);
     wasm = serializeArtifact (program.wasm or null);
@@ -114,6 +102,7 @@ let
       generators = builtins.mapAttrs (_: serializeProgram) problemConfig.generators;
       mainCorrectSolution = problemConfig.mainCorrectSolution.name;
       judger = {
+        prepareSolutionRunner = runnerPath problemConfig.judger.prepareSolution;
         generateOutputsRunner = runnerPath problemConfig.judger.generateOutputs;
         judgeRunner = runnerPath problemConfig.judger.judge;
       };
@@ -139,7 +128,6 @@ let
           participantVisibility
           ;
         src = toString solution.src;
-        prepared = serializePreparedSolution (preparedSolution problemConfig solution);
       }) selectedSolutions;
       checkerTests =
         if includeTests then

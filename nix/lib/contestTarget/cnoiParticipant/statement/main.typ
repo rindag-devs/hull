@@ -545,7 +545,7 @@
       .map(lang => (
         (
           [*#titlecase(translation.for-0-language(lang.display-name))*],
-          [#raw(lang.compile-arguments)],
+          [#raw(lang.display-compile-arguments)],
         )
       ))
       .flatten(),

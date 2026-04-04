@@ -28,7 +28,7 @@ use super::sandbox::run_wasm_for_stdio;
 use super::types::{
   ArtifactSpec, CheckerReport, CheckerRuntimeData, JudgeReport, PreparedSolutionSpec, ProblemSpec,
   RuntimeData, RuntimeOptions, RuntimeSolutionData, RuntimeTestCaseData, RuntimeTestCaseFiles,
-  SubtaskRuntimeReport, TestCaseSpec, ValidationReport, ValidatorRuntimeData,
+  SolutionSpec, SubtaskRuntimeReport, TestCaseSpec, ValidationReport, ValidatorRuntimeData,
 };
 use super::workspace::RuntimeWorkspace;
 use crate::interactive::{ProblemProgressHandle, TaskHandle, TaskItemReport, TaskKind};
@@ -57,6 +57,12 @@ struct LiveScoreState {
   test_case_traits: TestCaseTraitsMap,
 }
 
+#[derive(Clone)]
+struct PreparedSolutionEntry {
+  solution: SolutionSpec,
+  prepared: PreparedSolutionSpec,
+}
+
 fn judge_failure_context(problem_name: &str, solution_name: &str, test_case_name: &str) -> String {
   format!(
     "Judge failed for problem `{problem_name}`, solution `{solution_name}`, test case `{test_case_name}`"
@@ -71,6 +77,28 @@ fn generate_outputs_failure_context(
   format!(
     "Generate outputs failed for problem `{problem_name}`, solution `{solution_name}`, test case `{test_case_name}`"
   )
+}
+
+fn prepare_solution_failure_context(problem_name: &str, solution_name: &str) -> String {
+  format!("Prepare solution failed for problem `{problem_name}`, solution `{solution_name}`")
+}
+
+fn prepare_solutions(
+  problem: &ProblemSpec,
+  workspace: &RuntimeWorkspace,
+  solutions: &[SolutionSpec],
+) -> Result<Vec<PreparedSolutionEntry>> {
+  solutions
+    .iter()
+    .map(|solution| {
+      let prepared = run_prepare_solution(problem, solution, workspace)
+        .with_context(|| prepare_solution_failure_context(&problem.name, &solution.name))?;
+      Ok(PreparedSolutionEntry {
+        solution: solution.clone(),
+        prepared,
+      })
+    })
+    .collect()
 }
 
 // Execute the full runtime analysis for one problem and return the data that
@@ -107,11 +135,6 @@ fn analyze_problem_in_pool(
   options: &RuntimeOptions,
 ) -> Result<RuntimeData> {
   let progress = Some(&options.progress);
-  let solutions_by_name: BTreeMap<_, _> = problem
-    .solutions
-    .iter()
-    .map(|solution| (solution.name.clone(), solution.clone()))
-    .collect();
   let judged_solutions = problem
     .solutions
     .iter()
@@ -124,7 +147,22 @@ fn analyze_problem_in_pool(
     .cloned()
     .collect::<Vec<_>>();
 
-  let main_solution = solutions_by_name
+  let prepared_solutions = prepare_solutions(problem, workspace, &problem.solutions)?;
+  let prepared_solutions_by_name = prepared_solutions
+    .iter()
+    .map(|entry| (entry.solution.name.clone(), entry.clone()))
+    .collect::<BTreeMap<_, _>>();
+  let prepared_judged_solutions = judged_solutions
+    .iter()
+    .map(|solution| {
+      prepared_solutions_by_name
+        .get(&solution.name)
+        .cloned()
+        .with_context(|| format!("Missing prepared solution `{}`", solution.name))
+    })
+    .collect::<Result<Vec<_>>>()?;
+
+  let main_solution = prepared_solutions_by_name
     .get(&problem.main_correct_solution)
     .with_context(|| {
       format!(
@@ -141,12 +179,12 @@ fn analyze_problem_in_pool(
           run_checker_tests(
             problem,
             workspace,
-            &solutions_by_name,
+            &prepared_solutions_by_name,
             main_solution,
             progress,
           )
         },
-        || run_test_cases(problem, workspace, &judged_solutions, progress),
+        || run_test_cases(problem, workspace, &prepared_judged_solutions, progress),
       )
     },
   );
@@ -169,16 +207,16 @@ fn analyze_problem_in_pool(
     .map(|(name, test_case)| (name.clone(), test_case.input_validation.traits.clone()))
     .collect::<BTreeMap<_, _>>();
 
-  let solutions_runtime = judged_solutions
+  let solutions_runtime = prepared_judged_solutions
     .iter()
     .map(|solution| {
       let test_case_results = solution_reports_by_test_case
         .iter()
         .map(|(test_case_name, reports)| {
-          let report = reports.get(&solution.name).with_context(|| {
+          let report = reports.get(&solution.solution.name).with_context(|| {
             format!(
               "Missing judge report for solution `{}` on test case `{}`",
-              solution.name, test_case_name
+              solution.solution.name, test_case_name
             )
           })?;
           Ok((test_case_name.clone(), report.clone()))
@@ -192,7 +230,7 @@ fn analyze_problem_in_pool(
         .map(|result| result.scaled_score)
         .sum();
       Ok((
-        solution.name.clone(),
+        solution.solution.name.clone(),
         RuntimeSolutionData {
           test_case_results,
           subtask_results,
@@ -275,8 +313,8 @@ fn run_validator_tests(
 fn run_checker_tests(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
-  solutions_by_name: &BTreeMap<String, super::types::SolutionSpec>,
-  main_solution: &super::types::SolutionSpec,
+  solutions_by_name: &BTreeMap<String, PreparedSolutionEntry>,
+  main_solution: &PreparedSolutionEntry,
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<BTreeMap<String, (String, CheckerReport)>> {
   let handle = register_progress_group(
@@ -319,7 +357,7 @@ fn run_checker_tests(
           let outputs_dir = run_generate_outputs(
             problem,
             &fake_test_case,
-            &solution.name,
+            &solution.solution.name,
             &solution.prepared,
             workspace,
           )?;
@@ -352,7 +390,7 @@ fn run_checker_tests(
       let answer_dir = run_generate_outputs(
         problem,
         &fake_answer_case,
-        &main_solution.name,
+        &main_solution.solution.name,
         &main_solution.prepared,
         workspace,
       )?;
@@ -383,18 +421,12 @@ fn run_checker_tests(
 fn run_test_cases(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
-  solutions: &[super::types::SolutionSpec],
+  solutions: &[PreparedSolutionEntry],
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<TestCaseRunMap> {
   let main_solution = solutions
     .iter()
-    .find(|solution| solution.name == problem.main_correct_solution)
-    .or_else(|| {
-      problem
-        .solutions
-        .iter()
-        .find(|solution| solution.name == problem.main_correct_solution)
-    })
+    .find(|solution| solution.solution.name == problem.main_correct_solution)
     .with_context(|| {
       format!(
         "Main correct solution `{}` not found in runtime metadata",
@@ -411,14 +443,14 @@ fn run_test_cases(
         .map(|solution| {
           let handle = progress.register_group(
             TaskKind::Solution,
-            solution.name.clone(),
+            solution.solution.name.clone(),
             problem
               .test_cases
               .iter()
               .map(|test_case| test_case.name.clone()),
             Some(0.0),
           );
-          (solution.name.clone(), handle)
+          (solution.solution.name.clone(), handle)
         })
         .collect::<BTreeMap<_, _>>()
     })
@@ -468,7 +500,7 @@ fn run_test_cases(
       let outputs_dir = run_generate_outputs(
         problem,
         &concrete_test_case,
-        &main_solution.name,
+        &main_solution.solution.name,
         &main_solution.prepared,
         workspace,
       )?;
@@ -477,29 +509,34 @@ fn run_test_cases(
       let solution_reports = solutions
         .par_iter()
         .map(|solution| {
-          info!("Judging solution {} on {}", solution.name, test_case.name);
+          info!(
+            "Judging solution {} on {}",
+            solution.solution.name, test_case.name
+          );
           let guard = solution_handles
             .as_ref()
-            .and_then(|handles| handles.get(&solution.name))
+            .and_then(|handles| handles.get(&solution.solution.name))
             .map(|handle| handle.item(test_case.name.clone()));
           let report = run_judge(
             problem,
             &concrete_test_case,
-            &solution.name,
+            &solution.solution.name,
             &solution.prepared,
             Path::new(&outputs_path),
             workspace,
           )
-          .with_context(|| judge_failure_context(&problem.name, &solution.name, &test_case.name))?;
+          .with_context(|| {
+            judge_failure_context(&problem.name, &solution.solution.name, &test_case.name)
+          })?;
           if let Some(handle) = solution_handles
             .as_ref()
-            .and_then(|handles| handles.get(&solution.name))
+            .and_then(|handles| handles.get(&solution.solution.name))
           {
             let current_score = {
               let mut live_scores = live_scores.lock().unwrap();
               live_scores
                 .per_solution_reports
-                .entry(solution.name.clone())
+                .entry(solution.solution.name.clone())
                 .or_default()
                 .insert(test_case.name.clone(), report.clone());
 
@@ -507,7 +544,7 @@ fn run_test_cases(
                 problem,
                 live_scores
                   .per_solution_reports
-                  .get(&solution.name)
+                  .get(&solution.solution.name)
                   .expect("live score reports must exist after insertion"),
                 &live_scores.test_case_traits,
               )
@@ -529,7 +566,7 @@ fn run_test_cases(
             }
             handle.set_score(current_score);
           }
-          Ok((solution.name.clone(), report))
+          Ok((solution.solution.name.clone(), report))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
 
@@ -689,7 +726,7 @@ fn run_checker(
   serde_json::from_slice(&result.stderr).context("Failed to parse checker report JSON")
 }
 
-fn run_generate_outputs(
+pub fn run_generate_outputs(
   problem: &ProblemSpec,
   test_case: &TestCaseSpec,
   solution_name: &str,
@@ -719,7 +756,16 @@ fn run_generate_outputs(
   fs::create_dir_all(&outputs_dir)?;
 
   run_judger_script(JudgerInvocation {
-    runner: &problem.judger.generate_outputs_runner,
+    runner: problem
+      .judger
+      .generate_outputs_runner
+      .as_ref()
+      .with_context(|| {
+        format!(
+          "Problem `{}` does not define generateOutputsRunner",
+          problem.name
+        )
+      })?,
     mode: "generateOutputs",
     input_path: &input_path,
     test_case,
@@ -736,7 +782,54 @@ fn run_generate_outputs(
   Ok(outputs_dir)
 }
 
-fn run_judge(
+pub fn run_prepare_solution(
+  problem: &ProblemSpec,
+  solution: &SolutionSpec,
+  workspace: &RuntimeWorkspace,
+) -> Result<PreparedSolutionSpec> {
+  let work_dir = workspace.run_dir("prepared-solution", &solution.name)?;
+  let report_path = work_dir.join("report.json");
+  let prepared_src_path = work_dir.join("prepared-src");
+  let prepared_executable_path = work_dir.join("prepared-executable");
+
+  let runner = realize_runner(&problem.judger.prepare_solution_runner)?;
+  let output = Command::new(&runner)
+    .current_dir(&work_dir)
+    .env("HULL_SOLUTION_NAME", &solution.name)
+    .env("HULL_SOLUTION_SRC", &solution.src)
+    .env("HULL_PREPARED_SOLUTION_SRC_PATH", &prepared_src_path)
+    .env(
+      "HULL_PREPARED_SOLUTION_EXECUTABLE_PATH",
+      &prepared_executable_path,
+    )
+    .env("HULL_REPORT_PATH", &report_path)
+    .output()
+    .with_context(|| format!("Failed to execute prepareSolution {}", runner))?;
+
+  if !output.status.success() {
+    bail!(
+      "prepareSolution `{}` failed.\nStdout:\n{}\nStderr:\n{}",
+      runner,
+      String::from_utf8_lossy(&output.stdout).trim(),
+      String::from_utf8_lossy(&output.stderr).trim()
+    );
+  }
+
+  serde_json::from_slice(&fs::read(&report_path).with_context(|| {
+    format!(
+      "Failed to read prepareSolution report {}",
+      report_path.display()
+    )
+  })?)
+  .with_context(|| {
+    format!(
+      "Failed to parse prepareSolution report JSON for problem `{}`, solution `{}`",
+      problem.name, solution.name
+    )
+  })
+}
+
+pub fn run_judge(
   problem: &ProblemSpec,
   test_case: &TestCaseSpec,
   solution_name: &str,
@@ -877,7 +970,7 @@ fn realize_runner(runner: &ArtifactSpec) -> Result<String> {
   }
 }
 
-fn aggregate_subtask_results(
+pub fn aggregate_subtask_results(
   problem: &ProblemSpec,
   test_case_results: &BTreeMap<String, JudgeReport>,
   test_case_traits: &TestCaseTraitsMap,
@@ -1016,10 +1109,14 @@ mod tests {
       generators: BTreeMap::new(),
       main_correct_solution: "std".to_string(),
       judger: JudgerSpec {
-        generate_outputs_runner: ArtifactSpec {
+        prepare_solution_runner: ArtifactSpec {
           path: String::new(),
           drv_path: None,
         },
+        generate_outputs_runner: Some(ArtifactSpec {
+          path: String::new(),
+          drv_path: None,
+        }),
         judge_runner: ArtifactSpec {
           path: String::new(),
           drv_path: None,

@@ -21,15 +21,22 @@ mod sandbox;
 mod types;
 mod workspace;
 
-pub use analysis::analyze_problem;
+pub use analysis::{
+  aggregate_subtask_results, analyze_problem, run_generate_outputs, run_judge, run_prepare_solution,
+};
 pub use artifact::{cache_native_module, collect_problem_realize_builds, realize_artifact};
 pub use build::{build_contest, build_problem};
-pub use metadata::{load_ad_hoc_problem_spec, load_contest_spec, load_problem_spec};
+pub use metadata::{
+  load_ad_hoc_problem_spec, load_contest_spec, load_problem_spec, load_selfeval_contest_spec,
+  load_selfeval_problem_spec,
+};
 pub use sandbox::{WasmRunResult, run_wasm_for_stdio};
 pub use types::{
   ArtifactSpec, CheckerReport, CheckerRuntimeData, CheckerTestSpec, ContestSpec, JudgerSpec,
   PreparedSolutionSpec, ProblemSpec, ProgramSpec, RuntimeData, RuntimeOptions, RuntimeSolutionData,
-  RuntimeTestCaseData, RuntimeTestCaseFiles, SolutionSpec, SubtaskRuntimeReport, SubtaskSpec,
-  TestCaseSpec, ValidationReport, ValidatorRuntimeData, ValidatorTestSpec,
+  RuntimeTestCaseData, RuntimeTestCaseFiles, SelfEvalContestSpec, SelfEvalJudgeProblemSpec,
+  SelfEvalJudgeTestCaseSpec, SelfEvalLanguageSpec, SelfEvalProblemSpec, SolutionSpec,
+  SubtaskRuntimeReport, SubtaskSpec, TestCaseSpec, ValidationReport, ValidatorRuntimeData,
+  ValidatorTestSpec,
 };
 pub use workspace::RuntimeWorkspace;

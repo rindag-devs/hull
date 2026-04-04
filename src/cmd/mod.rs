@@ -17,6 +17,8 @@ pub mod build;
 pub mod build_contest;
 pub mod judge;
 pub mod patch;
+pub mod report;
 pub mod run;
 pub mod run_wasm;
+pub mod selfeval;
 pub mod stress;

@@ -88,13 +88,13 @@ let
           let
             lang = problem.languages.${config.language};
           in
-          lang.compile.executable {
+          lang.compile.executable.drv {
             name = "${problem.name}-program-${builtins.baseNameOf config.src}";
             inherit (config) src;
             includes = problem.includes;
             extraObjects = [ ];
           };
-        defaultText = lib.literalExpression "(problem.languages.\${config.language}).compile.executable { ... }";
+        defaultText = lib.literalExpression "(problem.languages.\${config.language}).compile.executable.drv { ... }";
       };
       participantVisibility = lib.mkOption {
         type = lib.types.strMatching "no|src|wasm";
@@ -336,12 +336,34 @@ in
         type = submodule {
           options = {
             object = lib.mkOption {
-              type = functionTo pathInStore;
-              description = "The function used to compile a source file into a linkable object file.";
+              type = submodule {
+                options = {
+                  drv = lib.mkOption {
+                    type = functionTo pathInStore;
+                    description = "The function used to compile a source file into a linkable object file derivation.";
+                  };
+                  script = lib.mkOption {
+                    type = functionTo lib.types.lines;
+                    description = "The function used to produce a shell script fragment that compiles a source file into a linkable object file.";
+                  };
+                };
+              };
+              description = "The object compilation interface.";
             };
             executable = lib.mkOption {
-              type = functionTo pathInStore;
-              description = "The function used to link a source file and object files into an executable.";
+              type = submodule {
+                options = {
+                  drv = lib.mkOption {
+                    type = functionTo pathInStore;
+                    description = "The function used to link a source file and object files into an executable derivation.";
+                  };
+                  script = lib.mkOption {
+                    type = functionTo lib.types.lines;
+                    description = "The function used to produce a shell script fragment that links a source file and object files into an executable.";
+                  };
+                };
+              };
+              description = "The executable compilation interface.";
             };
           };
         };

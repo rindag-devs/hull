@@ -17,6 +17,7 @@
   lib,
   hull,
   pkgs,
+  hullPkgs,
 }:
 
 # Judger for traditional batch problems and problems with custom graders.
@@ -46,26 +47,40 @@ let
   # Pre-compile extra objects (e.g., graders).
   compiledObjects = map (
     src:
-    hull.compile.object {
+    hull.compile.object.drv {
       name = "${problem.name}-${baseNameOf src}";
       inherit src;
       inherit (problem) languages includes;
     }
   ) extraObjects;
 
+  compileExecutableScript = hull.compile.executableMatchScript {
+    inherit languages;
+    srcExpr = ''"$HULL_SOLUTION_SRC"'';
+    outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
+    includes = problem.includes;
+    extraObjects = compiledObjects;
+  };
+
 in
 {
   _type = "hullJudger";
 
-  prepareSolution = solution: {
-    src = solution.src;
-    executable = hull.compile.executable {
-      inherit languages;
-      name = "${problem.name}-solution-${solution.name}";
-      src = solution.src;
-      includes = problem.includes;
-      extraObjects = compiledObjects;
-    };
+  prepareSolution = pkgs.writeShellApplication {
+    name = "hull-judger-batch-prepareSolution-${problem.name}";
+    inheritPath = false;
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
+    text = ''
+      cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
+      ${compileExecutableScript}
+      jq -nc \
+        --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
+        --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
+        '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
+    '';
   };
 
   generateOutputs = pkgs.writeShellApplication {
