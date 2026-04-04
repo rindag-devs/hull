@@ -432,6 +432,7 @@ fn run_test_cases(
         1
       };
       let validation = run_validator(problem, Path::new(&input_path), trace_level)?;
+      ensure_test_case_input_is_valid(&test_case.name, &validation)?;
       let concrete_test_case = TestCaseSpec {
         input_file: Some(input_path_string.clone()),
         ..test_case.clone()
@@ -539,6 +540,38 @@ fn is_fatal_judge_status(status: &str) -> bool {
 
 fn is_fatal_validation_status(status: &str) -> bool {
   matches!(status, "internal_error")
+}
+
+fn ensure_test_case_input_is_valid(test_case_name: &str, report: &ValidationReport) -> Result<()> {
+  if report.status == "valid" {
+    Ok(())
+  } else {
+    bail!(
+      "Input validation failed for test case `{}` with status `{}`: {}",
+      test_case_name,
+      report.status,
+      report.message
+    )
+  }
+}
+
+fn ensure_generator_succeeded(
+  generator_name: &str,
+  temp_name: &str,
+  result: &crate::runtime::sandbox::WasmRunResult,
+) -> Result<()> {
+  if result.status == RunStatus::Accepted {
+    return Ok(());
+  }
+
+  bail!(
+    "Generator `{}` failed while preparing input for `{}` with status {:?}: {}\nStderr:\n{}",
+    generator_name,
+    temp_name,
+    result.status,
+    result.error_message,
+    String::from_utf8_lossy(&result.stderr).trim()
+  )
 }
 
 fn is_fatal_checker_status(status: &str) -> bool {
@@ -925,6 +958,7 @@ fn resolve_test_input(
     TOOL_MEMORY_LIMIT,
     &[],
   )?;
+  ensure_generator_succeeded(generator_name, temp_name, &result)?;
   let path = workspace
     .case_dir("input", &format!("{}-{temp_name}", problem.name))?
     .join("input.txt");
@@ -1032,6 +1066,32 @@ mod tests {
     assert!(!is_fatal_validation_status("invalid"));
     assert!(is_fatal_checker_status("internal_error"));
     assert!(!is_fatal_checker_status("wrong_answer"));
+  }
+
+  #[test]
+  fn valid_test_case_input_passes_fail_fast_check() {
+    let report = ValidationReport {
+      status: "valid".to_string(),
+      message: String::new(),
+      ..ValidationReport::default()
+    };
+
+    assert!(ensure_test_case_input_is_valid("sample-1", &report).is_ok());
+  }
+
+  #[test]
+  fn invalid_test_case_input_fails_fast_check() {
+    let report = ValidationReport {
+      status: "invalid".to_string(),
+      message: "out of range".to_string(),
+      ..ValidationReport::default()
+    };
+
+    let err = ensure_test_case_input_is_valid("sample-1", &report)
+      .expect_err("invalid input should fail immediately");
+    let message = err.to_string();
+    assert!(message.contains("test case `sample-1`"));
+    assert!(message.contains("status `invalid`"));
   }
 
   #[test]
