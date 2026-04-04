@@ -23,14 +23,19 @@ use super::artifact::{collect_problem_realize_builds, storeify_runtime_data};
 use super::metadata::{load_contest_spec, load_problem_spec};
 use super::types::{RuntimeData, RuntimeOptions};
 use super::workspace::RuntimeWorkspace;
+use crate::interactive::ProblemProgressHandle;
 use crate::interactive::{PhaseKind, TaskItemReport, TaskKind};
 use crate::nix::{get_flake_url, run_build_commands};
 
-fn prepare_runtime_store_paths(label: &str, runtime: &mut RuntimeData) -> Result<()> {
+fn prepare_runtime_store_paths(
+  label: &str,
+  runtime: &mut RuntimeData,
+  progress: Option<&ProblemProgressHandle>,
+) -> Result<()> {
   crate::interactive::log_line(&format!(
     "Importing runtime outputs into the Nix store for {label}..."
   ));
-  storeify_runtime_data(runtime)
+  storeify_runtime_data(runtime, progress)
 }
 
 pub fn render_runtime_json(runtime: &RuntimeData) -> Result<String> {
@@ -44,12 +49,8 @@ pub fn build_problem_target(
   out_link: &str,
   nix_args: &[String],
 ) -> Result<()> {
-  // Runtime analysis stores paths outside `/nix/store`; move them into the
-  // store before handing the data back to Nix target evaluation.
   let flake_ref = get_flake_url()?;
-  let mut runtime = runtime.clone();
-  prepare_runtime_store_paths(&format!("problem `{problem}`"), &mut runtime)?;
-  let runtime_json = render_runtime_json(&runtime)?;
+  let runtime_json = render_runtime_json(runtime)?;
   let runtime_json_literal = format!("''{runtime_json}''");
   let expr = format!(
     r#"
@@ -80,11 +81,7 @@ pub fn build_contest_target(
   nix_args: &[String],
 ) -> Result<()> {
   let flake_ref = get_flake_url()?;
-  let mut runtime_by_problem = runtime_by_problem.clone();
-  for runtime in runtime_by_problem.values_mut() {
-    prepare_runtime_store_paths(&format!("contest `{contest}`"), runtime)?;
-  }
-  let runtime_json = serde_json::to_string(&runtime_by_problem)
+  let runtime_json = serde_json::to_string(runtime_by_problem)
     .context("Failed to serialize contest runtime analysis JSON")?;
   let runtime_json_literal = format!("''{runtime_json}''");
   let expr = format!(
@@ -134,7 +131,7 @@ pub fn build_problem(
     )?;
   }
 
-  let runtime = {
+  let mut runtime = {
     let _phase = options.progress.phase(
       PhaseKind::Runtime,
       "Running validators, checker tests, and solutions".to_string(),
@@ -149,6 +146,11 @@ pub fn build_problem(
     let _phase = options
       .progress
       .phase(PhaseKind::NixBuild, format!("Packaging target {}", target));
+    prepare_runtime_store_paths(
+      &format!("problem `{problem}`"),
+      &mut runtime,
+      Some(&options.progress),
+    )?;
     build_problem_target(problem, target, &runtime, out_link, nix_args)
   }
 }
@@ -183,7 +185,7 @@ pub fn build_contest(
     )?;
   }
 
-  let runtime_by_problem = {
+  let mut runtime_by_problem = {
     let _phase = options.progress.phase(
       PhaseKind::Runtime,
       format!("Running analysis for contest {}", contest),
@@ -241,6 +243,14 @@ pub fn build_contest(
       PhaseKind::NixBuild,
       format!("Packaging contest target {}", target),
     );
+    for (problem_name, runtime) in &mut runtime_by_problem {
+      let problem_progress = options.progress.child_scope(problem_name);
+      prepare_runtime_store_paths(
+        &format!("contest `{contest}`, problem `{problem_name}`"),
+        runtime,
+        Some(&problem_progress),
+      )?;
+    }
     build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args)
   }
 }

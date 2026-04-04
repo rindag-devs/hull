@@ -20,13 +20,15 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use sha2::{Digest, Sha256};
 
 use super::types::{ArtifactSpec, RuntimeData};
+use crate::interactive::{ProblemProgressHandle, TaskItemReport, TaskKind};
 use crate::runner;
 
 static NATIVE_MODULE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+const STORE_ADD_BATCH_SIZE: usize = 128;
 
 pub fn collect_problem_realize_builds(
   problem: &super::types::ProblemSpec,
@@ -247,11 +249,133 @@ pub fn add_path_to_store(path: &str) -> Result<String> {
   )
 }
 
-pub fn storeify_runtime_data(runtime: &mut RuntimeData) -> Result<()> {
+fn add_paths_to_store(paths: &[String]) -> Result<Vec<String>> {
+  if paths.is_empty() {
+    return Ok(Vec::new());
+  }
+
+  let output = Command::new("nix-store")
+    .arg("--add")
+    .args(paths)
+    .output()
+    .with_context(|| format!("Failed to add {} paths to the Nix store", paths.len()))?;
+
+  if !output.status.success() {
+    bail!(
+      "Failed to add {} paths to the Nix store.\nStderr:\n{}",
+      paths.len(),
+      String::from_utf8_lossy(&output.stderr).trim()
+    );
+  }
+
+  let stdout =
+    String::from_utf8(output.stdout).context("Failed to parse nix-store output as UTF-8")?;
+  let added = stdout
+    .lines()
+    .map(str::trim)
+    .filter(|line| !line.is_empty())
+    .map(str::to_string)
+    .collect::<Vec<_>>();
+
+  if added.len() != paths.len() {
+    bail!(
+      "Expected {} store paths from nix-store --add, got {}",
+      paths.len(),
+      added.len()
+    );
+  }
+
+  Ok(added)
+}
+
+fn visit_runtime_paths_mut(
+  runtime: &mut RuntimeData,
+  mut f: impl FnMut(&mut String) -> Result<()>,
+) -> Result<()> {
+  for path in runtime.checker.test_inputs.values_mut() {
+    f(path)?;
+  }
+
+  for path in runtime.validator.test_inputs.values_mut() {
+    f(path)?;
+  }
+
+  for test_case in runtime.test_cases.values_mut() {
+    f(&mut test_case.data.input)?;
+    f(&mut test_case.data.outputs)?;
+  }
+
+  for solution in runtime.solutions.values_mut() {
+    for test_case_result in solution.test_case_results.values_mut() {
+      f(&mut test_case_result.outputs)?;
+    }
+
+    for subtask_result in &mut solution.subtask_results {
+      for test_case_result in subtask_result.test_cases.values_mut() {
+        f(&mut test_case_result.outputs)?;
+      }
+    }
+  }
+
+  Ok(())
+}
+
+pub fn storeify_runtime_data(
+  runtime: &mut RuntimeData,
+  progress: Option<&ProblemProgressHandle>,
+) -> Result<()> {
   let mut store_path_cache = HashMap::<String, String>::new();
+
+  let mut pending_paths = Vec::<String>::new();
+  visit_runtime_paths_mut(runtime, |path| {
+    if path.starts_with("/nix/store/") || store_path_cache.contains_key(path) {
+      return Ok(());
+    }
+    store_path_cache.insert(path.clone(), String::new());
+    pending_paths.push(path.clone());
+    Ok(())
+  })?;
+
+  let total_batches = pending_paths.len().div_ceil(STORE_ADD_BATCH_SIZE);
+  let batch_names = (0..total_batches)
+    .map(|index| format!("batch {:04}", index + 1))
+    .collect::<Vec<_>>();
+  let progress_handle = progress.and_then(|progress| {
+    (!batch_names.is_empty()).then(|| {
+      progress.register_group(
+        TaskKind::Artifact,
+        "store import",
+        batch_names.clone(),
+        None,
+      )
+    })
+  });
+
+  for (index, batch) in pending_paths.chunks(STORE_ADD_BATCH_SIZE).enumerate() {
+    let batch_name = &batch_names[index];
+    let guard = progress_handle
+      .as_ref()
+      .map(|handle| handle.item(batch_name.clone()));
+    let added = add_paths_to_store(batch)?;
+    for (source, store_path) in batch.iter().zip(added) {
+      store_path_cache.insert(source.clone(), store_path);
+    }
+    if let Some(guard) = guard {
+      guard.finish(
+        true,
+        TaskItemReport {
+          status: Some(format!("{} paths", batch.len())),
+          ..TaskItemReport::default()
+        },
+      );
+    }
+  }
 
   let mut add_cached = |path: &str| -> Result<String> {
     if let Some(cached) = store_path_cache.get(path) {
+      if cached.is_empty() {
+        bail!("Missing store import result for path {}", path);
+      }
       return Ok(cached.clone());
     }
     let added = add_path_to_store(path)?;
@@ -259,30 +383,10 @@ pub fn storeify_runtime_data(runtime: &mut RuntimeData) -> Result<()> {
     Ok(added)
   };
 
-  for path in runtime.checker.test_inputs.values_mut() {
+  visit_runtime_paths_mut(runtime, |path| {
     *path = add_cached(path)?;
-  }
-
-  for path in runtime.validator.test_inputs.values_mut() {
-    *path = add_cached(path)?;
-  }
-
-  for test_case in runtime.test_cases.values_mut() {
-    test_case.data.input = add_cached(&test_case.data.input)?;
-    test_case.data.outputs = add_cached(&test_case.data.outputs)?;
-  }
-
-  for solution in runtime.solutions.values_mut() {
-    for test_case_result in solution.test_case_results.values_mut() {
-      test_case_result.outputs = add_cached(&test_case_result.outputs)?;
-    }
-
-    for subtask_result in &mut solution.subtask_results {
-      for test_case_result in subtask_result.test_cases.values_mut() {
-        test_case_result.outputs = add_cached(&test_case_result.outputs)?;
-      }
-    }
-  }
+    Ok(())
+  })?;
 
   Ok(())
 }
@@ -428,36 +532,24 @@ mod tests {
       .map(|command| command.build_command_for_debug())
       .collect::<Vec<_>>();
 
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/checker.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/validator.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/generator.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/genout.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/judge.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/std.drv^*"))
-    );
+    assert!(commands
+      .iter()
+      .any(|command| command.contains("/nix/store/checker.drv^*")));
+    assert!(commands
+      .iter()
+      .any(|command| command.contains("/nix/store/validator.drv^*")));
+    assert!(commands
+      .iter()
+      .any(|command| command.contains("/nix/store/generator.drv^*")));
+    assert!(commands
+      .iter()
+      .any(|command| command.contains("/nix/store/genout.drv^*")));
+    assert!(commands
+      .iter()
+      .any(|command| command.contains("/nix/store/judge.drv^*")));
+    assert!(commands
+      .iter()
+      .any(|command| command.contains("/nix/store/std.drv^*")));
   }
 
   #[test]
@@ -484,10 +576,8 @@ mod tests {
       .map(|command| command.build_command_for_debug())
       .collect::<Vec<_>>();
 
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/tmp/hull/validator"))
-    );
+    assert!(commands
+      .iter()
+      .any(|command| command.contains("/tmp/hull/validator")));
   }
 }

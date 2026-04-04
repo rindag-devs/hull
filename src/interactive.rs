@@ -62,6 +62,7 @@ pub enum TaskKind {
   Validator,
   Checker,
   Solution,
+  Artifact,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -882,6 +883,7 @@ fn task_label(kind: TaskKind) -> &'static str {
     TaskKind::Validator => "Validator tests",
     TaskKind::Checker => "Checker tests",
     TaskKind::Solution => "Solution",
+    TaskKind::Artifact => "Runtime artifacts",
   }
 }
 
