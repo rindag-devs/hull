@@ -131,13 +131,13 @@ pub fn build_problem(
     )?;
   }
 
+  let workspace =
+    RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;
   let mut runtime = {
     let _phase = options.progress.phase(
       PhaseKind::Runtime,
       "Running validators, checker tests, and solutions".to_string(),
     );
-    let workspace =
-      RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;
     analyze_problem(&spec, &workspace, options.clone())
       .with_context(|| format!("Runtime analysis failed for problem `{problem}`"))?
   };
@@ -232,7 +232,7 @@ pub fn build_contest(
               },
             );
           }
-          Ok((spec.name.clone(), runtime))
+          Ok((spec.name.clone(), (workspace, runtime)))
         })
         .collect::<Result<BTreeMap<_, _>>>()
     })?
@@ -243,7 +243,7 @@ pub fn build_contest(
       PhaseKind::NixBuild,
       format!("Packaging contest target {}", target),
     );
-    for (problem_name, runtime) in &mut runtime_by_problem {
+    for (problem_name, (_, runtime)) in &mut runtime_by_problem {
       let problem_progress = options.progress.child_scope(problem_name);
       prepare_runtime_store_paths(
         &format!("contest `{contest}`, problem `{problem_name}`"),
@@ -251,6 +251,15 @@ pub fn build_contest(
         Some(&problem_progress),
       )?;
     }
-    build_contest_target(contest, target, &runtime_by_problem, out_link, nix_args)
+    build_contest_target(
+      contest,
+      target,
+      &runtime_by_problem
+        .iter()
+        .map(|(name, (_, runtime))| (name.clone(), runtime.clone()))
+        .collect(),
+      out_link,
+      nix_args,
+    )
   }
 }

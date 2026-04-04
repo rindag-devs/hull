@@ -24,12 +24,12 @@ use comfy_table::{Cell, Table};
 use serde::Serialize;
 
 use crate::cmd::report::{
-  get_subtask_status, JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult,
+  JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult, get_subtask_status,
 };
 use crate::runtime::{
-  aggregate_subtask_results, load_selfeval_contest_spec, load_selfeval_problem_spec, run_judge,
-  run_prepare_solution, ProgramSpec, RuntimeWorkspace, SelfEvalJudgeProblemSpec,
-  SelfEvalJudgeTestCaseSpec, SelfEvalLanguageSpec, SolutionSpec, TestCaseSpec,
+  ProgramSpec, RuntimeWorkspace, SelfEvalJudgeProblemSpec, SelfEvalLanguageSpec, SolutionSpec,
+  TestCaseSpec, aggregate_subtask_results, load_selfeval_contest_spec, load_selfeval_problem_spec,
+  run_judge, run_prepare_solution,
 };
 use crate::utils::{format_size, format_tick};
 
@@ -77,7 +77,7 @@ pub fn run(opts: &SelfEvalOpts) -> Result<()> {
     .bundle_root
     .as_ref()
     .map(PathBuf::from)
-    .unwrap_or_else(|| default_bundle_root(&participant_root));
+    .unwrap_or_else(|| participant_root.join(".."));
   let package_root = opts
     .package_root
     .as_ref()
@@ -96,10 +96,32 @@ pub fn run(opts: &SelfEvalOpts) -> Result<()> {
   for contest_problem in &contest.problems {
     let problem = load_selfeval_problem_spec(&bundle_root, &contest_problem.metadata_path)?;
     let problem_dir = participant_root.join(&contest_problem.name);
-    let source_path = find_participant_source(&problem_dir, &contest.languages)?;
+    let source_path =
+      find_participant_source(&problem_dir, &contest_problem.name, &contest.languages)?;
     let report = match source_path {
-      Some(source_path) => evaluate_problem(&package_root, &problem, &source_path)?,
-      None => missing_solution_report(&problem),
+      Some((source_path, hull_language)) => {
+        evaluate_problem(&package_root, &problem, &source_path, &hull_language)?
+      }
+      None => JudgeCliReport {
+        score: 0.0,
+        full_score: problem.full_score,
+        subtask_results: vec![JudgeCliSubtaskResult {
+          full_score: problem.full_score,
+          scaled_score: 0.0,
+          statuses: vec!["internal_error".to_string()],
+        }],
+        test_case_results: BTreeMap::from([(
+          problem.name.clone(),
+          JudgeCliTestCaseResult {
+            status: "internal_error".to_string(),
+            score: 0.0,
+            tick: 0,
+            memory: 0,
+          },
+        )])
+        .into_iter()
+        .collect(),
+      },
     };
 
     overall_score += report.score;
@@ -176,6 +198,7 @@ fn evaluate_problem(
   package_root: &Path,
   problem: &SelfEvalJudgeProblemSpec,
   source_path: &Path,
+  hull_language: &str,
 ) -> Result<JudgeCliReport> {
   let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
     "hull-selfeval-{}-{}",
@@ -183,10 +206,11 @@ fn evaluate_problem(
     std::process::id()
   )))?;
 
-  let local_source_path = workspace
-    .root
-    .join("participant-src")
-    .join(source_path.file_name().unwrap_or_default());
+  let local_source_path = workspace.root.join("participant-src").join(format!(
+    "{}.{}",
+    problem.name,
+    hull_language.split('.').rev().collect::<Vec<_>>().join(".")
+  ));
   if let Some(parent) = local_source_path.parent() {
     fs::create_dir_all(parent)?;
   }
@@ -197,7 +221,33 @@ fn evaluate_problem(
     )
   })?;
 
-  let runtime_problem = to_runtime_problem(problem, &local_source_path);
+  let runtime_problem = crate::runtime::ProblemSpec {
+    name: problem.name.clone(),
+    tick_limit: problem.tick_limit,
+    memory_limit: problem.memory_limit,
+    full_score: problem.full_score,
+    checker: ProgramSpec {
+      src: None,
+      wasm: None,
+    },
+    validator: ProgramSpec {
+      src: None,
+      wasm: None,
+    },
+    generators: BTreeMap::new(),
+    main_correct_solution: "__unused".to_string(),
+    judger: problem.judger.clone(),
+    test_cases: Vec::new(),
+    subtasks: problem.subtasks.clone(),
+    solutions: vec![SolutionSpec {
+      name: "selfeval".to_string(),
+      src: local_source_path.to_string_lossy().into_owned(),
+      main_correct_solution: false,
+      participant_visibility: true,
+    }],
+    checker_tests: Vec::new(),
+    validator_tests: Vec::new(),
+  };
   let participant_solution = runtime_problem
     .solutions
     .first()
@@ -263,7 +313,16 @@ fn evaluate_problem(
       )
     })?;
 
-    let runtime_test_case = to_runtime_test_case(test_case, &local_input_path);
+    let runtime_test_case = TestCaseSpec {
+      name: test_case.name.clone(),
+      input_file: Some(local_input_path.to_string_lossy().into_owned()),
+      tick_limit: test_case.tick_limit,
+      memory_limit: test_case.memory_limit,
+      groups: test_case.groups.clone(),
+      traits: test_case.traits.clone(),
+      generator: None,
+      arguments: None,
+    };
     let report = run_judge(
       &runtime_problem,
       &runtime_test_case,
@@ -286,7 +345,16 @@ fn evaluate_problem(
           .join("samples")
           .join(&test_case.name)
           .join("input");
-        to_runtime_test_case(test_case, &local_input_path)
+        TestCaseSpec {
+          name: test_case.name.clone(),
+          input_file: Some(local_input_path.to_string_lossy().into_owned()),
+          tick_limit: test_case.tick_limit,
+          memory_limit: test_case.memory_limit,
+          groups: test_case.groups.clone(),
+          traits: test_case.traits.clone(),
+          generator: None,
+          arguments: None,
+        }
       })
       .collect(),
     ..runtime_problem.clone()
@@ -327,108 +395,19 @@ fn evaluate_problem(
   })
 }
 
-fn missing_solution_report(problem: &SelfEvalJudgeProblemSpec) -> JudgeCliReport {
-  JudgeCliReport {
-    score: 0.0,
-    full_score: problem.full_score,
-    subtask_results: vec![JudgeCliSubtaskResult {
-      full_score: problem.full_score,
-      scaled_score: 0.0,
-      statuses: vec!["internal_error".to_string()],
-    }],
-    test_case_results: BTreeMap::from([(
-      problem.name.clone(),
-      JudgeCliTestCaseResult {
-        status: "internal_error".to_string(),
-        score: 0.0,
-        tick: 0,
-        memory: 0,
-      },
-    )])
-    .into_iter()
-    .collect(),
-  }
-}
-
-fn to_runtime_problem(
-  problem: &SelfEvalJudgeProblemSpec,
-  source_path: &Path,
-) -> crate::runtime::ProblemSpec {
-  crate::runtime::ProblemSpec {
-    name: problem.name.clone(),
-    tick_limit: problem.tick_limit,
-    memory_limit: problem.memory_limit,
-    full_score: problem.full_score,
-    checker: ProgramSpec {
-      src: None,
-      wasm: None,
-    },
-    validator: ProgramSpec {
-      src: None,
-      wasm: None,
-    },
-    generators: BTreeMap::new(),
-    main_correct_solution: "__unused".to_string(),
-    judger: problem.judger.clone(),
-    test_cases: Vec::new(),
-    subtasks: problem.subtasks.clone(),
-    solutions: vec![SolutionSpec {
-      name: "selfeval".to_string(),
-      src: source_path.to_string_lossy().into_owned(),
-      main_correct_solution: false,
-      participant_visibility: true,
-    }],
-    checker_tests: Vec::new(),
-    validator_tests: Vec::new(),
-  }
-}
-
-fn to_runtime_test_case(test_case: &SelfEvalJudgeTestCaseSpec, input_path: &Path) -> TestCaseSpec {
-  TestCaseSpec {
-    name: test_case.name.clone(),
-    input_file: Some(input_path.to_string_lossy().into_owned()),
-    tick_limit: test_case.tick_limit,
-    memory_limit: test_case.memory_limit,
-    groups: test_case.groups.clone(),
-    traits: test_case.traits.clone(),
-    generator: None,
-    arguments: None,
-  }
-}
-
-fn default_bundle_root(participant_root: &Path) -> PathBuf {
-  participant_root.join("..")
-}
-
 fn find_participant_source(
   problem_dir: &Path,
+  problem_name: &str,
   languages: &[SelfEvalLanguageSpec],
-) -> Result<Option<PathBuf>> {
+) -> Result<Option<(PathBuf, String)>> {
   if !problem_dir.exists() {
     return Ok(None);
   }
 
-  let entries = fs::read_dir(problem_dir)
-    .with_context(|| format!("Failed to read problem directory {}", problem_dir.display()))?;
-  let file_paths = entries
-    .map(|entry| entry.map(|entry| entry.path()))
-    .collect::<std::io::Result<Vec<_>>>()
-    .with_context(|| format!("Failed to list files in {}", problem_dir.display()))?;
-
-  let regular_files = file_paths
-    .iter()
-    .filter(|path| path.is_file())
-    .cloned()
-    .collect::<Vec<_>>();
-
   for language in languages {
-    if let Some(path) = regular_files.iter().find(|path| {
-      path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.ends_with(&language.file_name_suffix))
-    }) {
-      return Ok(Some(path.clone()));
+    let expected_path = problem_dir.join(format!("{}{}", problem_name, language.file_name_suffix));
+    if expected_path.is_file() {
+      return Ok(Some((expected_path, language.hull_language.clone())));
     }
   }
 

@@ -395,12 +395,10 @@
       pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.tar.xz" { } ''
         tmp_archive_dir=$(mktemp -d)
         trap 'rm -rf "$tmp_archive_dir"' EXIT
-        staged_dir="$tmp_archive_dir/${contest.name}"
-        mkdir -p "$staged_dir"
-        cp -r --no-preserve=ownership ${outputDir}/. "$staged_dir/"
-        chmod -R u+rwX,go+rX "$staged_dir"
+        cp -r --no-preserve=ownership ${outputDir}/. "$tmp_archive_dir/"
+        chmod -R u+rwX,go+rX "$tmp_archive_dir"
         rm -rf "$out"
-        tar -C "$tmp_archive_dir" -cJf "$out" "${contest.name}"
+        tar -C "$tmp_archive_dir" -cJf "$out" .
       ''
     else
       outputDir;

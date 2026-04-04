@@ -19,9 +19,15 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct RuntimeWorkspace {
   pub root: PathBuf,
+}
+
+impl Drop for RuntimeWorkspace {
+  fn drop(&mut self) {
+    let _ = fs::remove_dir_all(&self.root);
+  }
 }
 
 impl RuntimeWorkspace {

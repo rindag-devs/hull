@@ -84,8 +84,23 @@ static void update_map(const char *mapping, const char *map_file) {
   close(fd);
 }
 
-static void ensure_dir(const char *path, mode_t mode) {
-  if (mkdir(path, mode) < 0 && errno != EEXIST) die_errno("mkdir");
+static void ensure_dir_recursive(const char *path, mode_t mode) {
+  char buffer[PATH_MAX];
+  size_t len;
+  char *cursor;
+
+  len = strlen(path);
+  if (len >= sizeof(buffer)) die_message("path too long");
+  memcpy(buffer, path, len + 1);
+
+  for (cursor = buffer + 1; *cursor; ++cursor) {
+    if (*cursor != '/') continue;
+    *cursor = '\0';
+    if (mkdir(buffer, mode) < 0 && errno != EEXIST) die_errno("mkdir");
+    *cursor = '/';
+  }
+
+  if (mkdir(buffer, mode) < 0 && errno != EEXIST) die_errno("mkdir");
 }
 
 static void add_path(const char *src, const char *dest, const char *rootdir) {
@@ -97,7 +112,7 @@ static void add_path(const char *src, const char *dest, const char *rootdir) {
   }
   snprintf(target, sizeof(target), "%s/%s", rootdir, dest);
   if (S_ISDIR(st.st_mode)) {
-    ensure_dir(target, st.st_mode & 0777);
+    ensure_dir_recursive(target, st.st_mode & 0777);
     if (mount(src, target, "none", MS_BIND | MS_REC, NULL) < 0) {
       fprintf(stderr, "Cannot bind mount %s to %s: %s\n", src, target, strerror(errno));
     }
@@ -131,7 +146,7 @@ static int child_proc(const char *rootdir, const char *nixdir, int clear_env,
   char nix_mount[PATH_MAX];
   if (stat(nixdir, &st) < 0) die_errno("stat nixdir");
   snprintf(nix_mount, sizeof(nix_mount), "%s/nix", rootdir);
-  ensure_dir(nix_mount, st.st_mode & 0777);
+  ensure_dir_recursive(nix_mount, st.st_mode & 0777);
   if (mount(nixdir, nix_mount, "none", MS_BIND | MS_REC, NULL) < 0) die_errno("mount nix");
 
   int fd = open("/proc/self/setgroups", O_WRONLY);
