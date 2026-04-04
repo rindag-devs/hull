@@ -312,7 +312,7 @@
   #if problem.samples.len() != 0 [
     #for (idx, sample) in problem.samples.enumerate() {
       if sample.len() > 1 [
-        == #titlecase(translation.sample-0(idx + 1))
+        == #titlecase(translation.sample-0(idx))
       ] else [
         == #titlecase(translation.sample)
       ]
@@ -366,7 +366,7 @@
       hlinex(),
       ..problem
         .subtasks
-        .enumerate(start: 1)
+        .enumerate()
         .map(((id, st)) => {
           (
             ([#id], $#str(st.full-score)$)

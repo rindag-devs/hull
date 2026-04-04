@@ -120,7 +120,7 @@ fn print_human_readable_report(report: &JudgeReport) {
     let full_score_str = format!("{:.3}", full_score);
 
     subtask_table.add_row(vec![
-      Cell::new(i + 1),
+      Cell::new(i),
       colored_status,
       Cell::new(score_str),
       Cell::new(full_score_str),

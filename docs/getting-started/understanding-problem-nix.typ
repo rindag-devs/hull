@@ -149,7 +149,7 @@ The `solutions` set is where you list all known implementations for the problem,
 ```
 
 - `mainCorrectSolution`: A boolean flag that *must be set to `true` for exactly one solution*. This solution is considered the canonical one and is used to generate the standard answer files for all test cases.
-- `subtaskPredictions`: This is a powerful validation feature. It's an attribute set where keys are subtask indices (as strings, e.g., `"0"`, `"1"`) and values are Nix functions. Each function takes a result (containing `score` and `statuses`) and returns `true` if the solution's performance matches your expectation. When you run `hull build`, Hull analyzes all solutions through its runtime and verifies that these predictions hold, catching inconsistencies early.
+- `subtaskPredictions`: This is a powerful validation feature. It's an attribute set where keys are zero-based subtask indices (as strings, e.g., `"0"`, `"1"`) and values are Nix functions. Each function takes a result (containing `score` and `statuses`) and returns `true` if the solution's performance matches your expectation. When you run `hull build`, Hull analyzes all solutions through its runtime and verifies that these predictions hold, catching inconsistencies early.
 
 == Documents & Targets
 

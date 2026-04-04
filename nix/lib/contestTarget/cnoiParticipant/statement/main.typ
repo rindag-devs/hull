@@ -419,7 +419,7 @@
   ]
 
   #if problem.samples.len() != 0 [
-    #for (i, sample) in problem.samples.enumerate(start: 1) {
+    #for (i, sample) in problem.samples.enumerate() {
       heading(level: 2, titlecase(translation.sample-0-input(i)))
 
       render-case-vis(i, sample.input, sample.input-validation.reader-trace-tree)
@@ -463,7 +463,7 @@
       ..problem.traits.keys().map(x => text(size: 0.8em, x.clusters().join(sym.zws))),
       ..problem
         .subtasks
-        .enumerate(start: 1)
+        .enumerate()
         .map(((id, st)) => {
           (
             ([#id], $#str(calc.round(st.full-score * 100, digits: 4))$)
@@ -560,16 +560,16 @@
 
 #translation.contest-notes-body
 
-#for (problem-id, problem) in hull.problems.enumerate(start: 1) {
+#for (problem-id, problem) in hull.problems.enumerate() {
   current-problem-title.update(
     titlecase(problem.display-name.at(language)) + " (" + raw(problem.name) + ")",
   )
 
-  if problem-id == 1 {
+  if problem-id == 0 {
     show-header.update(true)
   }
   pagebreak()
-  if problem-id == 1 {
+  if problem-id == 0 {
     show-footer.update(true)
   }
 

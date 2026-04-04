@@ -237,7 +237,7 @@
     .subtasks
     .enumerate()
     .map(((i, st)) => (
-      i + 1,
+      i,
       strfmt("{:.3}", st.at("full-score")),
       {
         let traits = st
@@ -315,7 +315,7 @@
     .subtasks
     .enumerate()
     .map(((i, st)) => (
-      i + 1,
+      i,
       ..solution-names.map(sol => {
         let score = problem.solutions.at(sol).subtask-results.at(i).scaled-score
         strfmt("{:.3}", score)
@@ -342,7 +342,7 @@
   pagebreak()
   [= Sample Cases]
   for (i, sample) in problem.samples.enumerate() {
-    [== Sample #str(i + 1)]
+    [== Sample #str(i)]
 
     table(
       columns: (1fr,) * (sample.outputs.len() + 1),
