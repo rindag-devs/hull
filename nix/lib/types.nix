@@ -416,7 +416,14 @@ in
           traits = lib.mkOption {
             type = attrsOf bool;
             default = { };
-            description = "An attribute set of traits that this test case possesses. Must match the traits output by the validator.";
+            description = ''
+              An attribute set of declared traits for this test case.
+
+              In normal workflows this is only a hint or a subset of the traits that will actually be
+              observed by the validator at runtime. Unless a feature explicitly documents otherwise,
+              scoring, subtask membership, and any other evaluation logic must use runtime validator
+              traits instead of trusting this metadata field.
+            '';
           };
           tickLimit = lib.mkOption {
             type = ints.unsigned;

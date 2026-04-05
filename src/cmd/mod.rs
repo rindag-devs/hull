@@ -20,5 +20,6 @@ pub mod patch;
 pub mod report;
 pub mod run;
 pub mod run_wasm;
-pub mod selfeval;
+pub mod self_eval;
 pub mod stress;
+pub mod uoj_custom_judge;

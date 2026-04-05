@@ -53,7 +53,8 @@ fn main() -> Result<()> {
     cli::Command::Patch(opts) => cmd::patch::run(opts),
     cli::Command::Run(opts) => cmd::run::run(opts),
     cli::Command::RunWasm(opts) => cmd::run_wasm::run(opts),
-    cli::Command::SelfEval(opts) => cmd::selfeval::run(opts),
+    cli::Command::SelfEval(opts) => cmd::self_eval::run(opts),
     cli::Command::Stress(opts) => cmd::stress::run(opts),
+    cli::Command::UojCustomJudge(opts) => cmd::uoj_custom_judge::run(opts),
   }
 }

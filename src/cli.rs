@@ -17,7 +17,8 @@ use clap::{Parser, Subcommand};
 
 use crate::cmd::{
   build::BuildOpts, build_contest::BuildContestOpts, judge::JudgeOpts, patch::PatchOpts,
-  run::RunOpts, run_wasm::RunWasmOpts, selfeval::SelfEvalOpts, stress::StressOpts,
+  run::RunOpts, run_wasm::RunWasmOpts, self_eval::SelfEvalOpts, stress::StressOpts,
+  uoj_custom_judge::UojCustomJudgeOpts,
 };
 use crate::interactive::InteractiveMode;
 
@@ -81,6 +82,8 @@ pub enum Command {
     long_about = "Run a generator repeatedly, build one temporary test case per generated input, judge the selected solutions against the problem's main correct solution, and stop when a non-accepted result is found."
   )]
   Stress(StressOpts),
+  #[command(hide = true)]
+  UojCustomJudge(UojCustomJudgeOpts),
 }
 
 fn parse_interactive_mode(value: &str) -> Result<InteractiveMode, String> {

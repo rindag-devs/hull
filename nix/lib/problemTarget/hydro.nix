@@ -296,7 +296,7 @@
     pkgs.runCommandLocal
       ("hull-problemTargetOutput-${problem.name}-hydro" + (lib.optionalString zipped ".zip"))
       {
-        nativeBuildInputs = [ pkgs.zip ];
+        nativeBuildInputs = [ pkgs._7zz ];
       }
       ''
         tmpdir=$(mktemp -d)
@@ -360,7 +360,7 @@
         ${
           if zipped then
             ''
-              (cd "$tmpdir" && zip -r "$out" .)
+              (cd "$tmpdir" && 7zz a -tzip -mx=9 -mmt=on "$out" .)
             ''
           else
             ''

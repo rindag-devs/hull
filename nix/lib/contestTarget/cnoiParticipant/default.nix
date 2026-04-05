@@ -88,6 +88,7 @@
             mkdir -p ${dataPathPrefix}
             cp ${tc.data.input} ${dataPathPrefix}/input
             cp -r ${tc.data.outputs} ${dataPathPrefix}/outputs
+            cp ${pkgs.writeText "${problem.name}-${tc.name}-input-validation.json" (builtins.toJSON tc.inputValidation)} ${dataPathPrefix}/input-validation.json
           ''
         ) samples;
 
@@ -241,9 +242,11 @@
       '';
 
       selfEvalRunner = pkgs.writeShellScriptBin "selfeval-run" ''
-        package_root="$1"
+        bundle_root="$1"
+        package_root="$2"
         shift
-        exec ${lib.getExe hullPkgs.default} self-eval --bundle-root ${selfEvalData} --package-root "$package_root" "$@"
+        shift
+        exec ${lib.getExe hullPkgs.default} self-eval --bundle-root "$bundle_root" --package-root "$package_root" "$@"
       '';
 
       selfEvalTargets = [
@@ -283,12 +286,12 @@
             -m "$self_dir:$self_dest" \
             -m "$participant_root:$participant_dest" \
             -n ./nix \
-            -- ${selfEvalRunner}/bin/selfeval-run "$self_dir" "$@"
+            -- ${selfEvalRunner}/bin/selfeval-run /nix/store/${baseNameOf (builtins.unsafeDiscardStringContext (toString selfEvalData))} "$self_dir" "$@"
         else
           exec ".${nixUserChrootRelative}" \
             -m "$self_dir:$self_dest" \
             -n ./nix \
-            -- ${selfEvalRunner}/bin/selfeval-run "$self_dir" "$@"
+            -- ${selfEvalRunner}/bin/selfeval-run /nix/store/${baseNameOf (builtins.unsafeDiscardStringContext (toString selfEvalData))} "$self_dir" "$@"
         fi
       '';
 

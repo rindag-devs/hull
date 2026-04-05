@@ -21,6 +21,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use comfy_table::presets::UTF8_FULL_CONDENSED;
 use comfy_table::{Cell, Table};
+use serde::Deserialize;
 use serde::Serialize;
 
 use crate::cmd::report::{
@@ -67,6 +68,13 @@ struct SelfEvalProblemReport {
   full_score: f64,
   subtask_results: Vec<JudgeCliSubtaskResult>,
   test_case_results: BTreeMap<String, JudgeCliTestCaseResult>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SelfEvalInputValidation {
+  #[serde(default)]
+  traits: BTreeMap<String, bool>,
 }
 
 pub fn run(opts: &SelfEvalOpts) -> Result<()> {
@@ -297,21 +305,31 @@ fn evaluate_problem(
 
     let official_outputs_dir = local_case_dir.join("outputs");
     fs::create_dir_all(&official_outputs_dir)?;
-    fs::copy(
-      package_root
-        .join(&problem.name)
-        .join("data")
-        .join(&test_case.name)
-        .join("outputs")
-        .join("output"),
-      official_outputs_dir.join("output"),
-    )
-    .with_context(|| {
+    let bundled_outputs_dir = package_root
+      .join(&problem.name)
+      .join("data")
+      .join(&test_case.name)
+      .join("outputs");
+    for entry in fs::read_dir(&bundled_outputs_dir).with_context(|| {
       format!(
-        "Failed to copy sample official output for {}:{}",
+        "Failed to read sample official outputs directory for {}:{}",
         problem.name, test_case.name
       )
-    })?;
+    })? {
+      let entry = entry?;
+      let file_type = entry.file_type()?;
+      if !file_type.is_file() {
+        continue;
+      }
+      fs::copy(entry.path(), official_outputs_dir.join(entry.file_name())).with_context(|| {
+        format!(
+          "Failed to copy sample official output for {}:{}:{}",
+          problem.name,
+          test_case.name,
+          entry.file_name().to_string_lossy()
+        )
+      })?;
+    }
 
     let runtime_test_case = TestCaseSpec {
       name: test_case.name.clone(),
@@ -331,7 +349,25 @@ fn evaluate_problem(
       &official_outputs_dir,
       &workspace,
     )?;
-    test_case_traits.insert(test_case.name.clone(), test_case.traits.clone());
+    let validation_path = package_root
+      .join(&problem.name)
+      .join("data")
+      .join(&test_case.name)
+      .join("input-validation.json");
+    let validation_content = fs::read_to_string(&validation_path).with_context(|| {
+      format!(
+        "Failed to read sample input validation for {}:{}",
+        problem.name, test_case.name
+      )
+    })?;
+    let validation: SelfEvalInputValidation = serde_json::from_str(&validation_content)
+      .with_context(|| {
+        format!(
+          "Failed to parse sample input validation for {}:{}",
+          problem.name, test_case.name
+        )
+      })?;
+    test_case_traits.insert(test_case.name.clone(), validation.traits);
     test_case_results.insert(test_case.name.clone(), report);
   }
 

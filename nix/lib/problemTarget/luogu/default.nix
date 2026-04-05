@@ -309,7 +309,7 @@
 
     in
     pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-luogu"
-      { nativeBuildInputs = [ pkgs.zip ]; }
+      { nativeBuildInputs = [ pkgs._7zz ]; }
       ''
         mkdir $out
         data_dir=$(mktemp -d)
@@ -326,8 +326,8 @@
 
         ${copyTestCasesCommand}
 
-        # Luogu's zip size limit is 50 MiB, so `-9` is needed to compress better.
-        (cd "$data_dir" && zip -9 -r "$out/data.zip" .)
+        # Luogu's zip size limit is 50 MiB, so max compression stays enabled.
+        (cd "$data_dir" && 7zz a -tzip -mx=9 -mmt=on "$out/data.zip" .)
 
         echo ${lib.escapeShellArg scoringScriptContent} > $out/scoring-script.txt
         echo ${lib.escapeShellArg (builtins.toJSON requiredTags)} > $out/required-tags.json

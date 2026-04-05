@@ -125,5 +125,6 @@
 
   targets = {
     default = hull.problemTarget.common;
+    uojCustom = hull.problemTarget.uojCustom { };
   };
 }

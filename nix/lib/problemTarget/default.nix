@@ -16,6 +16,7 @@
 {
   pkgs,
   hull,
+  hullPkgs,
   lib,
   cplib,
   cplibInitializers,
@@ -90,6 +91,15 @@
       cplib
       cplibInitializers
       x86_64-linux-gnu217-cross
+      ;
+  };
+
+  uojCustom = import ./uojCustom.nix {
+    inherit
+      lib
+      hull
+      pkgs
+      hullPkgs
       ;
   };
 
