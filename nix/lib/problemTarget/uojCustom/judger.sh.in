@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+main_path="$1"
+work_path="$2"
+result_path="$3"
+data_path="$4"
+self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+bundle_dir="$self_dir/hull-bundle"
+runtime_nix_dir="$work_path/hull-nix"
+if [ ! -x "$runtime_nix_dir/store@NIX_USER_CHROOT_STORE_SUFFIX@" ]; then
+  mkdir -p "$runtime_nix_dir/store"
+  tar -xJf "$bundle_dir/nix-store.tar.xz" -C "$runtime_nix_dir"
+fi
+submission_file="$work_path/answer.code"
+submission_language=$(awk '$1=="answer_language" { print $2; exit }' "$work_path/submission.conf")
+self_dest=main
+work_dest=work
+bundle_root_in_chroot="/$self_dest/hull-bundle"
+submission_file_in_chroot="/$work_dest/answer.code"
+work_path_in_chroot="/$work_dest"
+inner_result_dir="$work_path/hull-uoj-result"
+rm -rf "$inner_result_dir"
+mkdir -p "$inner_result_dir"
+result_path_in_chroot="/$work_dest/hull-uoj-result"
+cache_dir="$work_path/hull-cache"
+mkdir -p "$cache_dir"
+export XDG_CACHE_HOME="$cache_dir"
+export HOME="$work_path"
+"$runtime_nix_dir/store@NIX_USER_CHROOT_STORE_SUFFIX@" \
+  -m "$self_dir:$self_dest" \
+  -m "$work_path:$work_dest" \
+  -p XDG_CACHE_HOME \
+  -p HOME \
+  -n "$runtime_nix_dir" \
+  -- "@CUSTOM_JUDGE_RUNNER_RELATIVE@" \
+  "$bundle_root_in_chroot" "$submission_file_in_chroot" "$submission_language" "$work_path_in_chroot" "$result_path_in_chroot"
+status="$?"
+if [ -d "$inner_result_dir" ]; then
+  cp -f "$inner_result_dir"/* "$result_path"/ 2>/dev/null || true
+fi
+exit "$status"

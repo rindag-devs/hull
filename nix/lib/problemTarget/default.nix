@@ -94,7 +94,7 @@
       ;
   };
 
-  uojCustom = import ./uojCustom.nix {
+  uojCustom = import ./uojCustom {
     inherit
       lib
       hull

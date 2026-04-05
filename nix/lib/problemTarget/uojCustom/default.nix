@@ -24,7 +24,6 @@
   zipped ? true,
   ticksPerMs ? 1.0e7,
   uojToHullLanguageMap ? {
-    # Old UOJ.
     "C" = "c.23.s64m";
     "C++" = "cpp.26.s64m";
     "C++11" = "cpp.11.s64m";
@@ -34,7 +33,6 @@
     "Java11" = null;
     "Pascal" = null;
 
-    # New UOJ / vfleaking variants.
     "C89" = "c.89.s64m";
     "C99" = "c.99.s64m";
     "C11" = "c.11.s64m";
@@ -101,10 +99,9 @@
       };
 
       selfEvalData = pkgs.runCommandLocal "hull-uojCustom-data-${problem.name}" { } ''
-        mkdir -p $out/problems
-        mkdir -p $out/${problem.name}/data
+        mkdir -p $out/data
         cp ${pkgs.writeText "hull-uojCustom-${problem.name}.json" (builtins.toJSON metadata)} \
-          $out/problems/${problem.name}.json
+          $out/problem.json
         cp ${
           pkgs.writeText "hull-uojCustom-language-config-${problem.name}.json" (
             builtins.toJSON {
@@ -115,7 +112,7 @@
         ${lib.concatMapStringsSep "\n" (
           tc:
           let
-            pathPrefix = "$out/${problem.name}/data/${tc.name}";
+            pathPrefix = "$out/data/${tc.name}";
           in
           ''
             mkdir -p ${pathPrefix}
@@ -130,13 +127,17 @@
       nixUserChrootRelative = "/nix/store/${baseNameOf nixUserChrootStorePath}/bin/nix-user-chroot";
       customJudgeRunner = pkgs.writeShellScriptBin "hull-uoj-custom-judge-runner-${problem.name}" ''
         bundle_root="$1"
+        submission_file="$2"
+        submission_language="$3"
+        uoj_work_path="$4"
+        uoj_result_path="$5"
         exec ${lib.getExe hullPkgs.default} uoj-custom-judge \
           --bundle-root "$bundle_root" \
-          --metadata-path "problems/${problem.name}.json" \
-          --submission-file "$2" \
-          --submission-language "$3" \
-          --uoj-work-path "$4" \
-          --uoj-result-path "$5" \
+          --metadata-path "problem.json" \
+          --submission-file "$submission_file" \
+          --submission-language "$submission_language" \
+          --uoj-work-path "$uoj_work_path" \
+          --uoj-result-path "$uoj_result_path" \
           --ticks-per-ms ${toString ticksPerMs}
       '';
 
@@ -160,39 +161,18 @@
         n_tests ${toString (builtins.length allTestCases)}
         n_ex_tests 0
         n_sample_tests 0
+        judger_time_limit 1048576
+        judger_memory_limit 1048576
+        judger_output_limit 2047
       '';
 
-      makefile = ''
-        all:
-        	mkdir -p .hull-bundle/nix/store
-        	tar -xJf .hull-bundle/nix-store.tar.xz -C .hull-bundle/nix
-        	chmod +x judger
-        	find .hull-bundle/nix/store -type f \( -path '*/bin/*' -o -name '*.so' -o -name 'clang*' \) -exec chmod +x {} + || true
-      '';
-
-      judgerScript = ''
-        #!/usr/bin/env bash
-        set -eu
-        main_path="$1"
-        work_path="$2"
-        result_path="$3"
-        data_path="$4"
-        self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-        bundle_dir="$self_dir/.hull-bundle"
-        submission_file="$work_path/answer.code"
-        submission_language=$(awk '$1=="answer_language" { print $2; exit }' "$work_path/submission.conf")
-        self_dest=$(printf '%s' "$self_dir" | sed 's|^/||')
-        work_dest=$(printf '%s' "$work_path" | sed 's|^/||')
-        result_dest=$(printf '%s' "$result_path" | sed 's|^/||')
-        bundle_root_in_chroot="/$self_dest/.hull-bundle"
-        exec "$bundle_dir${nixUserChrootRelative}" \
-          -m "$self_dir:$self_dest" \
-          -m "$work_path:$work_dest" \
-          -m "$result_path:$result_dest" \
-          -n "$bundle_dir/nix" \
-          -- "${customJudgeRunnerRelative}" \
-          "$bundle_root_in_chroot" "$submission_file" "$submission_language" "$work_path" "$result_path"
-      '';
+      judgerShellScript = pkgs.replaceVarsWith {
+        src = ./judger.sh.in;
+        replacements = {
+          NIX_USER_CHROOT_STORE_SUFFIX = lib.removePrefix "/nix/store" nixUserChrootRelative;
+          CUSTOM_JUDGE_RUNNER_RELATIVE = customJudgeRunnerRelative;
+        };
+      };
 
       mkDocumentsCopyCommand =
         pathPrefix: docs:
@@ -221,20 +201,21 @@
         trap cleanup EXIT
 
         mkdir -p "$tmpdir/download/document"
-        mkdir -p "$tmpdir/.hull-bundle/nix/store"
+        mkdir -p "$tmpdir/hull-bundle/nix/store"
 
         while IFS= read -r store_path; do
-          cp -a --no-preserve=ownership "$store_path" "$tmpdir/.hull-bundle/nix/store/"
+          cp -a --no-preserve=ownership "$store_path" "$tmpdir/hull-bundle/nix/store/"
         done < ${targetClosure}/store-paths
 
-        cp -r ${selfEvalData}/. "$tmpdir/.hull-bundle/"
-        chmod -R u+rwX "$tmpdir/.hull-bundle"
-        tar -C "$tmpdir/.hull-bundle/nix" -cJf "$tmpdir/.hull-bundle/nix-store.tar.xz" store
-        rm -rf "$tmpdir/.hull-bundle/nix/store"
+        cp -r ${selfEvalData}/. "$tmpdir/hull-bundle/"
+        chmod -R u+rwX "$tmpdir/hull-bundle"
+        tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
+        rm -rf "$tmpdir/hull-bundle/nix/store"
         cp ${pkgs.writeText "problem.conf" problemConf} "$tmpdir/problem.conf"
-        cp ${pkgs.writeText "Makefile" makefile} "$tmpdir/Makefile"
-        cp ${pkgs.writeText "judger" judgerScript} "$tmpdir/judger"
-        chmod +x "$tmpdir/judger"
+        cp ${./judger.mk} "$tmpdir/Makefile"
+        cp ${./judger.c} "$tmpdir/judger.c"
+        cp ${judgerShellScript} "$tmpdir/judger.sh"
+        cp ${./README.txt} "$tmpdir/README.txt"
 
         ${mkDocumentsCopyCommand "$tmpdir/download/document" documents}
 
@@ -243,8 +224,8 @@
             ''
               (
                 cd "$tmpdir"
-                7zz a -tzip -mx=9 -mmt=on "$out" . -x!.hull-bundle/nix-store.tar.xz
-                7zz a -tzip -mx=0 "$out" .hull-bundle/nix-store.tar.xz
+                7zz a -tzip -mx=9 -mmt=on "$out" . -x!hull-bundle/nix-store.tar.xz
+                7zz a -tzip -mx=0 "$out" hull-bundle/nix-store.tar.xz
               )
             ''
           else

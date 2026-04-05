@@ -285,11 +285,7 @@ fn evaluate_test_case(
 
   let input_path = local_case_dir.join("input");
   fs::copy(
-    bundle_root
-      .join(&problem.name)
-      .join("data")
-      .join(&test_case.name)
-      .join("input"),
+    bundle_root.join("data").join(&test_case.name).join("input"),
     &input_path,
   )
   .with_context(|| {
@@ -302,7 +298,6 @@ fn evaluate_test_case(
   let official_outputs_dir = local_case_dir.join("outputs");
   fs::create_dir_all(&official_outputs_dir)?;
   let bundled_outputs_dir = bundle_root
-    .join(&problem.name)
     .join("data")
     .join(&test_case.name)
     .join("outputs");
@@ -459,12 +454,13 @@ fn write_uoj_result(
         continue;
       }
 
-      let execution = test_case_reports.get(&test_case_name).with_context(|| {
-        format!(
-          "Missing execution result for test case `{}`",
-          test_case_name
-        )
-      })?;
+      let Some(execution) = test_case_reports.get(&test_case_name) else {
+        details.push_str(&format!(
+          "<test num=\"{}\" score=\"0\" info=\"Skipped\" time=\"0\" memory=\"0\">\n<res></res>\n</test>\n",
+          xml_escape(&test_case_name)
+        ));
+        continue;
+      };
       max_memory = max_memory.max(execution.report.memory);
 
       let point_score = if subtask.scoring_method == "sum" {
