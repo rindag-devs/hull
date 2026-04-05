@@ -17,13 +17,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use serde::Deserialize;
 
 use crate::runtime::{
-  aggregate_subtask_results, load_selfeval_problem_spec, run_judge, run_prepare_solution,
   JudgeReport, ProgramSpec, RuntimeWorkspace, SelfEvalJudgeProblemSpec, SolutionSpec, TestCaseSpec,
+  aggregate_subtask_results, load_selfeval_problem_spec, run_judge, run_prepare_solution,
 };
 
 #[derive(Parser)]

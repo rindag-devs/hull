@@ -184,7 +184,15 @@ fn analyze_problem_in_pool(
             progress,
           )
         },
-        || run_test_cases(problem, workspace, &prepared_judged_solutions, progress),
+        || {
+          run_test_cases(
+            problem,
+            workspace,
+            &prepared_judged_solutions,
+            main_solution,
+            progress,
+          )
+        },
       )
     },
   );
@@ -422,18 +430,9 @@ fn run_test_cases(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
   solutions: &[PreparedSolutionEntry],
+  main_solution: &PreparedSolutionEntry,
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<TestCaseRunMap> {
-  let main_solution = solutions
-    .iter()
-    .find(|solution| solution.solution.name == problem.main_correct_solution)
-    .with_context(|| {
-      format!(
-        "Main correct solution `{}` not found in runtime metadata",
-        problem.main_correct_solution
-      )
-    })?;
-
   let solution_handles = if problem.test_cases.is_empty() {
     None
   } else {
