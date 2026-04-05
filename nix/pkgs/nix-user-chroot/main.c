@@ -15,6 +15,7 @@
 
 #define _GNU_SOURCE
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -101,6 +102,32 @@ static void ensure_dir_recursive(const char *path, mode_t mode) {
   }
 
   if (mkdir(buffer, mode) < 0 && errno != EEXIST) die_errno("mkdir");
+}
+
+static void remove_tree(const char *path) {
+  DIR *dir = opendir(path);
+  struct dirent *entry;
+  char child[PATH_MAX];
+
+  if (!dir) {
+    if (errno == ENOENT) return;
+    die_errno("opendir cleanup");
+  }
+
+  while ((entry = readdir(dir)) != NULL) {
+    struct stat st;
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+    snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
+    if (lstat(child, &st) < 0) continue;
+    if (S_ISDIR(st.st_mode)) {
+      remove_tree(child);
+    } else {
+      unlink(child);
+    }
+  }
+
+  closedir(dir);
+  if (rmdir(path) < 0 && errno != ENOENT) die_errno("rmdir cleanup");
 }
 
 static void add_path(const char *src, const char *dest, const char *rootdir) {
@@ -254,6 +281,7 @@ int main(int argc, char *argv[]) {
 
   int status = 0;
   waitpid(child, &status, 0);
+  remove_tree(rootdir);
   if (WIFEXITED(status)) return WEXITSTATUS(status);
   return 1;
 }
