@@ -18,8 +18,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::interactive::ProblemProgressHandle;
+use crate::platform::default_parallelism;
 
 #[derive(Clone, Debug)]
+/// Runtime analysis configuration shared by build, judge, and stress commands.
 pub struct RuntimeOptions {
   pub jobs: usize,
   pub progress: ProblemProgressHandle,
@@ -27,19 +29,22 @@ pub struct RuntimeOptions {
 }
 
 impl RuntimeOptions {
+  /// Creates runtime options with an optional explicit worker count.
   pub fn new(jobs: Option<usize>) -> Self {
     Self {
-      jobs: jobs.unwrap_or_else(num_cpus::get).max(1),
+      jobs: jobs.unwrap_or_else(default_parallelism).max(1),
       progress: ProblemProgressHandle::disabled(),
       solution_names: None,
     }
   }
 
+  /// Attaches a progress renderer to these runtime options.
   pub fn with_progress(mut self, progress: ProblemProgressHandle) -> Self {
     self.progress = progress;
     self
   }
 
+  /// Restricts runtime analysis to the named solutions when provided.
   pub fn with_solution_names(mut self, solution_names: impl IntoIterator<Item = String>) -> Self {
     self.solution_names = Some(solution_names.into_iter().collect());
     self
@@ -48,6 +53,7 @@ impl RuntimeOptions {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Resolved path metadata for one runtime artifact.
 pub struct ArtifactSpec {
   pub path: String,
   pub drv_path: Option<String>,
@@ -55,6 +61,7 @@ pub struct ArtifactSpec {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Source or artifact description for a problem tool such as a checker or generator.
 pub struct ProgramSpec {
   pub src: Option<String>,
   pub wasm: Option<ArtifactSpec>,
@@ -62,6 +69,7 @@ pub struct ProgramSpec {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Runtime runners that implement Hull's prepare, generate, and judge phases.
 pub struct JudgerSpec {
   pub prepare_solution_runner: ArtifactSpec,
   pub generate_outputs_runner: Option<ArtifactSpec>,
@@ -70,6 +78,7 @@ pub struct JudgerSpec {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One configured solution in a problem specification.
 pub struct SolutionSpec {
   pub name: String,
   pub src: String,
@@ -79,6 +88,7 @@ pub struct SolutionSpec {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Prepared solution outputs returned by the prepareSolution runner.
 pub struct PreparedSolutionSpec {
   pub src: String,
   pub executable: Option<ArtifactSpec>,
@@ -86,6 +96,7 @@ pub struct PreparedSolutionSpec {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One testcase in the runtime problem model.
 pub struct TestCaseSpec {
   pub name: String,
   pub input_file: Option<String>,
@@ -99,6 +110,7 @@ pub struct TestCaseSpec {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One subtask in the runtime problem model.
 pub struct SubtaskSpec {
   pub full_score: f64,
   pub scoring_method: String,
@@ -107,6 +119,7 @@ pub struct SubtaskSpec {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One checker self-test specification.
 pub struct CheckerTestSpec {
   pub name: String,
   pub output_name: String,
@@ -119,6 +132,7 @@ pub struct CheckerTestSpec {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One validator self-test specification.
 pub struct ValidatorTestSpec {
   pub name: String,
   pub input_file: Option<String>,
@@ -128,6 +142,7 @@ pub struct ValidatorTestSpec {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Full runtime metadata for one problem.
 pub struct ProblemSpec {
   pub name: String,
   pub tick_limit: u64,
@@ -147,6 +162,7 @@ pub struct ProblemSpec {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Full runtime metadata for one contest.
 pub struct ContestSpec {
   pub name: String,
   pub problems: Vec<ProblemSpec>,
@@ -154,6 +170,7 @@ pub struct ContestSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Exported self-eval contest manifest.
 pub struct SelfEvalContestSpec {
   pub name: String,
   pub problems: Vec<SelfEvalProblemSpec>,
@@ -162,6 +179,7 @@ pub struct SelfEvalContestSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// One problem entry inside a self-eval contest manifest.
 pub struct SelfEvalProblemSpec {
   pub name: String,
   pub full_score: f64,
@@ -170,6 +188,7 @@ pub struct SelfEvalProblemSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Exported judging metadata consumed by `hull uoj-custom-judge` and `self-eval`.
 pub struct SelfEvalJudgeProblemSpec {
   pub name: String,
   pub tick_limit: u64,
@@ -182,6 +201,7 @@ pub struct SelfEvalJudgeProblemSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// One testcase entry inside exported judging metadata.
 pub struct SelfEvalJudgeTestCaseSpec {
   pub name: String,
   pub tick_limit: u64,
@@ -192,6 +212,7 @@ pub struct SelfEvalJudgeTestCaseSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// One language option exposed in a self-eval bundle.
 pub struct SelfEvalLanguageSpec {
   pub display_name: String,
   pub file_name_suffix: String,
@@ -200,6 +221,7 @@ pub struct SelfEvalLanguageSpec {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Complete runtime analysis result for one problem.
 pub struct RuntimeData {
   pub checker: CheckerRuntimeData,
   pub test_cases: BTreeMap<String, RuntimeTestCaseData>,
@@ -207,15 +229,17 @@ pub struct RuntimeData {
   pub solutions: BTreeMap<String, RuntimeSolutionData>,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Runtime checker inputs and checker self-test results.
 pub struct CheckerRuntimeData {
   pub test_inputs: BTreeMap<String, String>,
   pub test_results: BTreeMap<String, CheckerReport>,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Runtime validator inputs and validator self-test results.
 pub struct ValidatorRuntimeData {
   pub test_inputs: BTreeMap<String, String>,
   pub test_results: BTreeMap<String, ValidationReport>,
@@ -223,6 +247,7 @@ pub struct ValidatorRuntimeData {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Packaged files and validation data for one runtime testcase.
 pub struct RuntimeTestCaseData {
   pub data: RuntimeTestCaseFiles,
   pub input_validation: ValidationReport,
@@ -230,6 +255,7 @@ pub struct RuntimeTestCaseData {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Paths to one testcase's packaged input and official outputs.
 pub struct RuntimeTestCaseFiles {
   pub input: String,
   pub outputs: String,
@@ -237,6 +263,7 @@ pub struct RuntimeTestCaseFiles {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Aggregated judging result for one solution across all testcases and subtasks.
 pub struct RuntimeSolutionData {
   pub test_case_results: BTreeMap<String, JudgeReport>,
   pub subtask_results: Vec<SubtaskRuntimeReport>,
@@ -245,6 +272,7 @@ pub struct RuntimeSolutionData {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+/// Aggregated scoring data for one subtask.
 pub struct SubtaskRuntimeReport {
   pub test_cases: BTreeMap<String, JudgeReport>,
   pub statuses: Vec<String>,
@@ -254,18 +282,20 @@ pub struct SubtaskRuntimeReport {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One testcase judging result returned by a Hull judger.
 pub struct JudgeReport {
   pub status: String,
   pub score: f64,
   pub message: String,
   pub tick: u64,
   pub memory: u64,
-  #[serde(default)]
+  #[serde(skip_deserializing)]
   pub outputs: String,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One input validation result and its optional trait annotations.
 pub struct ValidationReport {
   pub status: String,
   pub message: String,
@@ -279,8 +309,9 @@ pub struct ValidationReport {
   pub traits: BTreeMap<String, bool>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// One checker result including score and optional trace data.
 pub struct CheckerReport {
   pub status: String,
   pub message: String,
@@ -293,6 +324,6 @@ pub struct CheckerReport {
   pub evaluator_trace_stacks: Vec<serde_json::Value>,
 }
 
-pub fn default_json_object() -> serde_json::Value {
+fn default_json_object() -> serde_json::Value {
   serde_json::json!({})
 }

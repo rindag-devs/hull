@@ -15,13 +15,14 @@
 
 use std::fs;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
 #[derive(Debug)]
+/// Owns a temporary directory tree used by runtime analysis and judger runs.
 pub struct RuntimeWorkspace {
-  pub root: PathBuf,
+  root: PathBuf,
 }
 
 impl Drop for RuntimeWorkspace {
@@ -31,6 +32,7 @@ impl Drop for RuntimeWorkspace {
 }
 
 impl RuntimeWorkspace {
+  /// Creates or reuses the workspace root directory.
   pub fn new(root: impl Into<PathBuf>) -> Result<Self> {
     let root = root.into();
     fs::create_dir_all(&root)
@@ -38,6 +40,12 @@ impl RuntimeWorkspace {
     Ok(Self { root })
   }
 
+  /// Returns the workspace root directory.
+  pub fn root(&self) -> &Path {
+    &self.root
+  }
+
+  /// Returns a stable per-case directory for a logical `(group, name)` pair.
   pub fn case_dir(&self, group: &str, name: &str) -> Result<PathBuf> {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     name.hash(&mut hasher);
@@ -58,6 +66,7 @@ impl RuntimeWorkspace {
     Ok(path)
   }
 
+  /// Returns an empty work directory nested under the per-case directory.
   pub fn run_dir(&self, group: &str, name: &str) -> Result<PathBuf> {
     let path = self.case_dir(group, name)?;
     let run_dir = path.join("work");

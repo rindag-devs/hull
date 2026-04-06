@@ -22,7 +22,7 @@ use wasi_common::{
 
 use crate::{
   runner::{self, RunStatus, judge_dir::JudgeDir},
-  runtime::cache_native_module,
+  runtime::artifact::cache_native_module,
 };
 
 const DEFAULT_TICK_LIMIT: u64 = 100_000_000_000;

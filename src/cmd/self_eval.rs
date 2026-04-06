@@ -24,15 +24,17 @@ use comfy_table::{Cell, Table};
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::cmd::report::{
+use crate::format::{format_size, format_tick};
+use crate::report::{
   JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult, get_subtask_status,
 };
-use crate::runtime::{
-  ProgramSpec, RuntimeWorkspace, SelfEvalJudgeProblemSpec, SelfEvalLanguageSpec, SolutionSpec,
-  TestCaseSpec, aggregate_subtask_results, load_selfeval_contest_spec, load_selfeval_problem_spec,
-  run_judge, run_prepare_solution,
+use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
+use crate::runtime::metadata::{load_selfeval_contest_spec, load_selfeval_problem_spec};
+use crate::runtime::types::{
+  ProblemSpec, ProgramSpec, SelfEvalJudgeProblemSpec, SelfEvalLanguageSpec, SolutionSpec,
+  TestCaseSpec,
 };
-use crate::utils::{format_size, format_tick};
+use crate::runtime::workspace::RuntimeWorkspace;
 
 #[derive(Parser)]
 pub struct SelfEvalOpts {
@@ -53,7 +55,7 @@ pub struct SelfEvalOpts {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct SelfEvalCliReport {
   score: f64,
   full_score: f64,
@@ -61,7 +63,7 @@ struct SelfEvalCliReport {
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct SelfEvalProblemReport {
   name: String,
   score: f64,
@@ -73,7 +75,6 @@ struct SelfEvalProblemReport {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SelfEvalInputValidation {
-  #[serde(default)]
   traits: BTreeMap<String, bool>,
 }
 
@@ -214,7 +215,7 @@ fn evaluate_problem(
     std::process::id()
   )))?;
 
-  let local_source_path = workspace.root.join("participant-src").join(format!(
+  let local_source_path = workspace.root().join("participant-src").join(format!(
     "{}.{}",
     problem.name,
     hull_language.split('.').rev().collect::<Vec<_>>().join(".")
@@ -229,7 +230,7 @@ fn evaluate_problem(
     )
   })?;
 
-  let runtime_problem = crate::runtime::ProblemSpec {
+  let runtime_problem = ProblemSpec {
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
@@ -285,7 +286,7 @@ fn evaluate_problem(
   let mut test_case_traits = BTreeMap::new();
 
   for test_case in &problem.test_cases {
-    let local_case_dir = workspace.root.join("samples").join(&test_case.name);
+    let local_case_dir = workspace.root().join("samples").join(&test_case.name);
     fs::create_dir_all(&local_case_dir)?;
     let local_input_path = local_case_dir.join("input");
     fs::copy(
@@ -371,13 +372,13 @@ fn evaluate_problem(
     test_case_results.insert(test_case.name.clone(), report);
   }
 
-  let scoring_problem = crate::runtime::ProblemSpec {
+  let scoring_problem = ProblemSpec {
     test_cases: problem
       .test_cases
       .iter()
       .map(|test_case| {
         let local_input_path = workspace
-          .root
+          .root()
           .join("samples")
           .join(&test_case.name)
           .join("input");

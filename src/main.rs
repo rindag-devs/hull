@@ -20,11 +20,13 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod cli;
 pub mod cmd;
+pub mod format;
 pub mod interactive;
 pub mod nix;
+pub mod platform;
+pub mod report;
 pub mod runner;
 pub mod runtime;
-pub mod utils;
 
 fn main() -> Result<()> {
   let opts = Opts::parse();

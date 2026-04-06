@@ -13,17 +13,9 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-/// Runtime analysis and judger execution primitives.
-pub mod analysis;
-/// Artifact realization, store import, and native-module cache helpers.
-pub mod artifact;
-/// High-level problem and contest build entry points.
-pub mod build;
-/// Runtime metadata loading from flakes and exported bundles.
-pub mod metadata;
-/// WASM sandbox execution.
-pub mod sandbox;
-/// Runtime data models shared by analysis and packaging.
-pub mod types;
-/// Ephemeral filesystem workspace management for runtime jobs.
-pub mod workspace;
+/// Returns the default number of worker threads that the current process can use.
+pub fn default_parallelism() -> usize {
+  std::thread::available_parallelism()
+    .map(|parallelism| parallelism.get())
+    .unwrap_or(1)
+}

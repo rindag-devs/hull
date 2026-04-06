@@ -24,9 +24,10 @@ use wasi_common::{
 
 use crate::{
   runner::{self, RunStatus},
-  runtime::cache_native_module,
+  runtime::artifact::cache_native_module,
 };
 
+/// Captured result of executing one WASM module in Hull's sandbox.
 pub struct WasmRunResult {
   pub status: RunStatus,
   pub tick: u64,
@@ -36,6 +37,7 @@ pub struct WasmRunResult {
   pub stderr: Vec<u8>,
 }
 
+/// Runs one WASM module with optional stdin and read-only sandbox files.
 pub fn run_wasm_for_stdio(
   wasm_path: &str,
   stdin_path: Option<&Path>,

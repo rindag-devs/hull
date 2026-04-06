@@ -22,12 +22,15 @@ use rayon::{ThreadPoolBuilder, prelude::*};
 use tracing::info;
 
 use crate::{
+  format::{format_size, format_tick},
   interactive,
-  runtime::{
-    ProblemSpec, RuntimeOptions, RuntimeWorkspace, SubtaskSpec, TestCaseSpec, analyze_problem,
-    load_problem_spec, run_wasm_for_stdio,
-  },
-  utils::{format_size, format_tick},
+  platform::default_parallelism,
+  runtime::analysis::analyze_problem,
+  runtime::artifact::realize_artifact,
+  runtime::metadata::load_problem_spec,
+  runtime::sandbox::run_wasm_for_stdio,
+  runtime::types::{ProblemSpec, RuntimeOptions, SubtaskSpec, TestCaseSpec},
+  runtime::workspace::RuntimeWorkspace,
 };
 
 #[derive(Parser)]
@@ -99,7 +102,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
     generator_args.push(arg.clone());
   }
 
-  let jobs = opts.jobs.unwrap_or_else(num_cpus::get).max(1);
+  let jobs = opts.jobs.unwrap_or_else(default_parallelism).max(1);
 
   let mut problem = load_problem_spec(&opts.problem)?;
   let progress = interactive::create_problem_progress(&problem.name);
@@ -168,7 +171,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
 
     let hacked_case = run_stress_round(&StressRoundContext {
       problem: &problem,
-      generator_wasm: &crate::runtime::realize_artifact(&generator_wasm)?,
+      generator_wasm: &realize_artifact(&generator_wasm)?,
       generator_args_list: &all_generator_args,
       generator_name: &opts.generator,
       tick_limit_override: opts.tick_limit,

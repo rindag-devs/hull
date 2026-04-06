@@ -18,11 +18,14 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use crate::cmd::report::{
+use crate::interactive;
+use crate::report::{
   JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult, print_human_readable_report,
 };
-use crate::interactive;
-use crate::runtime::{RuntimeOptions, RuntimeWorkspace, analyze_problem, load_ad_hoc_problem_spec};
+use crate::runtime::analysis::analyze_problem;
+use crate::runtime::metadata::load_ad_hoc_problem_spec;
+use crate::runtime::types::RuntimeOptions;
+use crate::runtime::workspace::RuntimeWorkspace;
 
 #[derive(Parser)]
 pub struct JudgeOpts {

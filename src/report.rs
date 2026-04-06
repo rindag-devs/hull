@@ -17,12 +17,13 @@ use std::collections::HashMap;
 
 use comfy_table::presets::UTF8_FULL_CONDENSED;
 use comfy_table::{Cell, Color, Table};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-use crate::utils::{format_size, format_tick, to_title_case};
+use crate::format::{format_size, format_tick, to_title_case};
 
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+/// Serializable CLI judging summary shared by `judge` and `self-eval` commands.
 pub struct JudgeCliReport {
   pub score: f64,
   pub full_score: f64,
@@ -30,16 +31,18 @@ pub struct JudgeCliReport {
   pub test_case_results: HashMap<String, JudgeCliTestCaseResult>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+/// One subtask entry in a CLI judging summary.
 pub struct JudgeCliSubtaskResult {
   pub full_score: f64,
   pub scaled_score: f64,
   pub statuses: Vec<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+/// One testcase entry in a CLI judging summary.
 pub struct JudgeCliTestCaseResult {
   pub status: String,
   pub score: f64,
@@ -47,6 +50,7 @@ pub struct JudgeCliTestCaseResult {
   pub memory: u64,
 }
 
+/// Collapses a list of testcase statuses into one representative subtask status.
 pub fn get_subtask_status(statuses: &[String]) -> String {
   if statuses.is_empty() {
     return "N/A".to_string();
@@ -70,6 +74,7 @@ fn colorize_status(status: &str, text: &str) -> Cell {
   }
 }
 
+/// Prints a `JudgeCliReport` as human-readable tables.
 pub fn print_human_readable_report(report: &JudgeCliReport) {
   println!(
     "Overall Score: {:.3} / {:.3}\n",

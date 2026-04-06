@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use console::Style;
 
-use crate::utils::{format_duration_ms, format_size, format_tick, to_title_case};
+use crate::format::{format_duration_ms, format_size, format_tick, to_title_case};
 
 pub struct LogWriter;
 

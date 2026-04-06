@@ -28,7 +28,7 @@ use wasi_common::{
 use crate::{
   nix::{BuildCommand, get_flake_url},
   runner,
-  runtime::cache_native_module,
+  runtime::artifact::cache_native_module,
 };
 
 #[derive(Parser)]
@@ -155,7 +155,7 @@ pub fn run(opts: &RunOpts) -> Result<()> {
 
   // Show status if requested
   if opts.show_status {
-    use crate::utils::{format_size, format_tick};
+    use crate::format::{format_size, format_tick};
     eprintln!("Status: {:?}", result.status);
     eprintln!("Exit code: {}", result.exit_code);
     eprintln!("Tick: {}", format_tick(result.tick));

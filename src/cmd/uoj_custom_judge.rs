@@ -19,12 +19,17 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
+use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::Deserialize;
 
-use crate::runtime::{
-  JudgeReport, ProgramSpec, RuntimeWorkspace, SelfEvalJudgeProblemSpec, SolutionSpec, TestCaseSpec,
-  aggregate_subtask_results, load_selfeval_problem_spec, run_judge, run_prepare_solution,
+use crate::platform::default_parallelism;
+use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
+use crate::runtime::metadata::load_selfeval_problem_spec;
+use crate::runtime::types::{
+  JudgeReport, PreparedSolutionSpec, ProblemSpec, ProgramSpec, SelfEvalJudgeProblemSpec,
+  SelfEvalJudgeTestCaseSpec, SolutionSpec, TestCaseSpec,
 };
+use crate::runtime::workspace::RuntimeWorkspace;
 
 #[derive(Parser)]
 pub struct UojCustomJudgeOpts {
@@ -48,6 +53,9 @@ pub struct UojCustomJudgeOpts {
 
   #[arg(long)]
   pub ticks_per_ms: f64,
+
+  #[arg(long, default_value_t = 0usize)]
+  pub threads: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -61,10 +69,23 @@ struct TestCaseExecution {
   report: JudgeReport,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum TestCaseState {
+  Pending,
+  Running,
+  Done,
+}
+
+#[derive(Clone, Debug)]
+struct SubtaskExecutionPlan {
+  test_case_names: Vec<String>,
+  next_index: usize,
+  skip_remaining: bool,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UojCustomInputValidation {
-  #[serde(default)]
   traits: BTreeMap<String, bool>,
 }
 
@@ -136,6 +157,7 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
     &runtime_problem,
     &participant_solution,
     &prepared_solution,
+    opts.threads,
   )?;
 
   write_uoj_result(
@@ -172,7 +194,7 @@ fn copy_submission_source(
 ) -> Result<String> {
   let extension = hull_language.split('.').rev().collect::<Vec<_>>().join(".");
   let target = workspace
-    .root
+    .root()
     .join("participant-src")
     .join(format!("{problem_name}.{extension}"));
   if let Some(parent) = target.parent() {
@@ -190,8 +212,8 @@ fn copy_submission_source(
 fn make_runtime_problem(
   problem: &SelfEvalJudgeProblemSpec,
   participant_source: &str,
-) -> crate::runtime::ProblemSpec {
-  crate::runtime::ProblemSpec {
+) -> ProblemSpec {
+  ProblemSpec {
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
@@ -225,49 +247,219 @@ fn execute_unique_test_cases(
   workspace: &RuntimeWorkspace,
   problem: &SelfEvalJudgeProblemSpec,
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
-  runtime_problem: &crate::runtime::ProblemSpec,
+  runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
-  prepared_solution: &crate::runtime::PreparedSolutionSpec,
+  prepared_solution: &PreparedSolutionSpec,
+  threads: usize,
 ) -> Result<BTreeMap<String, TestCaseExecution>> {
   let mut reports = BTreeMap::new();
-  for subtask in &problem.subtasks {
-    let matching_test_cases = problem
-      .test_cases
-      .iter()
-      .filter(|test_case| {
-        subtask.traits.iter().all(|(name, value)| {
-          runtime_traits
-            .get(&test_case.name)
-            .and_then(|traits| traits.get(name))
-            == Some(value)
+  let mut test_case_states = problem
+    .test_cases
+    .iter()
+    .map(|test_case| (test_case.name.clone(), TestCaseState::Pending))
+    .collect::<BTreeMap<_, _>>();
+  let mut subtask_plans = problem
+    .subtasks
+    .iter()
+    .map(|subtask| SubtaskExecutionPlan {
+      test_case_names: problem
+        .test_cases
+        .iter()
+        .filter(|test_case| {
+          subtask.traits.iter().all(|(name, value)| {
+            runtime_traits
+              .get(&test_case.name)
+              .and_then(|traits| traits.get(name))
+              == Some(value)
+          })
         })
-      })
-      .collect::<Vec<_>>();
+        .map(|test_case| test_case.name.clone())
+        .collect(),
+      next_index: 0,
+      skip_remaining: false,
+    })
+    .collect::<Vec<_>>();
+  let thread_count = resolve_thread_count(threads);
+  let thread_pool = build_uoj_custom_thread_pool(thread_count)?;
 
-    for test_case in matching_test_cases {
-      if reports.contains_key(&test_case.name) {
-        continue;
+  // Advance all subtasks in lockstep. Each wave only schedules the current
+  // frontier testcase of each subtask, which preserves min-subtask skip
+  // semantics while still allowing independent frontiers to run in parallel.
+  while !subtask_plans.iter().all(subtask_plan_finished) {
+    let ready_test_case_names =
+      collect_ready_test_case_names(problem, &subtask_plans, &test_case_states, &reports);
+    if ready_test_case_names.is_empty() {
+      break;
+    }
+
+    for test_case_name in &ready_test_case_names {
+      test_case_states.insert(test_case_name.clone(), TestCaseState::Running);
+    }
+
+    let executions = evaluate_test_case_batch(
+      bundle_root,
+      workspace,
+      problem,
+      runtime_traits,
+      runtime_problem,
+      participant_solution,
+      prepared_solution,
+      &ready_test_case_names,
+      thread_pool.as_ref(),
+    )?;
+
+    for (test_case_name, execution) in executions {
+      test_case_states.insert(test_case_name.clone(), TestCaseState::Done);
+      reports.insert(test_case_name, execution);
+    }
+
+    advance_subtask_plans(problem, &mut subtask_plans, &reports);
+  }
+
+  Ok(reports)
+}
+
+fn resolve_thread_count(threads: usize) -> usize {
+  if threads > 0 {
+    return threads;
+  }
+  default_parallelism()
+}
+
+fn subtask_plan_finished(subtask_plan: &SubtaskExecutionPlan) -> bool {
+  subtask_plan.skip_remaining || subtask_plan.next_index >= subtask_plan.test_case_names.len()
+}
+
+fn collect_ready_test_case_names(
+  problem: &SelfEvalJudgeProblemSpec,
+  subtask_plans: &[SubtaskExecutionPlan],
+  test_case_states: &BTreeMap<String, TestCaseState>,
+  reports: &BTreeMap<String, TestCaseExecution>,
+) -> Vec<String> {
+  let mut ready = BTreeSet::new();
+
+  for (subtask_index, subtask_plan) in subtask_plans.iter().enumerate() {
+    if subtask_plan_finished(subtask_plan) {
+      continue;
+    }
+
+    let test_case_name = &subtask_plan.test_case_names[subtask_plan.next_index];
+    let Some(state) = test_case_states.get(test_case_name) else {
+      continue;
+    };
+
+    match state {
+      TestCaseState::Pending => {
+        ready.insert(test_case_name.clone());
       }
+      TestCaseState::Running => {}
+      TestCaseState::Done => {
+        // This testcase has already been judged once globally. The subtask may
+        // still depend on that result, but we must not enqueue it again.
+        if let Some(execution) = reports.get(test_case_name) {
+          let subtask = &problem.subtasks[subtask_index];
+          if subtask.scoring_method == "min" && execution.report.score <= 0.0 {
+            continue;
+          }
+        }
+      }
+    }
+  }
 
-      let execution = evaluate_test_case(
-        bundle_root,
-        workspace,
-        problem,
-        runtime_traits,
-        runtime_problem,
-        participant_solution,
-        prepared_solution,
-        test_case,
-      )?;
-      let is_zero_score = execution.report.score <= 0.0;
-      reports.insert(test_case.name.clone(), execution);
+  ready.into_iter().collect()
+}
 
-      if subtask.scoring_method == "min" && is_zero_score {
+fn advance_subtask_plans(
+  problem: &SelfEvalJudgeProblemSpec,
+  subtask_plans: &mut [SubtaskExecutionPlan],
+  reports: &BTreeMap<String, TestCaseExecution>,
+) {
+  for (subtask_index, subtask_plan) in subtask_plans.iter_mut().enumerate() {
+    if subtask_plan.skip_remaining {
+      continue;
+    }
+
+    while subtask_plan.next_index < subtask_plan.test_case_names.len() {
+      let test_case_name = &subtask_plan.test_case_names[subtask_plan.next_index];
+      let Some(execution) = reports.get(test_case_name) else {
+        break;
+      };
+
+      // Reuse globally cached testcase results when a testcase belongs to
+      // multiple subtasks, but only let a zero-score stop the current min
+      // subtask instead of accidentally skipping other subtasks.
+      subtask_plan.next_index += 1;
+      if problem.subtasks[subtask_index].scoring_method == "min" && execution.report.score <= 0.0 {
+        subtask_plan.skip_remaining = true;
         break;
       }
     }
   }
-  Ok(reports)
+}
+
+fn evaluate_test_case_batch(
+  bundle_root: &Path,
+  workspace: &RuntimeWorkspace,
+  problem: &SelfEvalJudgeProblemSpec,
+  runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
+  runtime_problem: &ProblemSpec,
+  participant_solution: &SolutionSpec,
+  prepared_solution: &PreparedSolutionSpec,
+  test_case_names: &[String],
+  thread_pool: Option<&ThreadPool>,
+) -> Result<BTreeMap<String, TestCaseExecution>> {
+  let test_cases = test_case_names
+    .iter()
+    .map(|test_case_name| {
+      problem
+        .test_cases
+        .iter()
+        .find(|test_case| test_case.name == *test_case_name)
+        .with_context(|| format!("Missing test case `{test_case_name}` in uojCustom scheduling"))
+    })
+    .collect::<Result<Vec<_>>>()?;
+
+  let evaluate = || {
+    test_cases
+      .par_iter()
+      .map(|test_case| {
+        let execution = evaluate_test_case(
+          bundle_root,
+          workspace,
+          problem,
+          runtime_traits,
+          runtime_problem,
+          participant_solution,
+          prepared_solution,
+          test_case,
+        )?;
+        Ok((test_case.name.clone(), execution))
+      })
+      .collect::<Result<BTreeMap<_, _>>>()
+  };
+
+  if test_cases.len() <= 1 {
+    return evaluate();
+  }
+
+  if let Some(thread_pool) = thread_pool {
+    return thread_pool.install(evaluate);
+  }
+
+  evaluate()
+}
+
+fn build_uoj_custom_thread_pool(thread_count: usize) -> Result<Option<ThreadPool>> {
+  if thread_count <= 1 {
+    return Ok(None);
+  }
+
+  Ok(Some(
+    ThreadPoolBuilder::new()
+      .num_threads(thread_count)
+      .build()
+      .context("Failed to build uojCustom thread pool")?,
+  ))
 }
 
 fn evaluate_test_case(
@@ -275,12 +467,12 @@ fn evaluate_test_case(
   workspace: &RuntimeWorkspace,
   problem: &SelfEvalJudgeProblemSpec,
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
-  runtime_problem: &crate::runtime::ProblemSpec,
+  runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
-  prepared_solution: &crate::runtime::PreparedSolutionSpec,
-  test_case: &crate::runtime::SelfEvalJudgeTestCaseSpec,
+  prepared_solution: &PreparedSolutionSpec,
+  test_case: &SelfEvalJudgeTestCaseSpec,
 ) -> Result<TestCaseExecution> {
-  let local_case_dir = workspace.root.join("uoj-data").join(&test_case.name);
+  let local_case_dir = workspace.root().join("uoj-data").join(&test_case.name);
   fs::create_dir_all(&local_case_dir)?;
 
   let input_path = local_case_dir.join("input");
@@ -370,7 +562,7 @@ fn write_uoj_result(
 ) -> Result<()> {
   let traits = runtime_traits;
 
-  let scoring_problem = crate::runtime::ProblemSpec {
+  let scoring_problem = ProblemSpec {
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,

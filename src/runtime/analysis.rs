@@ -1078,7 +1078,7 @@ fn resolve_test_input(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::runtime::{ArtifactSpec, JudgerSpec, ProgramSpec, SubtaskSpec};
+  use crate::runtime::types::{ArtifactSpec, JudgerSpec, ProgramSpec, SubtaskSpec};
 
   fn judge_report(status: &str, score: f64) -> JudgeReport {
     JudgeReport {
@@ -1185,7 +1185,9 @@ mod tests {
     let report = ValidationReport {
       status: "valid".to_string(),
       message: String::new(),
-      ..ValidationReport::default()
+      reader_trace_stacks: Vec::new(),
+      reader_trace_tree: serde_json::json!({}),
+      traits: BTreeMap::new(),
     };
 
     assert!(ensure_test_case_input_is_valid("sample-1", &report).is_ok());
@@ -1196,7 +1198,9 @@ mod tests {
     let report = ValidationReport {
       status: "invalid".to_string(),
       message: "out of range".to_string(),
-      ..ValidationReport::default()
+      reader_trace_stacks: Vec::new(),
+      reader_trace_tree: serde_json::json!({}),
+      traits: BTreeMap::new(),
     };
 
     let err = ensure_test_case_input_is_valid("sample-1", &report)

@@ -394,7 +394,7 @@ mod tests {
   use std::collections::{BTreeMap, HashSet};
   use std::thread;
 
-  use crate::runtime::{
+  use crate::runtime::types::{
     CheckerTestSpec, JudgerSpec, ProblemSpec, ProgramSpec, SolutionSpec, SubtaskSpec, TestCaseSpec,
     ValidatorTestSpec,
   };

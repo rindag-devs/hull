@@ -101,7 +101,7 @@ pub enum RunStatus {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub struct RunResult {
   pub status: RunStatus,
   pub tick: u64,
