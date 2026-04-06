@@ -648,7 +648,9 @@ where
   }
 }
 
-fn run_validator(
+/// Runs the validator WASM on one concrete input file and returns the parsed
+/// validation report produced on stderr.
+pub fn run_validator(
   problem: &ProblemSpec,
   input_path: &Path,
   reader_trace_level: u8,

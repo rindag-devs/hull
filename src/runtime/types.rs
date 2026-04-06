@@ -59,7 +59,7 @@ pub struct ArtifactSpec {
   pub drv_path: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 /// Source or artifact description for a problem tool such as a checker or generator.
 pub struct ProgramSpec {
@@ -76,7 +76,7 @@ pub struct JudgerSpec {
   pub judge_runner: ArtifactSpec,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 /// One configured solution in a problem specification.
 pub struct SolutionSpec {
@@ -194,9 +194,17 @@ pub struct BundleJudgeProblemSpec {
   pub tick_limit: u64,
   pub memory_limit: u64,
   pub full_score: f64,
+  #[serde(default = "default_program_spec")]
+  pub checker: ProgramSpec,
+  #[serde(default = "default_program_spec")]
+  pub validator: ProgramSpec,
   pub judger: JudgerSpec,
+  #[serde(default)]
+  pub main_correct_solution: String,
   pub test_cases: Vec<BundleJudgeTestCaseSpec>,
   pub subtasks: Vec<SubtaskSpec>,
+  #[serde(default)]
+  pub solutions: Vec<SolutionSpec>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -217,6 +225,13 @@ pub struct BundleLanguageSpec {
   pub display_name: String,
   pub file_name_suffix: String,
   pub hull_language: String,
+}
+
+fn default_program_spec() -> ProgramSpec {
+  ProgramSpec {
+    src: None,
+    wasm: None,
+  }
 }
 
 #[derive(Clone, Debug, Serialize)]

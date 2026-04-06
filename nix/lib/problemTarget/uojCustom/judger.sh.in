@@ -22,9 +22,11 @@ submission_file="$work_path/answer.code"
 submission_language=$(awk '$1=="answer_language" { print $2; exit }' "$work_path/submission.conf")
 self_dest=main
 work_dest=work
+data_dest=data
 bundle_root_in_chroot="/$self_dest/hull-bundle"
 submission_file_in_chroot="/$work_dest/answer.code"
 work_path_in_chroot="/$work_dest"
+data_path_in_chroot="/$data_dest"
 inner_result_dir="$work_path/hull-uoj-result"
 rm -rf "$inner_result_dir"
 mkdir -p "$inner_result_dir"
@@ -49,11 +51,12 @@ sync_inner_status() {
 "$runtime_nix_dir/store@NIX_USER_CHROOT_STORE_SUFFIX@" \
   -m "$self_dir:$self_dest" \
   -m "$work_path:$work_dest" \
+  -m "$data_path:$data_dest" \
   -p XDG_CACHE_HOME \
   -p HOME \
   -n "$runtime_nix_dir" \
   -- "@CUSTOM_JUDGE_RUNNER_RELATIVE@" \
-  "$bundle_root_in_chroot" "$submission_file_in_chroot" "$submission_language" "$work_path_in_chroot" "$result_path_in_chroot" &
+  "$bundle_root_in_chroot" "$submission_file_in_chroot" "$submission_language" "$work_path_in_chroot" "$result_path_in_chroot" "$data_path_in_chroot" &
 judge_pid="$!"
 sync_inner_status "$judge_pid" &
 sync_pid="$!"
@@ -62,5 +65,8 @@ status="$?"
 wait "$sync_pid" 2>/dev/null || true
 if [ -d "$inner_result_dir" ]; then
   cp -f "$inner_result_dir"/* "$result_path"/ 2>/dev/null || true
+  if [ -f "$inner_result_dir/std_output.txt" ]; then
+    cp -f "$inner_result_dir/std_output.txt" "$work_path/std_output.txt" 2>/dev/null || true
+  fi
 fi
 exit "$status"

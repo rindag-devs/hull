@@ -74,17 +74,35 @@
         tickLimit = problem.tickLimit;
         memoryLimit = problem.memoryLimit;
         fullScore = problem.fullScore;
+        checker = {
+          src = null;
+          wasm = {
+            path = builtins.unsafeDiscardStringContext (toString problem.checker.wasm);
+            drvPath = null;
+          };
+        };
+        validator = {
+          src = null;
+          wasm = {
+            path = builtins.unsafeDiscardStringContext (toString problem.validator.wasm);
+            drvPath = null;
+          };
+        };
         judger = {
           prepareSolutionRunner = {
             path = builtins.unsafeDiscardStringContext (lib.getExe problem.judger.prepareSolution);
             drvPath = null;
           };
-          generateOutputsRunner = null;
+          generateOutputsRunner = {
+            path = builtins.unsafeDiscardStringContext (lib.getExe problem.judger.generateOutputs);
+            drvPath = null;
+          };
           judgeRunner = {
             path = builtins.unsafeDiscardStringContext (lib.getExe problem.judger.judge);
             drvPath = null;
           };
         };
+        mainCorrectSolution = problem.mainCorrectSolution.name;
         testCases = map (tc: {
           name = tc.name;
           tickLimit = tc.tickLimit;
@@ -97,10 +115,36 @@
           scoringMethod = st.scoringMethod;
           traits = st.traits;
         }) problem.subtasks;
+        solutions = map (solution: {
+          name = solution.name;
+          src = "solutions/${baseNameOf (toString solution.src)}";
+          mainCorrectSolution = solution.mainCorrectSolution;
+          participantVisibility = solution.participantVisibility;
+        }) (builtins.attrValues problem.solutions);
       };
 
+      mkOfficialDataArchive =
+        tc:
+        pkgs.runCommandLocal "hull-uojCustom-official-data-${problem.name}-${tc.name}.tar" { } ''
+            tmpdir=$(mktemp -d)
+            cleanup() {
+              rm -rf "$tmpdir"
+            }
+            trap cleanup EXIT
+
+          mkdir -p "$tmpdir/outputs"
+          cp ${
+            pkgs.writeText "${tc.name}-official-data-metadata.json" (
+              builtins.toJSON { testCaseName = tc.name; }
+            )
+          } "$tmpdir/official-data-metadata.json"
+          cp ${pkgs.writeText "${tc.name}-input-validation.json" (builtins.toJSON tc.inputValidation)} "$tmpdir/validation.json"
+          cp -r ${tc.data.outputs}/. "$tmpdir/outputs/"
+          tar -C "$tmpdir" -cf "$out" official-data-metadata.json validation.json outputs
+        '';
+
       judgeBundleData = pkgs.runCommandLocal "hull-uojCustom-data-${problem.name}" { } ''
-        mkdir -p $out/data
+        mkdir -p $out/data $out/solutions
         cp ${pkgs.writeText "hull-uojCustom-${problem.name}.json" (builtins.toJSON metadata)} \
           $out/problem.json
         cp ${
@@ -118,10 +162,12 @@
           ''
             mkdir -p ${pathPrefix}
             cp ${tc.data.input} ${pathPrefix}/input
-            cp -r ${tc.data.outputs} ${pathPrefix}/outputs
-            cp ${pkgs.writeText "${tc.name}-input-validation.json" (builtins.toJSON tc.inputValidation)} ${pathPrefix}/input-validation.json
+            cp ${mkOfficialDataArchive tc} ${pathPrefix}/official-data.tar
           ''
         ) allTestCases}
+        ${lib.concatMapStringsSep "\n" (solution: ''
+          cp ${solution.src} $out/solutions/${baseNameOf (toString solution.src)}
+        '') (builtins.attrValues problem.solutions)}
       '';
 
       nixUserChrootStorePath = builtins.unsafeDiscardStringContext (toString nixUserChroot);
@@ -132,6 +178,7 @@
         submission_language="$3"
         uoj_work_path="$4"
         uoj_result_path="$5"
+        uoj_data_path="$6"
         exec ${lib.getExe hullPkgs.default} uoj-custom-judge \
           --bundle-root "$bundle_root" \
           --metadata-path "problem.json" \
@@ -139,6 +186,7 @@
           --submission-language "$submission_language" \
           --uoj-work-path "$uoj_work_path" \
           --uoj-result-path "$uoj_result_path" \
+          --uoj-data-path "$uoj_data_path" \
           --threads ${toString judgerThreads} \
           --ticks-per-ms ${toString ticksPerMs}
       '';
@@ -152,7 +200,10 @@
           hullPkgs.default
           hullPkgs.wasm32-wasi-wasip1.clang
           nixUserChroot
+          problem.checker.wasm
+          problem.validator.wasm
           problem.judger.prepareSolution
+          problem.judger.generateOutputs
           problem.judger.judge
         ];
       };
@@ -162,6 +213,10 @@
         n_tests ${toString (builtins.length allTestCases)}
         n_ex_tests 0
         n_sample_tests 0
+        input_pre input
+        input_suf txt
+        output_pre output
+        output_suf txt
         judger_time_limit 1048576
         judger_memory_limit 1048576
         judger_output_limit 2047

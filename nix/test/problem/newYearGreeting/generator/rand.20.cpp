@@ -16,9 +16,9 @@ void generator_main() {
   std::cout << "encode\n";
 
   while (S.size() != CNT) {
-    uint32_t x = gen.rnd.next<uint32_t>(0, k_max);
+    auto x = gen.rnd.next<uint32_t>(0, k_max);
     if (S.contains(x)) continue;
-    uint32_t y = gen.rnd.next<uint32_t>(0, CNT - 1);
+    auto y = gen.rnd.next<uint32_t>(0, CNT - 1);
     S.insert(x);
     std::cout << x << ' ' << y << '\n';
   }

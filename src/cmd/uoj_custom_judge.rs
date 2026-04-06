@@ -14,23 +14,30 @@
 */
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::ffi::OsStr;
 use std::fs;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
+use base64::Engine;
 use clap::Parser;
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::Deserialize;
+use tar::{Archive, Builder, Header};
 
 use crate::platform::default_parallelism;
-use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
+use crate::runtime::analysis::{
+  aggregate_subtask_results, run_generate_outputs, run_judge, run_prepare_solution, run_validator,
+};
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
 use crate::runtime::types::{
-  BundleJudgeProblemSpec, BundleJudgeTestCaseSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec,
-  ProgramSpec, SolutionSpec, TestCaseSpec,
+  BundleJudgeProblemSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec, SolutionSpec,
+  TestCaseSpec, ValidationReport,
 };
 use crate::runtime::workspace::RuntimeWorkspace;
 
+/// Runs the `uojCustom` compatibility judger inside a packaged UOJ problem.
 #[derive(Parser)]
 pub struct UojCustomJudgeOpts {
   #[arg(long)]
@@ -50,6 +57,9 @@ pub struct UojCustomJudgeOpts {
 
   #[arg(long)]
   pub uoj_result_path: String,
+
+  #[arg(long)]
+  pub uoj_data_path: String,
 
   #[arg(long)]
   pub ticks_per_ms: f64,
@@ -90,19 +100,58 @@ struct JudgeProgressTracker {
   total: usize,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct UojCustomInputValidation {
+#[derive(Clone, Debug)]
+struct TestCaseMaterial {
+  name: String,
+  input_path: PathBuf,
+  official_data_tar_path: PathBuf,
+  tick_limit: u64,
+  memory_limit: u64,
+  groups: Vec<String>,
   traits: BTreeMap<String, bool>,
 }
 
+#[derive(Clone, Debug)]
+struct LoadedOfficialData {
+  execution_name: String,
+  validation: ValidationReport,
+}
+
+#[derive(Clone, Debug, Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OfficialDataMetadata {
+  test_case_name: String,
+}
+
+#[derive(Clone, Debug)]
+struct ProblemConf {
+  n_ex_tests: usize,
+  input_pre: String,
+  input_suf: String,
+  output_pre: String,
+  output_suf: String,
+}
+
+const OFFICIAL_DATA_TAR_NAME: &str = "official-data.tar";
+const OFFICIAL_DATA_TEXT_PREFIX: &str = "HULL_OFFICIAL_DATA_TAR_BASE64_V1\n";
+
+/// Executes one UOJ judging request using Hull's `uojCustom` runtime.
 pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
+  let result = run_impl(opts);
+  if let Err(err) = &result {
+    let message = format!("{err:#}");
+    let _ = write_internal_error_result(Path::new(&opts.uoj_result_path), &message);
+  }
+  result
+}
+
+fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
   let bundle_root = PathBuf::from(&opts.bundle_root);
   let result_path = PathBuf::from(&opts.uoj_result_path);
+  let uoj_work_path = PathBuf::from(&opts.uoj_work_path);
+  let uoj_data_path = PathBuf::from(&opts.uoj_data_path);
   let problem = load_bundle_judge_problem_spec(&bundle_root, &opts.metadata_path)?;
-  let mut progress = JudgeProgressTracker::new(result_path.clone(), problem.test_cases.len());
   let language_config = load_language_config(&bundle_root)?;
-  let runtime_traits = load_runtime_traits(&bundle_root, &problem)?;
 
   let hull_language = match language_config
     .uoj_to_hull_language_map
@@ -129,6 +178,7 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
     problem.name,
     std::process::id()
   )))?;
+  let mut progress = JudgeProgressTracker::new(result_path.clone(), 0);
 
   let participant_source = copy_submission_source(
     &workspace,
@@ -137,7 +187,18 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
     &hull_language,
   )?;
 
-  let runtime_problem = make_runtime_problem(&problem, &participant_source);
+  let runtime_problem = make_runtime_problem(&bundle_root, &problem, &participant_source);
+  let main_correct_solution = runtime_problem
+    .solutions
+    .iter()
+    .find(|solution| solution.main_correct_solution)
+    .cloned()
+    .with_context(|| {
+      format!(
+        "Problem `{}` is missing main correct solution metadata",
+        problem.name
+      )
+    })?;
   let participant_solution = runtime_problem
     .solutions
     .first()
@@ -157,13 +218,32 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
       }
     };
 
+  let is_hack_mode = uoj_work_path.join("hack_input.txt").is_file();
+  if is_hack_mode {
+    let std_prepared_solution =
+      run_prepare_solution(&runtime_problem, &main_correct_solution, &workspace)
+        .context("Failed to prepare main correct solution for hack evaluation")?;
+    return run_hack_mode(
+      opts,
+      &problem,
+      &runtime_problem,
+      &workspace,
+      &participant_solution,
+      &prepared_solution,
+      &main_correct_solution,
+      &std_prepared_solution,
+    );
+  }
+
+  let test_cases = load_normal_test_cases(&bundle_root, &uoj_data_path, &problem)?;
+  let runtime_traits = collect_runtime_traits(&test_cases);
+  progress = JudgeProgressTracker::new(result_path.clone(), test_cases.len());
+
   progress.write_test_progress()?;
 
   let test_case_reports = execute_unique_test_cases(
-    &bundle_root,
     &workspace,
-    &problem,
-    &runtime_traits,
+    &test_cases,
     &runtime_problem,
     &participant_solution,
     &prepared_solution,
@@ -171,13 +251,41 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
     &mut progress,
   )?;
 
-  write_uoj_result(
+  write_result(
     &result_path,
     &problem,
+    &test_cases,
     &runtime_traits,
     &test_case_reports,
     opts.ticks_per_ms,
   )
+}
+
+/// Writes a `Judgment Failed` style UOJ result file for an internal `uojCustom`
+/// failure so the user can see the error without reading judge logs.
+fn write_internal_error_result(result_path: &Path, message: &str) -> Result<()> {
+  let escaped = xml_escape(message);
+  fs::create_dir_all(result_path).with_context(|| {
+    format!(
+      "Failed to create UOJ result directory for internal error {}",
+      result_path.display()
+    )
+  })?;
+  fs::write(result_path.join("cur_status.txt"), "Judgment failed")
+    .with_context(|| format!("Failed to write status file into {}", result_path.display()))?;
+  fs::write(
+    result_path.join("result.txt"),
+    format!(
+      "error Judgment Failed\ndetails\n<error>{}</error>\n",
+      escaped
+    ),
+  )
+  .with_context(|| {
+    format!(
+      "Failed to write internal error result to {}",
+      result_path.display()
+    )
+  })
 }
 
 fn load_language_config(bundle_root: &Path) -> Result<UojCustomLanguageConfig> {
@@ -220,41 +328,59 @@ fn copy_submission_source(
   Ok(target.to_string_lossy().into_owned())
 }
 
-fn make_runtime_problem(problem: &BundleJudgeProblemSpec, participant_source: &str) -> ProblemSpec {
+fn make_runtime_problem(
+  bundle_root: &Path,
+  problem: &BundleJudgeProblemSpec,
+  participant_source: &str,
+) -> ProblemSpec {
   ProblemSpec {
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
     full_score: problem.full_score,
-    checker: ProgramSpec {
-      src: None,
-      wasm: None,
-    },
-    validator: ProgramSpec {
-      src: None,
-      wasm: None,
-    },
+    checker: problem.checker.clone(),
+    validator: problem.validator.clone(),
     generators: BTreeMap::new(),
-    main_correct_solution: "__unused".to_string(),
+    main_correct_solution: problem.main_correct_solution.clone(),
     judger: problem.judger.clone(),
     test_cases: Vec::new(),
     subtasks: problem.subtasks.clone(),
-    solutions: vec![SolutionSpec {
-      name: "uojCustom".to_string(),
-      src: participant_source.to_string(),
-      main_correct_solution: false,
-      participant_visibility: true,
-    }],
+    solutions: problem
+      .solutions
+      .iter()
+      .map(|solution| {
+        if solution.main_correct_solution {
+          SolutionSpec {
+            src: resolve_bundle_path(bundle_root, &solution.src),
+            ..solution.clone()
+          }
+        } else {
+          SolutionSpec {
+            name: "uojCustom".to_string(),
+            src: participant_source.to_string(),
+            main_correct_solution: false,
+            participant_visibility: true,
+          }
+        }
+      })
+      .collect(),
     checker_tests: Vec::new(),
     validator_tests: Vec::new(),
   }
 }
 
+fn resolve_bundle_path(bundle_root: &Path, path: &str) -> String {
+  let candidate = Path::new(path);
+  if candidate.is_absolute() {
+    path.to_string()
+  } else {
+    bundle_root.join(candidate).to_string_lossy().into_owned()
+  }
+}
+
 fn execute_unique_test_cases(
-  bundle_root: &Path,
   workspace: &RuntimeWorkspace,
-  problem: &BundleJudgeProblemSpec,
-  runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
+  test_cases: &[TestCaseMaterial],
   runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
   prepared_solution: &PreparedSolutionSpec,
@@ -262,17 +388,16 @@ fn execute_unique_test_cases(
   progress: &mut JudgeProgressTracker,
 ) -> Result<BTreeMap<String, TestCaseExecution>> {
   let mut reports = BTreeMap::new();
-  let mut test_case_states = problem
-    .test_cases
+  let mut test_case_states = test_cases
     .iter()
     .map(|test_case| (test_case.name.clone(), TestCaseState::Pending))
     .collect::<BTreeMap<_, _>>();
-  let mut subtask_plans = problem
+  let runtime_traits = collect_runtime_traits(test_cases);
+  let mut subtask_plans = runtime_problem
     .subtasks
     .iter()
     .map(|subtask| SubtaskExecutionPlan {
-      test_case_names: problem
-        .test_cases
+      test_case_names: test_cases
         .iter()
         .filter(|test_case| {
           subtask.traits.iter().all(|(name, value)| {
@@ -297,7 +422,7 @@ fn execute_unique_test_cases(
   // still letting wide machines reach meaningful parallelism.
   while !subtask_plans.iter().all(subtask_plan_finished) {
     let ready_test_case_names = collect_ready_test_case_names(
-      problem,
+      &runtime_problem.subtasks,
       &subtask_plans,
       &test_case_states,
       &reports,
@@ -314,10 +439,8 @@ fn execute_unique_test_cases(
     progress.write_test_progress()?;
 
     let executions = evaluate_test_case_batch(
-      bundle_root,
       workspace,
-      problem,
-      runtime_traits,
+      test_cases,
       runtime_problem,
       participant_solution,
       prepared_solution,
@@ -333,7 +456,7 @@ fn execute_unique_test_cases(
     progress.running = 0;
     progress.write_test_progress()?;
 
-    advance_subtask_plans(problem, &mut subtask_plans, &reports);
+    advance_subtask_plans(&runtime_problem.subtasks, &mut subtask_plans, &reports);
   }
 
   Ok(reports)
@@ -385,7 +508,7 @@ fn subtask_plan_finished(subtask_plan: &SubtaskExecutionPlan) -> bool {
 }
 
 fn collect_ready_test_case_names(
-  problem: &BundleJudgeProblemSpec,
+  subtasks: &[crate::runtime::types::SubtaskSpec],
   subtask_plans: &[SubtaskExecutionPlan],
   test_case_states: &BTreeMap<String, TestCaseState>,
   reports: &BTreeMap<String, TestCaseExecution>,
@@ -420,7 +543,7 @@ fn collect_ready_test_case_names(
           // This testcase has already been judged once globally. The subtask may
           // still depend on that result, but we must not enqueue it again.
           if let Some(execution) = reports.get(test_case_name) {
-            let subtask = &problem.subtasks[subtask_index];
+            let subtask = &subtasks[subtask_index];
             if subtask.scoring_method == "min" && execution.report.score <= 0.0 {
               break;
             }
@@ -436,7 +559,7 @@ fn collect_ready_test_case_names(
 }
 
 fn advance_subtask_plans(
-  problem: &BundleJudgeProblemSpec,
+  subtasks: &[crate::runtime::types::SubtaskSpec],
   subtask_plans: &mut [SubtaskExecutionPlan],
   reports: &BTreeMap<String, TestCaseExecution>,
 ) {
@@ -455,7 +578,7 @@ fn advance_subtask_plans(
       // multiple subtasks, but only let a zero-score stop the current min
       // subtask instead of accidentally skipping other subtasks.
       subtask_plan.next_index += 1;
-      if problem.subtasks[subtask_index].scoring_method == "min" && execution.report.score <= 0.0 {
+      if subtasks[subtask_index].scoring_method == "min" && execution.report.score <= 0.0 {
         subtask_plan.skip_remaining = true;
         break;
       }
@@ -464,10 +587,8 @@ fn advance_subtask_plans(
 }
 
 fn evaluate_test_case_batch(
-  bundle_root: &Path,
   workspace: &RuntimeWorkspace,
-  problem: &BundleJudgeProblemSpec,
-  runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
+  test_cases: &[TestCaseMaterial],
   runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
   prepared_solution: &PreparedSolutionSpec,
@@ -477,8 +598,7 @@ fn evaluate_test_case_batch(
   let test_cases = test_case_names
     .iter()
     .map(|test_case_name| {
-      problem
-        .test_cases
+      test_cases
         .iter()
         .find(|test_case| test_case.name == *test_case_name)
         .with_context(|| format!("Missing test case `{test_case_name}` in uojCustom scheduling"))
@@ -490,10 +610,7 @@ fn evaluate_test_case_batch(
       .par_iter()
       .map(|test_case| {
         let execution = evaluate_test_case(
-          bundle_root,
           workspace,
-          problem,
-          runtime_traits,
           runtime_problem,
           participant_solution,
           prepared_solution,
@@ -529,67 +646,34 @@ fn build_uoj_custom_thread_pool(thread_count: usize) -> Result<Option<ThreadPool
 }
 
 fn evaluate_test_case(
-  bundle_root: &Path,
   workspace: &RuntimeWorkspace,
-  problem: &BundleJudgeProblemSpec,
-  runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
   prepared_solution: &PreparedSolutionSpec,
-  test_case: &BundleJudgeTestCaseSpec,
+  test_case: &TestCaseMaterial,
 ) -> Result<TestCaseExecution> {
   let local_case_dir = workspace.root().join("uoj-data").join(&test_case.name);
   fs::create_dir_all(&local_case_dir)?;
 
   let input_path = local_case_dir.join("input");
-  fs::copy(
-    bundle_root.join("data").join(&test_case.name).join("input"),
-    &input_path,
-  )
-  .with_context(|| {
+  fs::copy(&test_case.input_path, &input_path).with_context(|| {
     format!(
-      "Failed to copy bundled input for {}:{}",
-      problem.name, test_case.name
+      "Failed to copy testcase input {} to {}",
+      test_case.input_path.display(),
+      input_path.display()
     )
   })?;
 
   let official_outputs_dir = local_case_dir.join("outputs");
-  fs::create_dir_all(&official_outputs_dir)?;
-  let bundled_outputs_dir = bundle_root
-    .join("data")
-    .join(&test_case.name)
-    .join("outputs");
-  for entry in fs::read_dir(&bundled_outputs_dir).with_context(|| {
-    format!(
-      "Failed to read bundled outputs directory for {}:{}",
-      problem.name, test_case.name
-    )
-  })? {
-    let entry = entry?;
-    let file_type = entry.file_type()?;
-    if !file_type.is_file() {
-      continue;
-    }
-    fs::copy(entry.path(), official_outputs_dir.join(entry.file_name())).with_context(|| {
-      format!(
-        "Failed to copy bundled output for {}:{}:{}",
-        problem.name,
-        test_case.name,
-        entry.file_name().to_string_lossy()
-      )
-    })?;
-  }
+  let loaded = unpack_official_data_tar(&test_case.official_data_tar_path, &official_outputs_dir)?;
 
   let runtime_test_case = TestCaseSpec {
-    name: test_case.name.clone(),
+    name: loaded.execution_name,
     input_file: Some(input_path.to_string_lossy().into_owned()),
     tick_limit: test_case.tick_limit,
     memory_limit: test_case.memory_limit,
     groups: test_case.groups.clone(),
-    traits: runtime_traits
-      .get(&test_case.name)
-      .cloned()
-      .unwrap_or_default(),
+    traits: loaded.validation.traits,
     generator: None,
     arguments: None,
   };
@@ -619,9 +703,10 @@ fn write_compile_error_result(result_path: &Path, message: &str) -> Result<()> {
   })
 }
 
-fn write_uoj_result(
+fn write_result(
   result_path: &Path,
   problem: &BundleJudgeProblemSpec,
+  test_cases: &[TestCaseMaterial],
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   test_case_reports: &BTreeMap<String, TestCaseExecution>,
   ticks_per_ms: f64,
@@ -633,19 +718,12 @@ fn write_uoj_result(
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
     full_score: problem.full_score,
-    checker: ProgramSpec {
-      src: None,
-      wasm: None,
-    },
-    validator: ProgramSpec {
-      src: None,
-      wasm: None,
-    },
+    checker: problem.checker.clone(),
+    validator: problem.validator.clone(),
     generators: BTreeMap::new(),
-    main_correct_solution: "__unused".to_string(),
+    main_correct_solution: problem.main_correct_solution.clone(),
     judger: problem.judger.clone(),
-    test_cases: problem
-      .test_cases
+    test_cases: test_cases
       .iter()
       .map(|test_case| TestCaseSpec {
         name: test_case.name.clone(),
@@ -653,7 +731,10 @@ fn write_uoj_result(
         tick_limit: test_case.tick_limit,
         memory_limit: test_case.memory_limit,
         groups: test_case.groups.clone(),
-        traits: test_case.traits.clone(),
+        traits: runtime_traits
+          .get(&test_case.name)
+          .cloned()
+          .unwrap_or_default(),
         generator: None,
         arguments: None,
       })
@@ -672,14 +753,13 @@ fn write_uoj_result(
 
   let mut total_score = 0.0;
   let mut max_memory = 0u64;
-  let mut details = String::with_capacity(problem.test_cases.len().saturating_mul(160));
+  let mut details = String::with_capacity(test_cases.len().saturating_mul(160));
   details.push_str("<tests>");
   let mut seen_test_cases = BTreeSet::new();
   let mut emitted_test_index = 0usize;
 
-  for (index, subtask) in problem.subtasks.iter().enumerate() {
-    let matching = problem
-      .test_cases
+  for (index, subtask) in scoring_problem.subtasks.iter().enumerate() {
+    let matching = test_cases
       .iter()
       .filter(|test_case| {
         subtask
@@ -727,8 +807,7 @@ fn write_uoj_result(
       max_memory = max_memory.max(execution.report.memory);
 
       let point_score = if subtask.scoring_method == "sum" {
-        let case_count = problem
-          .test_cases
+        let case_count = test_cases
           .iter()
           .filter(|test_case| {
             subtask.traits.iter().all(|(name, value)| {
@@ -801,32 +880,478 @@ fn write_uoj_result(
   .with_context(|| format!("Failed to write UOJ result to {}", result_path.display()))
 }
 
-fn load_runtime_traits(
+fn load_normal_test_cases(
   bundle_root: &Path,
+  uoj_data_path: &Path,
   problem: &BundleJudgeProblemSpec,
-) -> Result<BTreeMap<String, BTreeMap<String, bool>>> {
-  let mut traits = BTreeMap::new();
-  for test_case in &problem.test_cases {
-    let validation_path = bundle_root
-      .join("data")
-      .join(&test_case.name)
-      .join("input-validation.json");
-    let content = fs::read_to_string(&validation_path).with_context(|| {
+) -> Result<Vec<TestCaseMaterial>> {
+  let mut test_cases = problem
+    .test_cases
+    .iter()
+    .map(|test_case| TestCaseMaterial {
+      name: test_case.name.clone(),
+      input_path: bundle_root.join("data").join(&test_case.name).join("input"),
+      official_data_tar_path: bundle_root
+        .join("data")
+        .join(&test_case.name)
+        .join(OFFICIAL_DATA_TAR_NAME),
+      tick_limit: test_case.tick_limit,
+      memory_limit: test_case.memory_limit,
+      groups: test_case.groups.clone(),
+      traits: test_case.traits.clone(),
+    })
+    .collect::<Vec<_>>();
+
+  let problem_conf_path = uoj_data_path.join("problem.conf");
+  if !problem_conf_path.is_file() {
+    return Ok(test_cases);
+  }
+  let problem_conf = load_problem_conf(&problem_conf_path)?;
+  let probe_dir = std::env::temp_dir().join(format!(
+    "hull-uoj-custom-extra-test-probe-{}-{}",
+    std::process::id(),
+    problem.name
+  ));
+  if probe_dir.exists() {
+    fs::remove_dir_all(&probe_dir).with_context(|| {
       format!(
-        "Failed to read bundled input validation for {}:{}",
-        problem.name, test_case.name
+        "Failed to reset extra test probe directory {}",
+        probe_dir.display()
       )
     })?;
-    let validation: UojCustomInputValidation =
-      serde_json::from_str(&content).with_context(|| {
+  }
+  fs::create_dir_all(&probe_dir)?;
+  for ex_index in 1..=problem_conf.n_ex_tests {
+    let input_path = uoj_data_path.join(format!(
+      "ex_{}{}.{}",
+      problem_conf.input_pre, ex_index, problem_conf.input_suf
+    ));
+    let official_data_tar_path = uoj_data_path.join(format!(
+      "ex_{}{}.{}",
+      problem_conf.output_pre, ex_index, problem_conf.output_suf
+    ));
+    if !input_path.is_file() || !official_data_tar_path.is_file() {
+      continue;
+    }
+    let probe_outputs_dir = probe_dir.join(format!("ex{ex_index}"));
+    let loaded = unpack_official_data_tar(&official_data_tar_path, &probe_outputs_dir)
+      .with_context(|| {
         format!(
-          "Failed to parse bundled input validation for {}:{}",
-          problem.name, test_case.name
+          "Failed to load official data tar for extra test {}",
+          official_data_tar_path.display()
         )
       })?;
-    traits.insert(test_case.name.clone(), validation.traits);
+    test_cases.push(TestCaseMaterial {
+      name: format!("ex{ex_index}"),
+      input_path,
+      official_data_tar_path,
+      tick_limit: problem.tick_limit,
+      memory_limit: problem.memory_limit,
+      groups: Vec::new(),
+      traits: loaded.validation.traits,
+    });
   }
-  Ok(traits)
+
+  if probe_dir.exists() {
+    fs::remove_dir_all(&probe_dir).with_context(|| {
+      format!(
+        "Failed to clean extra test probe directory {}",
+        probe_dir.display()
+      )
+    })?;
+  }
+
+  Ok(test_cases)
+}
+
+fn collect_runtime_traits(
+  test_cases: &[TestCaseMaterial],
+) -> BTreeMap<String, BTreeMap<String, bool>> {
+  test_cases
+    .iter()
+    .map(|test_case| (test_case.name.clone(), test_case.traits.clone()))
+    .collect()
+}
+
+fn load_problem_conf(problem_conf_path: &Path) -> Result<ProblemConf> {
+  let content = fs::read_to_string(problem_conf_path).with_context(|| {
+    format!(
+      "Failed to read UOJ problem.conf {}",
+      problem_conf_path.display()
+    )
+  })?;
+  let mut entries = BTreeMap::new();
+  for line in content.lines() {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+      continue;
+    }
+    let mut parts = trimmed.split_whitespace();
+    let Some(key) = parts.next() else {
+      continue;
+    };
+    entries.insert(key.to_string(), parts.collect::<Vec<_>>().join(" "));
+  }
+  Ok(ProblemConf {
+    n_ex_tests: entries
+      .get("n_ex_tests")
+      .context("problem.conf is missing n_ex_tests")?
+      .parse::<usize>()
+      .context("Failed to parse n_ex_tests in problem.conf")?,
+    input_pre: entries
+      .get("input_pre")
+      .cloned()
+      .context("problem.conf is missing input_pre")?,
+    input_suf: entries
+      .get("input_suf")
+      .cloned()
+      .context("problem.conf is missing input_suf")?,
+    output_pre: entries
+      .get("output_pre")
+      .cloned()
+      .context("problem.conf is missing output_pre")?,
+    output_suf: entries
+      .get("output_suf")
+      .cloned()
+      .context("problem.conf is missing output_suf")?,
+  })
+}
+
+fn unpack_official_data_tar(
+  official_data_tar_path: &Path,
+  official_outputs_dir: &Path,
+) -> Result<LoadedOfficialData> {
+  if official_outputs_dir.exists() {
+    fs::remove_dir_all(official_outputs_dir).with_context(|| {
+      format!(
+        "Failed to reset official outputs directory {}",
+        official_outputs_dir.display()
+      )
+    })?;
+  }
+  fs::create_dir_all(official_outputs_dir)?;
+
+  let tar_bytes = read_official_data_payload(official_data_tar_path)?;
+  let mut archive = Archive::new(Cursor::new(tar_bytes));
+  let mut metadata = None;
+  let mut validation = None;
+  for entry in archive
+    .entries()
+    .context("Failed to iterate official data tar entries")?
+  {
+    let mut entry = entry?;
+    let path = entry.path()?.to_path_buf();
+    if path == Path::new("official-data-metadata.json") {
+      let mut bytes = Vec::new();
+      std::io::Read::read_to_end(&mut entry, &mut bytes)?;
+      metadata = Some(
+        serde_json::from_slice::<OfficialDataMetadata>(&bytes)
+          .context("Failed to parse official-data-metadata.json from official data tar")?,
+      );
+      continue;
+    }
+    if path == Path::new("validation.json") {
+      let mut bytes = Vec::new();
+      std::io::Read::read_to_end(&mut entry, &mut bytes)?;
+      validation = Some(
+        serde_json::from_slice::<ValidationReport>(&bytes)
+          .context("Failed to parse validation.json from official data tar")?,
+      );
+      continue;
+    }
+    if let Ok(relative) = path.strip_prefix("outputs") {
+      if relative.as_os_str().is_empty() {
+        continue;
+      }
+      let target_path = official_outputs_dir.join(relative);
+      if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)?;
+      }
+      entry.unpack(&target_path).with_context(|| {
+        format!(
+          "Failed to unpack official output {} to {}",
+          path.display(),
+          target_path.display()
+        )
+      })?;
+    }
+  }
+
+  Ok(LoadedOfficialData {
+    execution_name: metadata
+      .map(|metadata| metadata.test_case_name)
+      .unwrap_or_else(|| "hack".to_string()),
+    validation: validation.context("official data tar is missing validation.json")?,
+  })
+}
+
+fn pack_official_data_tar(
+  test_case_name: &str,
+  validation: &ValidationReport,
+  outputs_dir: &Path,
+  target_path: &Path,
+) -> Result<()> {
+  if let Some(parent) = target_path.parent() {
+    fs::create_dir_all(parent)?;
+  }
+  let mut builder = Builder::new(Vec::new());
+
+  let validation_bytes = serde_json::to_vec(validation)
+    .context("Failed to serialize validation report into official data tar")?;
+  let metadata_bytes = serde_json::to_vec(&OfficialDataMetadata {
+    test_case_name: test_case_name.to_string(),
+  })
+  .context("Failed to serialize official data metadata into official data tar")?;
+  let mut metadata_header = Header::new_gnu();
+  metadata_header.set_size(metadata_bytes.len() as u64);
+  metadata_header.set_mode(0o644);
+  metadata_header.set_cksum();
+  builder
+    .append_data(
+      &mut metadata_header,
+      "official-data-metadata.json",
+      Cursor::new(metadata_bytes),
+    )
+    .context("Failed to append official-data-metadata.json to official data tar")?;
+  let mut header = Header::new_gnu();
+  header.set_size(validation_bytes.len() as u64);
+  header.set_mode(0o644);
+  header.set_cksum();
+  builder
+    .append_data(
+      &mut header,
+      "validation.json",
+      Cursor::new(validation_bytes),
+    )
+    .context("Failed to append validation.json to official data tar")?;
+  append_outputs_to_tar(&mut builder, outputs_dir, outputs_dir)?;
+  builder
+    .finish()
+    .context("Failed to finalize official data tar")?;
+  let tar_bytes = builder
+    .into_inner()
+    .context("Failed to extract official data tar bytes")?;
+  write_official_data_payload(target_path, &tar_bytes)
+}
+
+fn append_outputs_to_tar(
+  builder: &mut Builder<Vec<u8>>,
+  root_dir: &Path,
+  current_dir: &Path,
+) -> Result<()> {
+  for entry in fs::read_dir(current_dir)
+    .with_context(|| format!("Failed to read outputs directory {}", current_dir.display()))?
+  {
+    let entry = entry?;
+    let path = entry.path();
+    let file_type = entry.file_type()?;
+    if file_type.is_dir() {
+      append_outputs_to_tar(builder, root_dir, &path)?;
+      continue;
+    }
+    if !file_type.is_file() {
+      continue;
+    }
+    let relative = path
+      .strip_prefix(root_dir)
+      .with_context(|| format!("Failed to relativize output path {}", path.display()))?;
+    builder
+      .append_path_with_name(&path, Path::new("outputs").join(relative))
+      .with_context(|| {
+        format!(
+          "Failed to append output file {} to official data tar",
+          path.display()
+        )
+      })?;
+  }
+  Ok(())
+}
+
+fn read_official_data_payload(official_data_path: &Path) -> Result<Vec<u8>> {
+  let payload = fs::read(official_data_path).with_context(|| {
+    format!(
+      "Failed to read official data payload {}",
+      official_data_path.display()
+    )
+  })?;
+  if official_data_path.extension() == Some(OsStr::new("tar")) {
+    return Ok(payload);
+  }
+  let text = String::from_utf8(payload).with_context(|| {
+    format!(
+      "Official data payload {} is neither tar nor UTF-8 armored text",
+      official_data_path.display()
+    )
+  })?;
+  let encoded = text
+    .strip_prefix(OFFICIAL_DATA_TEXT_PREFIX)
+    .with_context(|| {
+      format!(
+        "Official data payload {} is missing armored prefix",
+        official_data_path.display()
+      )
+    })?
+    .replace('\n', "");
+  base64::engine::general_purpose::STANDARD
+    .decode(encoded)
+    .with_context(|| {
+      format!(
+        "Failed to decode armored official data {}",
+        official_data_path.display()
+      )
+    })
+}
+
+fn write_official_data_payload(target_path: &Path, tar_bytes: &[u8]) -> Result<()> {
+  if let Some(parent) = target_path.parent() {
+    fs::create_dir_all(parent)?;
+  }
+  if target_path.extension() == Some(OsStr::new("tar")) {
+    return fs::write(target_path, tar_bytes).with_context(|| {
+      format!(
+        "Failed to write binary official data tar {}",
+        target_path.display()
+      )
+    });
+  }
+  let encoded = base64::engine::general_purpose::STANDARD.encode(tar_bytes);
+  let mut armored = String::with_capacity(OFFICIAL_DATA_TEXT_PREFIX.len() + encoded.len() + 1);
+  armored.push_str(OFFICIAL_DATA_TEXT_PREFIX);
+  for chunk in encoded.as_bytes().chunks(76) {
+    armored.push_str(std::str::from_utf8(chunk).context("Base64 output was not UTF-8")?);
+    armored.push('\n');
+  }
+  fs::write(target_path, armored).with_context(|| {
+    format!(
+      "Failed to write armored official data payload {}",
+      target_path.display()
+    )
+  })
+}
+
+fn run_hack_mode(
+  opts: &UojCustomJudgeOpts,
+  problem: &BundleJudgeProblemSpec,
+  runtime_problem: &ProblemSpec,
+  workspace: &RuntimeWorkspace,
+  participant_solution: &SolutionSpec,
+  prepared_solution: &PreparedSolutionSpec,
+  main_correct_solution: &SolutionSpec,
+  std_prepared_solution: &PreparedSolutionSpec,
+) -> Result<()> {
+  let work_path = Path::new(&opts.uoj_work_path);
+  let result_path = Path::new(&opts.uoj_result_path);
+  let hack_input_path = work_path.join("hack_input.txt");
+  let official_data_tar_path = result_path.join("std_output.txt");
+  let hack_test_case = TestCaseSpec {
+    name: "hack".to_string(),
+    input_file: Some(hack_input_path.to_string_lossy().into_owned()),
+    tick_limit: problem.tick_limit,
+    memory_limit: problem.memory_limit,
+    groups: Vec::new(),
+    traits: BTreeMap::new(),
+    generator: None,
+    arguments: None,
+  };
+
+  let validation =
+    run_validator(runtime_problem, &hack_input_path, 1).context("Failed to validate hack input")?;
+  if validation.status != "valid" {
+    write_hack_input_invalid_result(result_path, &validation.message)?;
+    return Ok(());
+  }
+  let std_test_case = TestCaseSpec {
+    traits: validation.traits.clone(),
+    ..hack_test_case.clone()
+  };
+  let official_outputs_dir = run_generate_outputs(
+    runtime_problem,
+    &std_test_case,
+    &main_correct_solution.name,
+    std_prepared_solution,
+    workspace,
+  )
+  .context("Failed to generate official outputs for hack input")?;
+  pack_official_data_tar(
+    &std_test_case.name,
+    &validation,
+    &official_outputs_dir,
+    &official_data_tar_path,
+  )?;
+
+  let report = run_judge(
+    runtime_problem,
+    &std_test_case,
+    &participant_solution.name,
+    prepared_solution,
+    &official_outputs_dir,
+    workspace,
+  )?;
+  write_hack_result(result_path, &report, opts.ticks_per_ms)
+}
+
+fn write_hack_input_invalid_result(result_path: &Path, message: &str) -> Result<()> {
+  let escaped = xml_escape(message);
+  fs::write(result_path.join("cur_status.txt"), "Invalid hack input").with_context(|| {
+    format!(
+      "Failed to write invalid hack status into {}",
+      result_path.display()
+    )
+  })?;
+  fs::write(
+    result_path.join("result.txt"),
+    format!(
+      "score 0\ntime 0\nmemory 0\ndetails\n<tests><test num=\"1\" score=\"0\" info=\"Invalid Input\" time=\"0\" memory=\"0\"><res>{}</res></test></tests>",
+      escaped
+    ),
+  )
+  .with_context(|| {
+    format!(
+      "Failed to write invalid hack input result to {}",
+      result_path.display()
+    )
+  })
+}
+
+fn write_hack_result(result_path: &Path, report: &JudgeReport, ticks_per_ms: f64) -> Result<()> {
+  let hack_succeeded = report.score < 1.0;
+  let point_score = if hack_succeeded { 0.0 } else { 100.0 };
+  let message = xml_escape(&report.message);
+  let test_xml = if message.is_empty() {
+    format!(
+      "<test num=\"1\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res/></test>",
+      format_score(point_score),
+      xml_escape(&to_uoj_info(&report.status)),
+      tick_to_ms(report.tick, ticks_per_ms),
+      bytes_to_uoj_kb(report.memory)
+    )
+  } else {
+    format!(
+      "<test num=\"1\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
+      format_score(point_score),
+      xml_escape(&to_uoj_info(&report.status)),
+      tick_to_ms(report.tick, ticks_per_ms),
+      bytes_to_uoj_kb(report.memory),
+      message,
+    )
+  };
+
+  fs::write(
+    result_path.join("result.txt"),
+    format!(
+      "score {}\ntime {}\nmemory {}\ndetails\n<tests>{}</tests>",
+      if hack_succeeded { "1" } else { "0" },
+      tick_to_ms(report.tick, ticks_per_ms),
+      bytes_to_uoj_kb(report.memory),
+      test_xml,
+    ),
+  )
+  .with_context(|| {
+    format!(
+      "Failed to write UOJ hack result to {}",
+      result_path.display()
+    )
+  })
 }
 
 fn subtask_status(statuses: &[String], raw_score: f64) -> String {
