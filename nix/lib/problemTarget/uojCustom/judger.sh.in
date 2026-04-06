@@ -4,10 +4,17 @@ main_path="$1"
 work_path="$2"
 result_path="$3"
 data_path="$4"
+
+write_status() {
+  status_text="$1"
+  printf '%s\n' "$status_text" > "$result_path/cur_status.txt"
+}
+
 self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 bundle_dir="$self_dir/hull-bundle"
 runtime_nix_dir="$work_path/hull-nix"
 if [ ! -x "$runtime_nix_dir/store@NIX_USER_CHROOT_STORE_SUFFIX@" ]; then
+  write_status "Extracting runtime bundle"
   mkdir -p "$runtime_nix_dir/store"
   tar -xJf "$bundle_dir/nix-store.tar.xz" -C "$runtime_nix_dir"
 fi
@@ -26,6 +33,19 @@ cache_dir="$work_path/hull-cache"
 mkdir -p "$cache_dir"
 export XDG_CACHE_HOME="$cache_dir"
 export HOME="$work_path"
+sync_inner_status() {
+  inner_status_path="$inner_result_dir/cur_status.txt"
+  while kill -0 "$1" 2>/dev/null; do
+    if [ -f "$inner_status_path" ]; then
+      cp -f "$inner_status_path" "$result_path/cur_status.txt" 2>/dev/null || true
+    fi
+    sleep 0.1
+  done
+  if [ -f "$inner_status_path" ]; then
+    cp -f "$inner_status_path" "$result_path/cur_status.txt" 2>/dev/null || true
+  fi
+}
+
 "$runtime_nix_dir/store@NIX_USER_CHROOT_STORE_SUFFIX@" \
   -m "$self_dir:$self_dest" \
   -m "$work_path:$work_dest" \
@@ -33,8 +53,13 @@ export HOME="$work_path"
   -p HOME \
   -n "$runtime_nix_dir" \
   -- "@CUSTOM_JUDGE_RUNNER_RELATIVE@" \
-  "$bundle_root_in_chroot" "$submission_file_in_chroot" "$submission_language" "$work_path_in_chroot" "$result_path_in_chroot"
+  "$bundle_root_in_chroot" "$submission_file_in_chroot" "$submission_language" "$work_path_in_chroot" "$result_path_in_chroot" &
+judge_pid="$!"
+sync_inner_status "$judge_pid" &
+sync_pid="$!"
+wait "$judge_pid"
 status="$?"
+wait "$sync_pid" 2>/dev/null || true
 if [ -d "$inner_result_dir" ]; then
   cp -f "$inner_result_dir"/* "$result_path"/ 2>/dev/null || true
 fi

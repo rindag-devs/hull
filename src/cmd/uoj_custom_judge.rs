@@ -83,6 +83,13 @@ struct SubtaskExecutionPlan {
   skip_remaining: bool,
 }
 
+struct JudgeProgressTracker {
+  result_path: PathBuf,
+  completed: usize,
+  running: usize,
+  total: usize,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UojCustomInputValidation {
@@ -92,8 +99,8 @@ struct UojCustomInputValidation {
 pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
   let bundle_root = PathBuf::from(&opts.bundle_root);
   let result_path = PathBuf::from(&opts.uoj_result_path);
-
   let problem = load_selfeval_problem_spec(&bundle_root, &opts.metadata_path)?;
+  let mut progress = JudgeProgressTracker::new(result_path.clone(), problem.test_cases.len());
   let language_config = load_language_config(&bundle_root)?;
   let runtime_traits = load_runtime_traits(&bundle_root, &problem)?;
 
@@ -137,6 +144,7 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
     .cloned()
     .context("uojCustom runtime problem must contain one solution")?;
 
+  progress.write_message("Compiling submission")?;
   let prepared_solution =
     match run_prepare_solution(&runtime_problem, &participant_solution, &workspace) {
       Ok(solution) => solution,
@@ -149,6 +157,8 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
       }
     };
 
+  progress.write_test_progress()?;
+
   let test_case_reports = execute_unique_test_cases(
     &bundle_root,
     &workspace,
@@ -158,6 +168,7 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
     &participant_solution,
     &prepared_solution,
     opts.threads,
+    &mut progress,
   )?;
 
   write_uoj_result(
@@ -251,6 +262,7 @@ fn execute_unique_test_cases(
   participant_solution: &SolutionSpec,
   prepared_solution: &PreparedSolutionSpec,
   threads: usize,
+  progress: &mut JudgeProgressTracker,
 ) -> Result<BTreeMap<String, TestCaseExecution>> {
   let mut reports = BTreeMap::new();
   let mut test_case_states = problem
@@ -282,12 +294,18 @@ fn execute_unique_test_cases(
   let thread_count = resolve_thread_count(threads);
   let thread_pool = build_uoj_custom_thread_pool(thread_count)?;
 
-  // Advance all subtasks in lockstep. Each wave only schedules the current
-  // frontier testcase of each subtask, which preserves min-subtask skip
-  // semantics while still allowing independent frontiers to run in parallel.
+  // Advance all subtasks in lockstep. Each wave can schedule up to
+  // `thread_count` pending testcases per subtask, which keeps the extra work
+  // caused by min-subtask zero-score skip bounded by O(thread_count) while
+  // still letting wide machines reach meaningful parallelism.
   while !subtask_plans.iter().all(subtask_plan_finished) {
-    let ready_test_case_names =
-      collect_ready_test_case_names(problem, &subtask_plans, &test_case_states, &reports);
+    let ready_test_case_names = collect_ready_test_case_names(
+      problem,
+      &subtask_plans,
+      &test_case_states,
+      &reports,
+      thread_count,
+    );
     if ready_test_case_names.is_empty() {
       break;
     }
@@ -295,6 +313,8 @@ fn execute_unique_test_cases(
     for test_case_name in &ready_test_case_names {
       test_case_states.insert(test_case_name.clone(), TestCaseState::Running);
     }
+    progress.running = ready_test_case_names.len();
+    progress.write_test_progress()?;
 
     let executions = evaluate_test_case_batch(
       bundle_root,
@@ -312,11 +332,48 @@ fn execute_unique_test_cases(
       test_case_states.insert(test_case_name.clone(), TestCaseState::Done);
       reports.insert(test_case_name, execution);
     }
+    progress.completed = reports.len();
+    progress.running = 0;
+    progress.write_test_progress()?;
 
     advance_subtask_plans(problem, &mut subtask_plans, &reports);
   }
 
   Ok(reports)
+}
+
+impl JudgeProgressTracker {
+  fn new(result_path: PathBuf, total: usize) -> Self {
+    Self {
+      result_path,
+      completed: 0,
+      running: 0,
+      total,
+    }
+  }
+
+  fn write_message(&self, status: &str) -> Result<()> {
+    fs::write(
+      self.result_path.join("cur_status.txt"),
+      format!("{status}\n"),
+    )
+    .with_context(|| {
+      format!(
+        "Failed to write judging progress to {}",
+        self.result_path.display()
+      )
+    })
+  }
+
+  fn write_test_progress(&self) -> Result<()> {
+    let remaining = self
+      .total
+      .saturating_sub(self.completed.saturating_add(self.running));
+    self.write_message(&format!(
+      "Judging tests: completed {}, running {}, remaining {}",
+      self.completed, self.running, remaining
+    ))
+  }
 }
 
 fn resolve_thread_count(threads: usize) -> usize {
@@ -335,6 +392,7 @@ fn collect_ready_test_case_names(
   subtask_plans: &[SubtaskExecutionPlan],
   test_case_states: &BTreeMap<String, TestCaseState>,
   reports: &BTreeMap<String, TestCaseExecution>,
+  window_size: usize,
 ) -> Vec<String> {
   let mut ready = BTreeSet::new();
 
@@ -343,26 +401,37 @@ fn collect_ready_test_case_names(
       continue;
     }
 
-    let test_case_name = &subtask_plan.test_case_names[subtask_plan.next_index];
-    let Some(state) = test_case_states.get(test_case_name) else {
-      continue;
-    };
+    let mut scheduled_for_subtask = 0usize;
+    let mut scan_index = subtask_plan.next_index;
 
-    match state {
-      TestCaseState::Pending => {
-        ready.insert(test_case_name.clone());
-      }
-      TestCaseState::Running => {}
-      TestCaseState::Done => {
-        // This testcase has already been judged once globally. The subtask may
-        // still depend on that result, but we must not enqueue it again.
-        if let Some(execution) = reports.get(test_case_name) {
-          let subtask = &problem.subtasks[subtask_index];
-          if subtask.scoring_method == "min" && execution.report.score <= 0.0 {
-            continue;
+    while scan_index < subtask_plan.test_case_names.len() && scheduled_for_subtask < window_size {
+      let test_case_name = &subtask_plan.test_case_names[scan_index];
+      let Some(state) = test_case_states.get(test_case_name) else {
+        scan_index += 1;
+        continue;
+      };
+
+      match state {
+        TestCaseState::Pending => {
+          ready.insert(test_case_name.clone());
+          scheduled_for_subtask += 1;
+        }
+        TestCaseState::Running => {
+          scheduled_for_subtask += 1;
+        }
+        TestCaseState::Done => {
+          // This testcase has already been judged once globally. The subtask may
+          // still depend on that result, but we must not enqueue it again.
+          if let Some(execution) = reports.get(test_case_name) {
+            let subtask = &problem.subtasks[subtask_index];
+            if subtask.scoring_method == "min" && execution.report.score <= 0.0 {
+              break;
+            }
           }
         }
       }
+
+      scan_index += 1;
     }
   }
 

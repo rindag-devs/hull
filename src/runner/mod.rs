@@ -101,7 +101,9 @@ pub enum RunStatus {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+// This JSON shape is consumed by Nix-side judger scripts such as batch.nix and
+// stdioInteraction.nix, so it must stay camelCase for compatibility.
+#[serde(rename_all = "camelCase")]
 pub struct RunResult {
   pub status: RunStatus,
   pub tick: u64,

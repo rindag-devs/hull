@@ -99,7 +99,7 @@
         }) problem.subtasks;
       };
 
-      selfEvalData = pkgs.runCommandLocal "hull-uojCustom-data-${problem.name}" { } ''
+      judgeBundleData = pkgs.runCommandLocal "hull-uojCustom-data-${problem.name}" { } ''
         mkdir -p $out/data
         cp ${pkgs.writeText "hull-uojCustom-${problem.name}.json" (builtins.toJSON metadata)} \
           $out/problem.json
@@ -151,7 +151,6 @@
           customJudgeRunner
           hullPkgs.default
           hullPkgs.wasm32-wasi-wasip1.clang
-          selfEvalData
           nixUserChroot
           problem.judger.prepareSolution
           problem.judger.judge
@@ -209,7 +208,7 @@
           cp -a --no-preserve=ownership "$store_path" "$tmpdir/hull-bundle/nix/store/"
         done < ${targetClosure}/store-paths
 
-        cp -r ${selfEvalData}/. "$tmpdir/hull-bundle/"
+        cp -r ${judgeBundleData}/. "$tmpdir/hull-bundle/"
         chmod -R u+rwX "$tmpdir/hull-bundle"
         tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
         rm -rf "$tmpdir/hull-bundle/nix/store"
