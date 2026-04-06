@@ -246,7 +246,7 @@
         package_root="$2"
         shift
         shift
-        exec ${lib.getExe hullPkgs.default} self-eval --bundle-root "$bundle_root" --package-root "$package_root" "$@"
+        exec ${lib.getExe hullPkgs.default} cnoi-self-eval --bundle-root "$bundle_root" --package-root "$package_root" "$@"
       '';
 
       selfEvalTargets = [

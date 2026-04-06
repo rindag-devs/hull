@@ -29,15 +29,14 @@ use crate::report::{
   JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult, get_subtask_status,
 };
 use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
-use crate::runtime::metadata::{load_selfeval_contest_spec, load_selfeval_problem_spec};
+use crate::runtime::metadata::{load_bundle_contest_spec, load_bundle_judge_problem_spec};
 use crate::runtime::types::{
-  ProblemSpec, ProgramSpec, SelfEvalJudgeProblemSpec, SelfEvalLanguageSpec, SolutionSpec,
-  TestCaseSpec,
+  BundleJudgeProblemSpec, BundleLanguageSpec, ProblemSpec, ProgramSpec, SolutionSpec, TestCaseSpec,
 };
 use crate::runtime::workspace::RuntimeWorkspace;
 
 #[derive(Parser)]
-pub struct SelfEvalOpts {
+pub struct CnoiSelfEvalOpts {
   /// Participant root directory containing one subdirectory per problem.
   pub participant_root: String,
 
@@ -45,7 +44,7 @@ pub struct SelfEvalOpts {
   #[arg(long)]
   pub json: bool,
 
-  /// Bundle root directory shipped alongside the `selfeval` launcher.
+  /// Bundle root directory shipped alongside the CNOI self eval launcher.
   #[arg(long, hide = true)]
   pub bundle_root: Option<String>,
 
@@ -56,15 +55,15 @@ pub struct SelfEvalOpts {
 
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
-struct SelfEvalCliReport {
+struct CliReport {
   score: f64,
   full_score: f64,
-  problems: Vec<SelfEvalProblemReport>,
+  problems: Vec<ProblemReport>,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
-struct SelfEvalProblemReport {
+struct ProblemReport {
   name: String,
   score: f64,
   full_score: f64,
@@ -74,11 +73,11 @@ struct SelfEvalProblemReport {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SelfEvalInputValidation {
+struct InputValidation {
   traits: BTreeMap<String, bool>,
 }
 
-pub fn run(opts: &SelfEvalOpts) -> Result<()> {
+pub fn run(opts: &CnoiSelfEvalOpts) -> Result<()> {
   let participant_root = PathBuf::from(&opts.participant_root)
     .canonicalize()
     .with_context(|| format!("Failed to find participant root {}", opts.participant_root))?;
@@ -92,7 +91,7 @@ pub fn run(opts: &SelfEvalOpts) -> Result<()> {
     .as_ref()
     .map(PathBuf::from)
     .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| bundle_root.clone()));
-  let contest = load_selfeval_contest_spec(&bundle_root)?;
+  let contest = load_bundle_contest_spec(&bundle_root)?;
 
   let mut overall_score = 0.0;
   let overall_full_score = contest
@@ -103,7 +102,7 @@ pub fn run(opts: &SelfEvalOpts) -> Result<()> {
   let mut problem_reports = Vec::new();
 
   for contest_problem in &contest.problems {
-    let problem = load_selfeval_problem_spec(&bundle_root, &contest_problem.metadata_path)?;
+    let problem = load_bundle_judge_problem_spec(&bundle_root, &contest_problem.metadata_path)?;
     let problem_dir = participant_root.join(&contest_problem.name);
     let source_path =
       find_participant_source(&problem_dir, &contest_problem.name, &contest.languages)?;
@@ -134,7 +133,7 @@ pub fn run(opts: &SelfEvalOpts) -> Result<()> {
     };
 
     overall_score += report.score;
-    problem_reports.push(SelfEvalProblemReport {
+    problem_reports.push(ProblemReport {
       name: problem.name.clone(),
       score: report.score,
       full_score: report.full_score,
@@ -143,7 +142,7 @@ pub fn run(opts: &SelfEvalOpts) -> Result<()> {
     });
   }
 
-  let overall = SelfEvalCliReport {
+  let overall = CliReport {
     score: overall_score,
     full_score: overall_full_score,
     problems: problem_reports,
@@ -152,13 +151,13 @@ pub fn run(opts: &SelfEvalOpts) -> Result<()> {
   if opts.json {
     println!("{}", serde_json::to_string(&overall)?);
   } else {
-    print_selfeval_human_readable_report(&overall);
+    print_human_readable_report(&overall);
   }
 
   Ok(())
 }
 
-fn print_selfeval_human_readable_report(report: &SelfEvalCliReport) {
+fn print_human_readable_report(report: &CliReport) {
   println!(
     "Overall Score: {:.3} / {:.3}\n",
     report.score, report.full_score
@@ -205,12 +204,12 @@ fn print_selfeval_human_readable_report(report: &SelfEvalCliReport) {
 
 fn evaluate_problem(
   package_root: &Path,
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
   source_path: &Path,
   hull_language: &str,
 ) -> Result<JudgeCliReport> {
   let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
-    "hull-selfeval-{}-{}",
+    "hull-cnoi-self-eval-{}-{}",
     problem.name,
     std::process::id()
   )))?;
@@ -225,7 +224,7 @@ fn evaluate_problem(
   }
   fs::copy(source_path, &local_source_path).with_context(|| {
     format!(
-      "Failed to copy participant source {} into selfeval workspace",
+      "Failed to copy participant source {} into CNOI self eval workspace",
       source_path.display()
     )
   })?;
@@ -249,7 +248,7 @@ fn evaluate_problem(
     test_cases: Vec::new(),
     subtasks: problem.subtasks.clone(),
     solutions: vec![SolutionSpec {
-      name: "selfeval".to_string(),
+      name: "cnoi_self_eval".to_string(),
       src: local_source_path.to_string_lossy().into_owned(),
       main_correct_solution: false,
       participant_visibility: true,
@@ -261,7 +260,7 @@ fn evaluate_problem(
     .solutions
     .first()
     .cloned()
-    .expect("selfeval runtime problem must contain one solution");
+    .expect("CNOI self eval runtime problem must contain one solution");
   let prepared_solution =
     run_prepare_solution(&runtime_problem, &participant_solution, &workspace)?;
 
@@ -361,8 +360,8 @@ fn evaluate_problem(
         problem.name, test_case.name
       )
     })?;
-    let validation: SelfEvalInputValidation = serde_json::from_str(&validation_content)
-      .with_context(|| {
+    let validation: InputValidation =
+      serde_json::from_str(&validation_content).with_context(|| {
         format!(
           "Failed to parse sample input validation for {}:{}",
           problem.name, test_case.name
@@ -435,7 +434,7 @@ fn evaluate_problem(
 fn find_participant_source(
   problem_dir: &Path,
   problem_name: &str,
-  languages: &[SelfEvalLanguageSpec],
+  languages: &[BundleLanguageSpec],
 ) -> Result<Option<(PathBuf, String)>> {
   if !problem_dir.exists() {
     return Ok(None);

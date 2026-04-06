@@ -170,17 +170,17 @@ pub struct ContestSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Exported self-eval contest manifest.
-pub struct SelfEvalContestSpec {
+/// Exported bundle judging contest manifest.
+pub struct BundleContestSpec {
   pub name: String,
-  pub problems: Vec<SelfEvalProblemSpec>,
-  pub languages: Vec<SelfEvalLanguageSpec>,
+  pub problems: Vec<BundleProblemSpec>,
+  pub languages: Vec<BundleLanguageSpec>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-/// One problem entry inside a self-eval contest manifest.
-pub struct SelfEvalProblemSpec {
+/// One problem entry inside a bundle judging contest manifest.
+pub struct BundleProblemSpec {
   pub name: String,
   pub full_score: f64,
   pub metadata_path: String,
@@ -188,21 +188,21 @@ pub struct SelfEvalProblemSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Exported judging metadata consumed by `hull uoj-custom-judge` and `self-eval`.
-pub struct SelfEvalJudgeProblemSpec {
+/// Exported judging metadata consumed by `hull uoj-custom-judge` and `bundle-judge`.
+pub struct BundleJudgeProblemSpec {
   pub name: String,
   pub tick_limit: u64,
   pub memory_limit: u64,
   pub full_score: f64,
   pub judger: JudgerSpec,
-  pub test_cases: Vec<SelfEvalJudgeTestCaseSpec>,
+  pub test_cases: Vec<BundleJudgeTestCaseSpec>,
   pub subtasks: Vec<SubtaskSpec>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 /// One testcase entry inside exported judging metadata.
-pub struct SelfEvalJudgeTestCaseSpec {
+pub struct BundleJudgeTestCaseSpec {
   pub name: String,
   pub tick_limit: u64,
   pub memory_limit: u64,
@@ -212,8 +212,8 @@ pub struct SelfEvalJudgeTestCaseSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-/// One language option exposed in a self-eval bundle.
-pub struct SelfEvalLanguageSpec {
+/// One language option exposed in a bundle judging bundle.
+pub struct BundleLanguageSpec {
   pub display_name: String,
   pub file_name_suffix: String,
   pub hull_language: String,

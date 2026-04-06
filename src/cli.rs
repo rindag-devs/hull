@@ -16,8 +16,8 @@
 use clap::{Parser, Subcommand};
 
 use crate::cmd::{
-  build::BuildOpts, build_contest::BuildContestOpts, judge::JudgeOpts, patch::PatchOpts,
-  run::RunOpts, run_wasm::RunWasmOpts, self_eval::SelfEvalOpts, stress::StressOpts,
+  build::BuildOpts, build_contest::BuildContestOpts, cnoi_self_eval::CnoiSelfEvalOpts,
+  judge::JudgeOpts, patch::PatchOpts, run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
   uoj_custom_judge::UojCustomJudgeOpts,
 };
 use crate::interactive::InteractiveMode;
@@ -73,10 +73,10 @@ pub enum Command {
   )]
   RunWasm(RunWasmOpts),
   #[command(
-    about = "Evaluate participant samples offline from an exported bundle",
+    about = "Judge participant samples offline from an exported bundle",
     long_about = "Compile participant sources to WASM with the bundled toolchain, then judge contest samples serially with the bundled Hull runtime and exported judger artifacts."
   )]
-  SelfEval(SelfEvalOpts),
+  CnoiSelfEval(CnoiSelfEvalOpts),
   #[command(
     about = "Search for hacks with generated test cases",
     long_about = "Run a generator repeatedly, build one temporary test case per generated input, judge the selected solutions against the problem's main correct solution, and stop when a non-accepted result is found."

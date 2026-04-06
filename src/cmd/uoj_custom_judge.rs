@@ -24,10 +24,10 @@ use serde::Deserialize;
 
 use crate::platform::default_parallelism;
 use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
-use crate::runtime::metadata::load_selfeval_problem_spec;
+use crate::runtime::metadata::load_bundle_judge_problem_spec;
 use crate::runtime::types::{
-  JudgeReport, PreparedSolutionSpec, ProblemSpec, ProgramSpec, SelfEvalJudgeProblemSpec,
-  SelfEvalJudgeTestCaseSpec, SolutionSpec, TestCaseSpec,
+  BundleJudgeProblemSpec, BundleJudgeTestCaseSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec,
+  ProgramSpec, SolutionSpec, TestCaseSpec,
 };
 use crate::runtime::workspace::RuntimeWorkspace;
 
@@ -99,7 +99,7 @@ struct UojCustomInputValidation {
 pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
   let bundle_root = PathBuf::from(&opts.bundle_root);
   let result_path = PathBuf::from(&opts.uoj_result_path);
-  let problem = load_selfeval_problem_spec(&bundle_root, &opts.metadata_path)?;
+  let problem = load_bundle_judge_problem_spec(&bundle_root, &opts.metadata_path)?;
   let mut progress = JudgeProgressTracker::new(result_path.clone(), problem.test_cases.len());
   let language_config = load_language_config(&bundle_root)?;
   let runtime_traits = load_runtime_traits(&bundle_root, &problem)?;
@@ -220,10 +220,7 @@ fn copy_submission_source(
   Ok(target.to_string_lossy().into_owned())
 }
 
-fn make_runtime_problem(
-  problem: &SelfEvalJudgeProblemSpec,
-  participant_source: &str,
-) -> ProblemSpec {
+fn make_runtime_problem(problem: &BundleJudgeProblemSpec, participant_source: &str) -> ProblemSpec {
   ProblemSpec {
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
@@ -256,7 +253,7 @@ fn make_runtime_problem(
 fn execute_unique_test_cases(
   bundle_root: &Path,
   workspace: &RuntimeWorkspace,
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
@@ -388,7 +385,7 @@ fn subtask_plan_finished(subtask_plan: &SubtaskExecutionPlan) -> bool {
 }
 
 fn collect_ready_test_case_names(
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
   subtask_plans: &[SubtaskExecutionPlan],
   test_case_states: &BTreeMap<String, TestCaseState>,
   reports: &BTreeMap<String, TestCaseExecution>,
@@ -439,7 +436,7 @@ fn collect_ready_test_case_names(
 }
 
 fn advance_subtask_plans(
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
   subtask_plans: &mut [SubtaskExecutionPlan],
   reports: &BTreeMap<String, TestCaseExecution>,
 ) {
@@ -469,7 +466,7 @@ fn advance_subtask_plans(
 fn evaluate_test_case_batch(
   bundle_root: &Path,
   workspace: &RuntimeWorkspace,
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
@@ -534,12 +531,12 @@ fn build_uoj_custom_thread_pool(thread_count: usize) -> Result<Option<ThreadPool
 fn evaluate_test_case(
   bundle_root: &Path,
   workspace: &RuntimeWorkspace,
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   runtime_problem: &ProblemSpec,
   participant_solution: &SolutionSpec,
   prepared_solution: &PreparedSolutionSpec,
-  test_case: &SelfEvalJudgeTestCaseSpec,
+  test_case: &BundleJudgeTestCaseSpec,
 ) -> Result<TestCaseExecution> {
   let local_case_dir = workspace.root().join("uoj-data").join(&test_case.name);
   fs::create_dir_all(&local_case_dir)?;
@@ -624,7 +621,7 @@ fn write_compile_error_result(result_path: &Path, message: &str) -> Result<()> {
 
 fn write_uoj_result(
   result_path: &Path,
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   test_case_reports: &BTreeMap<String, TestCaseExecution>,
   ticks_per_ms: f64,
@@ -806,7 +803,7 @@ fn write_uoj_result(
 
 fn load_runtime_traits(
   bundle_root: &Path,
-  problem: &SelfEvalJudgeProblemSpec,
+  problem: &BundleJudgeProblemSpec,
 ) -> Result<BTreeMap<String, BTreeMap<String, bool>>> {
   let mut traits = BTreeMap::new();
   for test_case in &problem.test_cases {

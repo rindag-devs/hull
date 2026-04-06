@@ -23,7 +23,7 @@ use crate::format::{format_size, format_tick, to_title_case};
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
-/// Serializable CLI judging summary shared by `judge` and `self-eval` commands.
+/// Serializable CLI judging summary shared by `judge` and `cnoi-self-eval`.
 pub struct JudgeCliReport {
   pub score: f64,
   pub full_score: f64,

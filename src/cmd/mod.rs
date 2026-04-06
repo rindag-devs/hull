@@ -15,10 +15,10 @@
 
 pub mod build;
 pub mod build_contest;
+pub mod cnoi_self_eval;
 pub mod judge;
 pub mod patch;
 pub mod run;
 pub mod run_wasm;
-pub mod self_eval;
 pub mod stress;
 pub mod uoj_custom_judge;

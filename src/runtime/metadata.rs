@@ -18,7 +18,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use super::types::{ContestSpec, ProblemSpec, SelfEvalContestSpec, SelfEvalJudgeProblemSpec};
+use super::types::{BundleContestSpec, BundleJudgeProblemSpec, ContestSpec, ProblemSpec};
 use crate::nix::{EvalCommand, get_flake_url};
 
 pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
@@ -82,27 +82,27 @@ pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<Proble
   serde_json::from_str(&output).context("Failed to parse ad-hoc runtime problem metadata JSON")
 }
 
-pub fn load_selfeval_contest_spec(bundle_root: &Path) -> Result<SelfEvalContestSpec> {
+pub fn load_bundle_contest_spec(bundle_root: &Path) -> Result<BundleContestSpec> {
   let manifest_path = bundle_root.join("contest.json");
   let content = fs::read_to_string(&manifest_path).with_context(|| {
     format!(
-      "Failed to read selfeval manifest {}",
+      "Failed to read bundle contest manifest {}",
       manifest_path.display()
     )
   })?;
-  serde_json::from_str(&content).context("Failed to parse selfeval manifest JSON")
+  serde_json::from_str(&content).context("Failed to parse bundle contest manifest JSON")
 }
 
-pub fn load_selfeval_problem_spec(
+pub fn load_bundle_judge_problem_spec(
   bundle_root: &Path,
   relative_path: &str,
-) -> Result<SelfEvalJudgeProblemSpec> {
+) -> Result<BundleJudgeProblemSpec> {
   let metadata_path = bundle_root.join(relative_path);
   let content = fs::read_to_string(&metadata_path).with_context(|| {
     format!(
-      "Failed to read selfeval problem metadata {}",
+      "Failed to read bundle judging problem metadata {}",
       metadata_path.display()
     )
   })?;
-  serde_json::from_str(&content).context("Failed to parse selfeval problem metadata JSON")
+  serde_json::from_str(&content).context("Failed to parse bundle judging problem metadata JSON")
 }
