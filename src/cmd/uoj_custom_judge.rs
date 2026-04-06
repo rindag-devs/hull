@@ -675,8 +675,10 @@ fn write_uoj_result(
 
   let mut total_score = 0.0;
   let mut max_memory = 0u64;
-  let mut details = String::from("<tests>\n");
+  let mut details = String::with_capacity(problem.test_cases.len().saturating_mul(160));
+  details.push_str("<tests>");
   let mut seen_test_cases = BTreeSet::new();
+  let mut emitted_test_index = 0usize;
 
   for (index, subtask) in problem.subtasks.iter().enumerate() {
     let matching = problem
@@ -697,8 +699,8 @@ fn write_uoj_result(
 
     let status = subtask_status(&subtask_reports[index].statuses, raw_subtask_score);
     details.push_str(&format!(
-      "<subtask num=\"{}\" score=\"{}\" info=\"{}\">\n",
-      index + 1,
+      "<subtask num=\"{}\" score=\"{}\" info=\"{}\">",
+      index,
       format_score(scaled_subtask_score),
       xml_escape(&status)
     ));
@@ -711,14 +713,17 @@ fn write_uoj_result(
         continue;
       }
 
+      let compact_test_num = compact_uoj_extra_test_num(emitted_test_index);
+      emitted_test_index += 1;
+
       if skip_rest {
         continue;
       }
 
       let Some(execution) = test_case_reports.get(&test_case_name) else {
         details.push_str(&format!(
-          "<test num=\"{}\" score=\"0\" info=\"Skipped\" time=\"0\" memory=\"0\">\n<res></res>\n</test>\n",
-          xml_escape(&test_case_name)
+          "<test num=\"{}\" score=\"0\" info=\"Skipped\" time=\"0\" memory=\"0\"/>",
+          compact_test_num
         ));
         continue;
       };
@@ -743,25 +748,37 @@ fn write_uoj_result(
         execution.report.score * subtask.full_score * 100.0
       };
 
-      details.push_str(&format!(
-        "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\">\n<res>{}</res>\n</test>\n",
-        xml_escape(&test_case_name),
-        format_score(point_score),
-        xml_escape(&to_uoj_info(&execution.report.status)),
-        tick_to_ms(execution.report.tick, ticks_per_ms),
-        bytes_to_uoj_kb(execution.report.memory),
-        xml_escape(&execution.report.message)
-      ));
+      let message = xml_escape(&execution.report.message);
+      if message.is_empty() {
+        details.push_str(&format!(
+          "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res/></test>",
+          compact_test_num,
+          format_score(point_score),
+          xml_escape(&to_uoj_info(&execution.report.status)),
+          tick_to_ms(execution.report.tick, ticks_per_ms),
+          bytes_to_uoj_kb(execution.report.memory)
+        ));
+      } else {
+        details.push_str(&format!(
+          "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
+          compact_test_num,
+          format_score(point_score),
+          xml_escape(&to_uoj_info(&execution.report.status)),
+          tick_to_ms(execution.report.tick, ticks_per_ms),
+          bytes_to_uoj_kb(execution.report.memory),
+          message,
+        ));
+      }
 
       if should_skip_remaining && execution.report.score <= 0.0 {
         skip_rest = true;
       }
     }
 
-    details.push_str("</subtask>\n");
+    details.push_str("</subtask>");
   }
 
-  details.push_str("</tests>\n");
+  details.push_str("</tests>");
 
   let total_time_ms = if ticks_per_ms <= 0.0 {
     0
@@ -860,6 +877,22 @@ fn format_score(score: f64) -> String {
   } else {
     format!("{:.6}", score)
   }
+}
+
+fn compact_uoj_extra_test_num(mut index: usize) -> String {
+  const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let base = ALPHABET.len();
+  let mut encoded = Vec::new();
+
+  loop {
+    encoded.push(ALPHABET[index % base] as char);
+    if index < base {
+      break;
+    }
+    index = index / base - 1;
+  }
+
+  encoded.iter().rev().collect()
 }
 
 fn xml_escape(text: &str) -> String {
