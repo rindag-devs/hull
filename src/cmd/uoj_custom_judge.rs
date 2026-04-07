@@ -74,11 +74,6 @@ struct UojCustomLanguageConfig {
   uoj_to_hull_language_map: HashMap<String, Option<String>>,
 }
 
-#[derive(Clone)]
-struct TestCaseExecution {
-  report: JudgeReport,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum TestCaseState {
   Pending,
@@ -87,10 +82,17 @@ enum TestCaseState {
 }
 
 #[derive(Clone, Debug)]
-struct SubtaskExecutionPlan {
+struct SubtaskSchedule {
   test_case_names: Vec<String>,
+  scoring_method: String,
   next_index: usize,
-  skip_remaining: bool,
+  skipped: bool,
+}
+
+#[derive(Clone, Debug)]
+struct SchedulerState {
+  test_case_states: BTreeMap<String, TestCaseState>,
+  subtask_schedules: Vec<SubtaskSchedule>,
 }
 
 struct JudgeProgressTracker {
@@ -131,6 +133,8 @@ struct ProblemConf {
   output_pre: String,
   output_suf: String,
 }
+
+type TestCaseTraitsMap = BTreeMap<String, BTreeMap<String, bool>>;
 
 const OFFICIAL_DATA_TAR_NAME: &str = "official-data.tar";
 const OFFICIAL_DATA_TEXT_PREFIX: &str = "HULL_OFFICIAL_DATA_TAR_BASE64_V1\n";
@@ -351,7 +355,14 @@ fn make_runtime_problem(
       .map(|solution| {
         if solution.main_correct_solution {
           SolutionSpec {
-            src: resolve_bundle_path(bundle_root, &solution.src),
+            src: if Path::new(&solution.src).is_absolute() {
+              solution.src.clone()
+            } else {
+              bundle_root
+                .join(&solution.src)
+                .to_string_lossy()
+                .into_owned()
+            },
             ..solution.clone()
           }
         } else {
@@ -369,15 +380,6 @@ fn make_runtime_problem(
   }
 }
 
-fn resolve_bundle_path(bundle_root: &Path, path: &str) -> String {
-  let candidate = Path::new(path);
-  if candidate.is_absolute() {
-    path.to_string()
-  } else {
-    bundle_root.join(candidate).to_string_lossy().into_owned()
-  }
-}
-
 fn execute_unique_test_cases(
   workspace: &RuntimeWorkspace,
   test_cases: &[TestCaseMaterial],
@@ -386,55 +388,32 @@ fn execute_unique_test_cases(
   prepared_solution: &PreparedSolutionSpec,
   threads: usize,
   progress: &mut JudgeProgressTracker,
-) -> Result<BTreeMap<String, TestCaseExecution>> {
+) -> Result<BTreeMap<String, JudgeReport>> {
   let mut reports = BTreeMap::new();
-  let mut test_case_states = test_cases
-    .iter()
-    .map(|test_case| (test_case.name.clone(), TestCaseState::Pending))
-    .collect::<BTreeMap<_, _>>();
-  let runtime_traits = collect_runtime_traits(test_cases);
-  let mut subtask_plans = runtime_problem
-    .subtasks
-    .iter()
-    .map(|subtask| SubtaskExecutionPlan {
-      test_case_names: test_cases
-        .iter()
-        .filter(|test_case| {
-          subtask.traits.iter().all(|(name, value)| {
-            runtime_traits
-              .get(&test_case.name)
-              .and_then(|traits| traits.get(name))
-              == Some(value)
-          })
-        })
-        .map(|test_case| test_case.name.clone())
-        .collect(),
-      next_index: 0,
-      skip_remaining: false,
-    })
-    .collect::<Vec<_>>();
-  let thread_count = resolve_thread_count(threads);
+  let thread_count = if threads > 0 {
+    threads
+  } else {
+    default_parallelism()
+  };
   let thread_pool = build_uoj_custom_thread_pool(thread_count)?;
 
-  // Advance all subtasks in lockstep. Each wave can schedule up to
-  // `thread_count` pending testcases per subtask, which keeps the extra work
-  // caused by min-subtask zero-score skip bounded by O(thread_count) while
-  // still letting wide machines reach meaningful parallelism.
-  while !subtask_plans.iter().all(subtask_plan_finished) {
-    let ready_test_case_names = collect_ready_test_case_names(
-      &runtime_problem.subtasks,
-      &subtask_plans,
-      &test_case_states,
-      &reports,
-      thread_count,
-    );
+  let runtime_traits = collect_runtime_traits(test_cases);
+  let mut scheduler = SchedulerState::new(test_cases, &runtime_problem.subtasks, &runtime_traits);
+
+  while !scheduler.is_finished() {
+    let ready_test_case_names = scheduler.collect_ready_test_case_names(thread_count);
     if ready_test_case_names.is_empty() {
-      break;
+      scheduler.mark_irrelevant_pending_test_cases_done();
+      if scheduler.is_finished() {
+        break;
+      }
+      return Err(anyhow!(
+        "uojCustom scheduler reached a dead end with unfinished active subtasks"
+      ));
     }
 
-    for test_case_name in &ready_test_case_names {
-      test_case_states.insert(test_case_name.clone(), TestCaseState::Running);
-    }
+    scheduler.mark_running(&ready_test_case_names);
+    progress.completed = scheduler.completed_count();
     progress.running = ready_test_case_names.len();
     progress.write_test_progress()?;
 
@@ -448,15 +427,15 @@ fn execute_unique_test_cases(
       thread_pool.as_ref(),
     )?;
 
-    for (test_case_name, execution) in executions {
-      test_case_states.insert(test_case_name.clone(), TestCaseState::Done);
-      reports.insert(test_case_name, execution);
+    scheduler.finish_batch(&ready_test_case_names, &executions);
+    for (test_case_name, report) in executions {
+      reports.insert(test_case_name, report);
     }
-    progress.completed = reports.len();
+
+    scheduler.mark_irrelevant_pending_test_cases_done();
+    progress.completed = scheduler.completed_count();
     progress.running = 0;
     progress.write_test_progress()?;
-
-    advance_subtask_plans(&runtime_problem.subtasks, &mut subtask_plans, &reports);
   }
 
   Ok(reports)
@@ -496,93 +475,168 @@ impl JudgeProgressTracker {
   }
 }
 
-fn resolve_thread_count(threads: usize) -> usize {
-  if threads > 0 {
-    return threads;
+impl SchedulerState {
+  fn new(
+    test_cases: &[TestCaseMaterial],
+    subtasks: &[crate::runtime::types::SubtaskSpec],
+    runtime_traits: &TestCaseTraitsMap,
+  ) -> Self {
+    let test_case_states = test_cases
+      .iter()
+      .map(|test_case| (test_case.name.clone(), TestCaseState::Pending))
+      .collect::<BTreeMap<_, _>>();
+    let subtask_schedules = subtasks
+      .iter()
+      .map(|subtask| SubtaskSchedule {
+        test_case_names: test_cases
+          .iter()
+          .filter(|test_case| {
+            test_case_matches_traits(&test_case.name, &subtask.traits, runtime_traits)
+          })
+          .map(|test_case| test_case.name.clone())
+          .collect(),
+        scoring_method: subtask.scoring_method.clone(),
+        next_index: 0,
+        skipped: false,
+      })
+      .collect();
+    Self {
+      test_case_states,
+      subtask_schedules,
+    }
   }
-  default_parallelism()
-}
 
-fn subtask_plan_finished(subtask_plan: &SubtaskExecutionPlan) -> bool {
-  subtask_plan.skip_remaining || subtask_plan.next_index >= subtask_plan.test_case_names.len()
-}
+  fn is_finished(&self) -> bool {
+    self
+      .subtask_schedules
+      .iter()
+      .all(|schedule| schedule.skipped || schedule.next_index >= schedule.test_case_names.len())
+  }
 
-fn collect_ready_test_case_names(
-  subtasks: &[crate::runtime::types::SubtaskSpec],
-  subtask_plans: &[SubtaskExecutionPlan],
-  test_case_states: &BTreeMap<String, TestCaseState>,
-  reports: &BTreeMap<String, TestCaseExecution>,
-  window_size: usize,
-) -> Vec<String> {
-  let mut ready = BTreeSet::new();
+  fn completed_count(&self) -> usize {
+    self
+      .test_case_states
+      .values()
+      .filter(|state| **state == TestCaseState::Done)
+      .count()
+  }
 
-  for (subtask_index, subtask_plan) in subtask_plans.iter().enumerate() {
-    if subtask_plan_finished(subtask_plan) {
-      continue;
+  fn collect_ready_test_case_names(&self, limit: usize) -> Vec<String> {
+    if limit == 0 {
+      return Vec::new();
     }
 
-    let mut scheduled_for_subtask = 0usize;
-    let mut scan_index = subtask_plan.next_index;
+    let mut ready = Vec::new();
+    let mut seen = BTreeSet::new();
 
-    while scan_index < subtask_plan.test_case_names.len() && scheduled_for_subtask < window_size {
-      let test_case_name = &subtask_plan.test_case_names[scan_index];
-      let Some(state) = test_case_states.get(test_case_name) else {
-        scan_index += 1;
-        continue;
-      };
+    let mut scan_indices = self
+      .subtask_schedules
+      .iter()
+      .map(|schedule| schedule.next_index)
+      .collect::<Vec<_>>();
 
-      match state {
-        TestCaseState::Pending => {
-          ready.insert(test_case_name.clone());
-          scheduled_for_subtask += 1;
+    while ready.len() < limit {
+      let mut made_progress = false;
+
+      for (subtask_index, schedule) in self.subtask_schedules.iter().enumerate() {
+        if schedule.skipped {
+          continue;
         }
-        TestCaseState::Running => {
-          scheduled_for_subtask += 1;
-        }
-        TestCaseState::Done => {
-          // This testcase has already been judged once globally. The subtask may
-          // still depend on that result, but we must not enqueue it again.
-          if let Some(execution) = reports.get(test_case_name) {
-            let subtask = &subtasks[subtask_index];
-            if subtask.scoring_method == "min" && execution.report.score <= 0.0 {
-              break;
-            }
+
+        while scan_indices[subtask_index] < schedule.test_case_names.len() {
+          let test_case_name = &schedule.test_case_names[scan_indices[subtask_index]];
+          scan_indices[subtask_index] += 1;
+
+          let Some(state) = self.test_case_states.get(test_case_name) else {
+            continue;
+          };
+          if *state != TestCaseState::Pending {
+            continue;
           }
+
+          if seen.insert(test_case_name.clone()) {
+            ready.push(test_case_name.clone());
+          }
+          made_progress = true;
+          break;
+        }
+
+        if ready.len() >= limit {
+          break;
         }
       }
 
-      scan_index += 1;
-    }
-  }
-
-  ready.into_iter().collect()
-}
-
-fn advance_subtask_plans(
-  subtasks: &[crate::runtime::types::SubtaskSpec],
-  subtask_plans: &mut [SubtaskExecutionPlan],
-  reports: &BTreeMap<String, TestCaseExecution>,
-) {
-  for (subtask_index, subtask_plan) in subtask_plans.iter_mut().enumerate() {
-    if subtask_plan.skip_remaining {
-      continue;
-    }
-
-    while subtask_plan.next_index < subtask_plan.test_case_names.len() {
-      let test_case_name = &subtask_plan.test_case_names[subtask_plan.next_index];
-      let Some(execution) = reports.get(test_case_name) else {
-        break;
-      };
-
-      // Reuse globally cached testcase results when a testcase belongs to
-      // multiple subtasks, but only let a zero-score stop the current min
-      // subtask instead of accidentally skipping other subtasks.
-      subtask_plan.next_index += 1;
-      if subtasks[subtask_index].scoring_method == "min" && execution.report.score <= 0.0 {
-        subtask_plan.skip_remaining = true;
+      if !made_progress {
         break;
       }
     }
+
+    ready
+  }
+
+  fn mark_running(&mut self, test_case_names: &[String]) {
+    for test_case_name in test_case_names {
+      self
+        .test_case_states
+        .insert(test_case_name.clone(), TestCaseState::Running);
+    }
+  }
+
+  fn finish_batch(
+    &mut self,
+    scheduled_test_case_names: &[String],
+    executions: &BTreeMap<String, JudgeReport>,
+  ) {
+    for test_case_name in scheduled_test_case_names {
+      self
+        .test_case_states
+        .insert(test_case_name.clone(), TestCaseState::Done);
+    }
+
+    for schedule in &mut self.subtask_schedules {
+      if schedule.skipped {
+        continue;
+      }
+      while let Some(test_case_name) = schedule.current_test_case_name().cloned() {
+        let Some(state) = self.test_case_states.get(&test_case_name) else {
+          break;
+        };
+        if *state != TestCaseState::Done {
+          break;
+        }
+        schedule.next_index += 1;
+        if schedule.scoring_method == "min"
+          && executions
+            .get(&test_case_name)
+            .is_some_and(|report| report.score <= 0.0)
+        {
+          schedule.skipped = true;
+          break;
+        }
+      }
+    }
+  }
+
+  fn mark_irrelevant_pending_test_cases_done(&mut self) {
+    let active_test_case_names = self
+      .subtask_schedules
+      .iter()
+      .filter(|schedule| !schedule.skipped)
+      .flat_map(|schedule| schedule.test_case_names.iter().skip(schedule.next_index))
+      .cloned()
+      .collect::<BTreeSet<_>>();
+
+    for (test_case_name, state) in &mut self.test_case_states {
+      if *state == TestCaseState::Pending && !active_test_case_names.contains(test_case_name) {
+        *state = TestCaseState::Done;
+      }
+    }
+  }
+}
+
+impl SubtaskSchedule {
+  fn current_test_case_name(&self) -> Option<&String> {
+    self.test_case_names.get(self.next_index)
   }
 }
 
@@ -594,7 +648,7 @@ fn evaluate_test_case_batch(
   prepared_solution: &PreparedSolutionSpec,
   test_case_names: &[String],
   thread_pool: Option<&ThreadPool>,
-) -> Result<BTreeMap<String, TestCaseExecution>> {
+) -> Result<BTreeMap<String, JudgeReport>> {
   let test_cases = test_case_names
     .iter()
     .map(|test_case_name| {
@@ -651,7 +705,7 @@ fn evaluate_test_case(
   participant_solution: &SolutionSpec,
   prepared_solution: &PreparedSolutionSpec,
   test_case: &TestCaseMaterial,
-) -> Result<TestCaseExecution> {
+) -> Result<JudgeReport> {
   let local_case_dir = workspace.root().join("uoj-data").join(&test_case.name);
   fs::create_dir_all(&local_case_dir)?;
 
@@ -665,7 +719,10 @@ fn evaluate_test_case(
   })?;
 
   let official_outputs_dir = local_case_dir.join("outputs");
-  let loaded = unpack_official_data_tar(&test_case.official_data_tar_path, &official_outputs_dir)?;
+  let loaded = load_official_data(
+    &test_case.official_data_tar_path,
+    Some(&official_outputs_dir),
+  )?;
 
   let runtime_test_case = TestCaseSpec {
     name: loaded.execution_name,
@@ -678,15 +735,14 @@ fn evaluate_test_case(
     arguments: None,
   };
 
-  let report = run_judge(
+  run_judge(
     runtime_problem,
     &runtime_test_case,
     &participant_solution.name,
     prepared_solution,
     &official_outputs_dir,
     workspace,
-  )?;
-  Ok(TestCaseExecution { report })
+  )
 }
 
 fn write_compile_error_result(result_path: &Path, message: &str) -> Result<()> {
@@ -707,12 +763,11 @@ fn write_result(
   result_path: &Path,
   problem: &BundleJudgeProblemSpec,
   test_cases: &[TestCaseMaterial],
-  runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
-  test_case_reports: &BTreeMap<String, TestCaseExecution>,
+  runtime_traits: &TestCaseTraitsMap,
+  test_case_reports: &BTreeMap<String, JudgeReport>,
   ticks_per_ms: f64,
 ) -> Result<()> {
   let traits = runtime_traits;
-
   let scoring_problem = ProblemSpec {
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
@@ -744,12 +799,7 @@ fn write_result(
     checker_tests: Vec::new(),
     validator_tests: Vec::new(),
   };
-
-  let report_map = test_case_reports
-    .iter()
-    .map(|(name, execution)| (name.clone(), execution.report.clone()))
-    .collect::<BTreeMap<_, _>>();
-  let subtask_reports = aggregate_subtask_results(&scoring_problem, &report_map, &traits);
+  let subtask_reports = aggregate_subtask_results(&scoring_problem, test_case_reports, traits);
 
   let mut total_score = 0.0;
   let mut max_memory = 0u64;
@@ -758,28 +808,21 @@ fn write_result(
   let mut seen_test_cases = BTreeSet::new();
   let mut emitted_test_index = 0usize;
 
-  for (index, subtask) in scoring_problem.subtasks.iter().enumerate() {
-    let matching = test_cases
-      .iter()
-      .filter(|test_case| {
-        subtask
-          .traits
-          .iter()
-          .all(|(name, value)| traits.get(&test_case.name).and_then(|m| m.get(name)) == Some(value))
-      })
-      .map(|test_case| test_case.name.clone())
-      .collect::<Vec<_>>();
-
+  for (index, subtask) in problem.subtasks.iter().enumerate() {
+    let matching = matching_test_case_names(test_cases, &subtask.traits, traits);
+    let matching_count = matching.len();
     let raw_subtask_score = subtask_reports[index].raw_score;
     let scaled_subtask_score = subtask_reports[index].scaled_score * 100.0;
     total_score += scaled_subtask_score;
 
-    let status = subtask_status(&subtask_reports[index].statuses, raw_subtask_score);
     details.push_str(&format!(
       "<subtask num=\"{}\" score=\"{}\" info=\"{}\">",
       index,
       format_score(scaled_subtask_score),
-      xml_escape(&status)
+      xml_escape(&subtask_status(
+        &subtask_reports[index].statuses,
+        raw_subtask_score
+      ))
     ));
 
     let should_skip_remaining = subtask.scoring_method == "min" && raw_subtask_score <= 0.0;
@@ -797,56 +840,48 @@ fn write_result(
         continue;
       }
 
-      let Some(execution) = test_case_reports.get(&test_case_name) else {
+      let Some(report) = test_case_reports.get(&test_case_name) else {
         details.push_str(&format!(
           "<test num=\"{}\" score=\"0\" info=\"Skipped\" time=\"0\" memory=\"0\"/>",
           compact_test_num
         ));
         continue;
       };
-      max_memory = max_memory.max(execution.report.memory);
+      max_memory = max_memory.max(report.memory);
 
       let point_score = if subtask.scoring_method == "sum" {
-        let case_count = test_cases
-          .iter()
-          .filter(|test_case| {
-            subtask.traits.iter().all(|(name, value)| {
-              traits.get(&test_case.name).and_then(|m| m.get(name)) == Some(value)
-            })
-          })
-          .count();
-        if case_count == 0 {
+        if matching_count == 0 {
           0.0
         } else {
-          execution.report.score * subtask.full_score * 100.0 / case_count as f64
+          report.score * subtask.full_score * 100.0 / matching_count as f64
         }
       } else {
-        execution.report.score * subtask.full_score * 100.0
+        report.score * subtask.full_score * 100.0
       };
 
-      let message = xml_escape(&execution.report.message);
+      let message = xml_escape(&report.message);
       if message.is_empty() {
         details.push_str(&format!(
           "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res/></test>",
           compact_test_num,
           format_score(point_score),
-          xml_escape(&to_uoj_info(&execution.report.status)),
-          tick_to_ms(execution.report.tick, ticks_per_ms),
-          bytes_to_uoj_kb(execution.report.memory)
+          xml_escape(&to_uoj_info(&report.status)),
+          tick_to_ms(report.tick, ticks_per_ms),
+          bytes_to_uoj_kb(report.memory)
         ));
       } else {
         details.push_str(&format!(
           "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
           compact_test_num,
           format_score(point_score),
-          xml_escape(&to_uoj_info(&execution.report.status)),
-          tick_to_ms(execution.report.tick, ticks_per_ms),
-          bytes_to_uoj_kb(execution.report.memory),
+          xml_escape(&to_uoj_info(&report.status)),
+          tick_to_ms(report.tick, ticks_per_ms),
+          bytes_to_uoj_kb(report.memory),
           message,
         ));
       }
 
-      if should_skip_remaining && execution.report.score <= 0.0 {
+      if should_skip_remaining && report.score <= 0.0 {
         skip_rest = true;
       }
     }
@@ -861,7 +896,7 @@ fn write_result(
   } else {
     let max_tick = test_case_reports
       .values()
-      .map(|execution| execution.report.tick)
+      .map(|report| report.tick)
       .max()
       .unwrap_or(0);
     tick_to_ms(max_tick, ticks_per_ms)
@@ -888,39 +923,34 @@ fn load_normal_test_cases(
   let mut test_cases = problem
     .test_cases
     .iter()
-    .map(|test_case| TestCaseMaterial {
-      name: test_case.name.clone(),
-      input_path: bundle_root.join("data").join(&test_case.name).join("input"),
-      official_data_tar_path: bundle_root
+    .map(|test_case| {
+      let official_data_tar_path = bundle_root
         .join("data")
         .join(&test_case.name)
-        .join(OFFICIAL_DATA_TAR_NAME),
-      tick_limit: test_case.tick_limit,
-      memory_limit: test_case.memory_limit,
-      groups: test_case.groups.clone(),
-      traits: test_case.traits.clone(),
+        .join(OFFICIAL_DATA_TAR_NAME);
+      let loaded = load_official_data(&official_data_tar_path, None).with_context(|| {
+        format!(
+          "Failed to read official data header for bundled testcase {}",
+          official_data_tar_path.display()
+        )
+      })?;
+      Ok(TestCaseMaterial {
+        name: test_case.name.clone(),
+        input_path: bundle_root.join("data").join(&test_case.name).join("input"),
+        official_data_tar_path,
+        tick_limit: test_case.tick_limit,
+        memory_limit: test_case.memory_limit,
+        groups: test_case.groups.clone(),
+        traits: loaded.validation.traits,
+      })
     })
-    .collect::<Vec<_>>();
+    .collect::<Result<Vec<_>>>()?;
 
   let problem_conf_path = uoj_data_path.join("problem.conf");
   if !problem_conf_path.is_file() {
     return Ok(test_cases);
   }
   let problem_conf = load_problem_conf(&problem_conf_path)?;
-  let probe_dir = std::env::temp_dir().join(format!(
-    "hull-uoj-custom-extra-test-probe-{}-{}",
-    std::process::id(),
-    problem.name
-  ));
-  if probe_dir.exists() {
-    fs::remove_dir_all(&probe_dir).with_context(|| {
-      format!(
-        "Failed to reset extra test probe directory {}",
-        probe_dir.display()
-      )
-    })?;
-  }
-  fs::create_dir_all(&probe_dir)?;
   for ex_index in 1..=problem_conf.n_ex_tests {
     let input_path = uoj_data_path.join(format!(
       "ex_{}{}.{}",
@@ -933,14 +963,12 @@ fn load_normal_test_cases(
     if !input_path.is_file() || !official_data_tar_path.is_file() {
       continue;
     }
-    let probe_outputs_dir = probe_dir.join(format!("ex{ex_index}"));
-    let loaded = unpack_official_data_tar(&official_data_tar_path, &probe_outputs_dir)
-      .with_context(|| {
-        format!(
-          "Failed to load official data tar for extra test {}",
-          official_data_tar_path.display()
-        )
-      })?;
+    let loaded = load_official_data(&official_data_tar_path, None).with_context(|| {
+      format!(
+        "Failed to read official data header for extra test {}",
+        official_data_tar_path.display()
+      )
+    })?;
     test_cases.push(TestCaseMaterial {
       name: format!("ex{ex_index}"),
       input_path,
@@ -952,21 +980,10 @@ fn load_normal_test_cases(
     });
   }
 
-  if probe_dir.exists() {
-    fs::remove_dir_all(&probe_dir).with_context(|| {
-      format!(
-        "Failed to clean extra test probe directory {}",
-        probe_dir.display()
-      )
-    })?;
-  }
-
   Ok(test_cases)
 }
 
-fn collect_runtime_traits(
-  test_cases: &[TestCaseMaterial],
-) -> BTreeMap<String, BTreeMap<String, bool>> {
+fn collect_runtime_traits(test_cases: &[TestCaseMaterial]) -> TestCaseTraitsMap {
   test_cases
     .iter()
     .map(|test_case| (test_case.name.clone(), test_case.traits.clone()))
@@ -1017,19 +1034,21 @@ fn load_problem_conf(problem_conf_path: &Path) -> Result<ProblemConf> {
   })
 }
 
-fn unpack_official_data_tar(
+fn load_official_data(
   official_data_tar_path: &Path,
-  official_outputs_dir: &Path,
+  official_outputs_dir: Option<&Path>,
 ) -> Result<LoadedOfficialData> {
-  if official_outputs_dir.exists() {
-    fs::remove_dir_all(official_outputs_dir).with_context(|| {
-      format!(
-        "Failed to reset official outputs directory {}",
-        official_outputs_dir.display()
-      )
-    })?;
+  if let Some(official_outputs_dir) = official_outputs_dir {
+    if official_outputs_dir.exists() {
+      fs::remove_dir_all(official_outputs_dir).with_context(|| {
+        format!(
+          "Failed to reset official outputs directory {}",
+          official_outputs_dir.display()
+        )
+      })?;
+    }
+    fs::create_dir_all(official_outputs_dir)?;
   }
-  fs::create_dir_all(official_outputs_dir)?;
 
   let tar_bytes = read_official_data_payload(official_data_tar_path)?;
   let mut archive = Archive::new(Cursor::new(tar_bytes));
@@ -1060,6 +1079,9 @@ fn unpack_official_data_tar(
       continue;
     }
     if let Ok(relative) = path.strip_prefix("outputs") {
+      let Some(official_outputs_dir) = official_outputs_dir else {
+        continue;
+      };
       if relative.as_os_str().is_empty() {
         continue;
       }
@@ -1351,6 +1373,31 @@ fn write_hack_result(result_path: &Path, report: &JudgeReport, ticks_per_ms: f64
       "Failed to write UOJ hack result to {}",
       result_path.display()
     )
+  })
+}
+
+fn matching_test_case_names(
+  test_cases: &[TestCaseMaterial],
+  required_traits: &BTreeMap<String, bool>,
+  runtime_traits: &TestCaseTraitsMap,
+) -> Vec<String> {
+  test_cases
+    .iter()
+    .filter(|test_case| test_case_matches_traits(&test_case.name, required_traits, runtime_traits))
+    .map(|test_case| test_case.name.clone())
+    .collect()
+}
+
+fn test_case_matches_traits(
+  test_case_name: &str,
+  required_traits: &BTreeMap<String, bool>,
+  runtime_traits: &TestCaseTraitsMap,
+) -> bool {
+  required_traits.iter().all(|(name, value)| {
+    runtime_traits
+      .get(test_case_name)
+      .and_then(|traits| traits.get(name))
+      == Some(value)
   })
 }
 
