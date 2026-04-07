@@ -42,14 +42,14 @@
     {
       displayName = "C";
       fileNameSuffix = ".c";
-      displayCompileArguments = "gcc -O3 -std=c23";
+      displayCompileArguments = "wasm32-wasi-wasip1-clang -O3 -std=c23 -Wl,-z,stack-size=67108864";
       hullLanguage = "c.23.s64m";
     }
     {
       displayName = "C++";
       fileNameSuffix = ".cpp";
-      displayCompileArguments = "g++ -O3 -std=c++23";
-      hullLanguage = "cpp.23.s64m";
+      displayCompileArguments = "wasm32-wasi-wasip1-clang++ -O3 -std=c++26 -Wl,-z,stack-size=67108864";
+      hullLanguage = "cpp.26.s64m";
     }
   ],
 

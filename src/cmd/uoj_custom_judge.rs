@@ -61,10 +61,10 @@ pub struct UojCustomJudgeOpts {
   #[arg(long)]
   pub uoj_data_path: String,
 
-  #[arg(long)]
-  pub ticks_per_ms: f64,
+  #[arg(long, default_value_t = false)]
+  pub round_top_level_score: bool,
 
-  #[arg(long, default_value_t = 0usize)]
+  #[arg(long)]
   pub threads: usize,
 }
 
@@ -132,6 +132,14 @@ struct ProblemConf {
   input_suf: String,
   output_pre: String,
   output_suf: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct TrivialTestSummary {
+  count: usize,
+  score: f64,
+  max_tick: u64,
+  max_memory: u64,
 }
 
 type TestCaseTraitsMap = BTreeMap<String, BTreeMap<String, bool>>;
@@ -261,7 +269,7 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
     &test_cases,
     &runtime_traits,
     &test_case_reports,
-    opts.ticks_per_ms,
+    opts.round_top_level_score,
   )
 }
 
@@ -765,7 +773,7 @@ fn write_result(
   test_cases: &[TestCaseMaterial],
   runtime_traits: &TestCaseTraitsMap,
   test_case_reports: &BTreeMap<String, JudgeReport>,
-  ticks_per_ms: f64,
+  round_top_level_score: bool,
 ) -> Result<()> {
   let traits = runtime_traits;
   let scoring_problem = ProblemSpec {
@@ -803,13 +811,19 @@ fn write_result(
 
   let mut total_score = 0.0;
   let mut max_memory = 0u64;
-  let mut details = String::with_capacity(test_cases.len().saturating_mul(160));
+  let mut details = String::new();
   details.push_str("<tests>");
   let mut emitted_test_index = 0usize;
 
   for (index, subtask) in problem.subtasks.iter().enumerate() {
-    let matching = matching_test_case_names(test_cases, &subtask.traits, traits);
-    let matching_count = matching.len();
+    let matching: Vec<_> = test_cases
+      .iter()
+      .filter(|test_case| {
+        test_case_matches_traits(&test_case.name, &subtask.traits, runtime_traits)
+      })
+      .map(|test_case| test_case.name.clone())
+      .collect();
+
     let raw_subtask_score = subtask_reports[index].raw_score;
     let scaled_subtask_score = subtask_reports[index].scaled_score * 100.0;
     total_score += scaled_subtask_score;
@@ -817,64 +831,69 @@ fn write_result(
     details.push_str(&format!(
       "<subtask num=\"{}\" score=\"{}\" info=\"{}\">",
       index,
-      format_score(scaled_subtask_score),
-      xml_escape(&subtask_status(
-        &subtask_reports[index].statuses,
-        raw_subtask_score
-      ))
+      scaled_subtask_score,
+      subtask_status(&subtask_reports[index].statuses, raw_subtask_score)
     ));
 
     let should_skip_remaining = subtask.scoring_method == "min" && raw_subtask_score <= 0.0;
     let mut skip_rest = false;
+    let trivial_summary = summarize_trivial_test_cases(subtask, &matching, test_case_reports);
 
-    for test_case_name in matching {
-      let compact_test_num = compact_uoj_extra_test_num(emitted_test_index);
+    if trivial_summary.count > 1 {
+      let num = compact_uoj_extra_test_num(emitted_test_index);
       emitted_test_index += 1;
+      details.push_str(&format!(
+          "<test num=\"{}\" score=\"{}\" info=\"Accepted\" time=\"{}\" memory=\"{}\"><res>{} trivial test cases</res></test>",
+          num,
+          trivial_summary.score,
+          trivial_summary.max_tick,
+          trivial_summary.max_memory,
+          trivial_summary.count
+        ));
+    }
 
+    for test_case_name in &matching {
       if skip_rest {
         continue;
       }
 
-      let Some(report) = test_case_reports.get(&test_case_name) else {
+      let Some(report) = test_case_reports.get(&*test_case_name) else {
+        let num = compact_uoj_extra_test_num(emitted_test_index);
+        emitted_test_index += 1;
         details.push_str(&format!(
           "<test num=\"{}\" score=\"0\" info=\"Skipped\" time=\"0\" memory=\"0\"/>",
-          compact_test_num
+          num
         ));
         continue;
       };
       max_memory = max_memory.max(report.memory);
 
       let point_score = if subtask.scoring_method == "sum" {
-        if matching_count == 0 {
+        if matching.len() == 0 {
           0.0
         } else {
-          report.score * subtask.full_score * 100.0 / matching_count as f64
+          report.score * subtask.full_score * 100.0 / matching.len() as f64
         }
       } else {
         report.score * subtask.full_score * 100.0
       };
 
-      let message = xml_escape(&report.message);
-      if message.is_empty() {
-        details.push_str(&format!(
-          "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res/></test>",
-          compact_test_num,
-          format_score(point_score),
-          xml_escape(&to_uoj_info(&report.status)),
-          tick_to_ms(report.tick, ticks_per_ms),
-          bytes_to_uoj_kb(report.memory)
-        ));
-      } else {
-        details.push_str(&format!(
-          "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
-          compact_test_num,
-          format_score(point_score),
-          xml_escape(&to_uoj_info(&report.status)),
-          tick_to_ms(report.tick, ticks_per_ms),
-          bytes_to_uoj_kb(report.memory),
-          message,
-        ));
+      if trivial_summary.count > 1 && is_trivial_test_case(report) {
+        continue;
       }
+
+      let compact_test_num = compact_uoj_extra_test_num(emitted_test_index);
+      emitted_test_index += 1;
+
+      details.push_str(&format!(
+        "<test num=\"{}\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
+        compact_test_num,
+        point_score,
+        to_uoj_info(&report.status),
+        report.tick,
+        report.memory,
+        xml_escape(&report.message),
+      ));
 
       if should_skip_remaining && report.score <= 0.0 {
         skip_rest = true;
@@ -886,25 +905,22 @@ fn write_result(
 
   details.push_str("</tests>");
 
-  let total_time_ms = if ticks_per_ms <= 0.0 {
-    0
+  let total_tick = test_case_reports
+    .values()
+    .map(|report| report.tick)
+    .max()
+    .unwrap_or(0);
+  let top_level_score = if round_top_level_score {
+    total_score.round().to_string()
   } else {
-    let max_tick = test_case_reports
-      .values()
-      .map(|report| report.tick)
-      .max()
-      .unwrap_or(0);
-    tick_to_ms(max_tick, ticks_per_ms)
+    total_score.to_string()
   };
 
   fs::write(
     result_path.join("result.txt"),
     format!(
       "score {}\ntime {}\nmemory {}\ndetails\n{}",
-      format_score(total_score),
-      total_time_ms,
-      bytes_to_uoj_kb(max_memory),
-      details
+      top_level_score, total_tick, max_memory, details
     ),
   )
   .with_context(|| format!("Failed to write UOJ result to {}", result_path.display()))
@@ -1304,7 +1320,7 @@ fn run_hack_mode(
     &official_outputs_dir,
     workspace,
   )?;
-  write_hack_result(result_path, &report, opts.ticks_per_ms)
+  write_hack_result(result_path, &report)
 }
 
 fn write_hack_input_invalid_result(result_path: &Path, message: &str) -> Result<()> {
@@ -1330,25 +1346,25 @@ fn write_hack_input_invalid_result(result_path: &Path, message: &str) -> Result<
   })
 }
 
-fn write_hack_result(result_path: &Path, report: &JudgeReport, ticks_per_ms: f64) -> Result<()> {
+fn write_hack_result(result_path: &Path, report: &JudgeReport) -> Result<()> {
   let hack_succeeded = report.score < 1.0;
   let point_score = if hack_succeeded { 0.0 } else { 100.0 };
   let message = xml_escape(&report.message);
   let test_xml = if message.is_empty() {
     format!(
       "<test num=\"1\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res/></test>",
-      format_score(point_score),
-      xml_escape(&to_uoj_info(&report.status)),
-      tick_to_ms(report.tick, ticks_per_ms),
-      bytes_to_uoj_kb(report.memory)
+      point_score,
+      to_uoj_info(&report.status),
+      report.tick,
+      report.memory
     )
   } else {
     format!(
       "<test num=\"1\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
-      format_score(point_score),
-      xml_escape(&to_uoj_info(&report.status)),
-      tick_to_ms(report.tick, ticks_per_ms),
-      bytes_to_uoj_kb(report.memory),
+      point_score,
+      to_uoj_info(&report.status),
+      report.tick,
+      report.memory,
       message,
     )
   };
@@ -1358,8 +1374,8 @@ fn write_hack_result(result_path: &Path, report: &JudgeReport, ticks_per_ms: f64
     format!(
       "score {}\ntime {}\nmemory {}\ndetails\n<tests>{}</tests>",
       if hack_succeeded { "1" } else { "0" },
-      tick_to_ms(report.tick, ticks_per_ms),
-      bytes_to_uoj_kb(report.memory),
+      report.tick,
+      report.memory,
       test_xml,
     ),
   )
@@ -1371,16 +1387,36 @@ fn write_hack_result(result_path: &Path, report: &JudgeReport, ticks_per_ms: f64
   })
 }
 
-fn matching_test_case_names(
-  test_cases: &[TestCaseMaterial],
-  required_traits: &BTreeMap<String, bool>,
-  runtime_traits: &TestCaseTraitsMap,
-) -> Vec<String> {
-  test_cases
-    .iter()
-    .filter(|test_case| test_case_matches_traits(&test_case.name, required_traits, runtime_traits))
-    .map(|test_case| test_case.name.clone())
-    .collect()
+fn summarize_trivial_test_cases(
+  subtask: &crate::runtime::types::SubtaskSpec,
+  matching_test_case_names: &[String],
+  test_case_reports: &BTreeMap<String, JudgeReport>,
+) -> TrivialTestSummary {
+  let mut summary = TrivialTestSummary::default();
+  for test_case_name in matching_test_case_names {
+    let Some(report) = test_case_reports.get(test_case_name) else {
+      continue;
+    };
+    if !is_trivial_test_case(report) {
+      continue;
+    }
+    summary.count += 1;
+    if subtask.scoring_method == "sum" {
+      summary.score += report.score * subtask.full_score;
+    };
+    summary.max_tick = summary.max_tick.max(report.tick);
+    summary.max_memory = summary.max_memory.max(report.memory);
+  }
+  if subtask.scoring_method == "sum" {
+    summary.score = summary.score * 100.0 / matching_test_case_names.len() as f64;
+  } else {
+    summary.score = 1.0;
+  }
+  summary
+}
+
+fn is_trivial_test_case(report: &JudgeReport) -> bool {
+  report.score >= 1.0 && report.status == "accepted" && report.message.is_empty()
 }
 
 fn test_case_matches_traits(
@@ -1420,27 +1456,6 @@ fn to_uoj_info(status: &str) -> String {
     _ => "Judgment Failed",
   }
   .to_string()
-}
-
-fn tick_to_ms(tick: u64, ticks_per_ms: f64) -> u64 {
-  if ticks_per_ms <= 0.0 {
-    return 0;
-  }
-  ((tick as f64) / ticks_per_ms).ceil() as u64
-}
-
-// UOJ historically spells this field as `kb`, but the stored value is actually
-// KiB in the Linux ru_maxrss sense: 1024-byte units, not bits and not SI kB.
-fn bytes_to_uoj_kb(bytes: u64) -> u64 {
-  bytes.div_ceil(1024)
-}
-
-fn format_score(score: f64) -> String {
-  if (score.round() - score).abs() < 1e-9 {
-    format!("{:.0}", score.round())
-  } else {
-    format!("{:.6}", score)
-  }
 }
 
 fn compact_uoj_extra_test_num(mut index: usize) -> String {

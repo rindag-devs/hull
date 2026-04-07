@@ -84,11 +84,10 @@
 }
 
 #let contest-notes-body = [
-  1. File names (including program, input, and output files) must be in lowercase English. The official evaluation after the contest will be based on the source code file(s) left by the contestant in the problem directory.
+  1. File names (including program, input, and output files) must be in lowercase. The official evaluation after the contest will be based on the source code file(s) left by the contestant in the problem directory.
   2. The return type of the `main` function must be `int`. The program must return `0` upon normal termination.
   3. Unless otherwise specified, outputs will be judged by an exact match comparison, ignoring trailing whitespace at the end of each line and trailing newlines at the end of the file.
   4. The size of the submitted source code file must not exceed 100 KiB.
-  5. The stack space available to the program is included within the overall memory limit specified for the problem.
-  6. It is prohibited to modify compiler parameters within the source code (e.g., using `#pragma` directives), use system architecture-specific instructions (e.g., inline assembly), or employ any other methods that could create an unfair advantage.
-  7. Appeals regarding issues caused by violations of the above rules will not be accepted.
+  5. It is prohibited to modify compiler parameters within the source code (e.g., using `#pragma` directives), use system architecture-specific instructions (e.g., inline assembly), or employ any other methods that could create an unfair advantage.
+  6. Appeals regarding issues caused by violations of the above rules will not be accepted.
 ]

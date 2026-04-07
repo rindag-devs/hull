@@ -24,12 +24,12 @@
   # Whether to emit a single zip archive or an unpacked directory tree.
   zipped ? true,
 
-  # Conversion ratio from Hull ticks to UOJ milliseconds in result.txt.
-  ticksPerMs ? 1.0e7,
-
   # Number of testcase judging threads used by uojCustom.
   # 0 means auto-detect based on available_parallelism().
   judgerThreads ? 0,
+
+  # Whether the top-level score in result.txt should be rounded to an integer.
+  roundTopLevelScore ? false,
 
   # Mapping from UOJ language names to Hull language identifiers.
   # null means the UOJ language is explicitly unsupported by uojCustom.
@@ -187,8 +187,8 @@
           --uoj-work-path "$uoj_work_path" \
           --uoj-result-path "$uoj_result_path" \
           --uoj-data-path "$uoj_data_path" \
-          --threads ${toString judgerThreads} \
-          --ticks-per-ms ${toString ticksPerMs}
+          ${lib.optionalString roundTopLevelScore "--round-top-level-score"} \
+          --threads ${toString judgerThreads}
       '';
 
       customJudgeRunnerStorePath = builtins.unsafeDiscardStringContext (toString customJudgeRunner);
