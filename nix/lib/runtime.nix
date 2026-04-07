@@ -112,7 +112,7 @@ let
           tickLimit
           memoryLimit
           groups
-          traits
+          traitHints
           ;
         inputFile = if tc.inputFile == null then null else toString tc.inputFile;
         generator = tc.generator;

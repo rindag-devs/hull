@@ -81,7 +81,7 @@
         "--n-max=10"
         "--salt=0"
       ];
-      traits = {
+      traitHints = {
         a_positive = true;
         b_positive = true;
       };
@@ -102,7 +102,7 @@
         "sampleLarge"
         "pretest"
       ];
-      traits = {
+      traitHints = {
         a_positive = true;
         b_positive = true;
       };
@@ -114,14 +114,14 @@
         "--n-max=-1"
         "--salt=0"
       ];
-      traits = {
+      traitHints = {
         a_positive = false;
         b_positive = false;
       };
     };
     hand1 = {
       inputFile = ./data/hand-1.in;
-      traits = {
+      traitHints = {
         a_positive = true;
         b_positive = true;
       };

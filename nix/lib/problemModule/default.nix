@@ -160,7 +160,7 @@
               message = "runtime data missing";
               readerTraceStacks = [ ];
               readerTraceTree = { };
-              traits = tc.traits;
+              traits = { };
             };
           }) config.testCases;
           solutions = lib.mapAttrs (

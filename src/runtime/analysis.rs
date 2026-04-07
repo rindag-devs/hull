@@ -358,7 +358,7 @@ fn run_checker_tests(
             tick_limit: problem.tick_limit,
             memory_limit: problem.memory_limit,
             groups: Vec::new(),
-            traits: BTreeMap::new(),
+            trait_hints: BTreeMap::new(),
             generator: None,
             arguments: None,
           };
@@ -391,7 +391,7 @@ fn run_checker_tests(
         tick_limit: problem.tick_limit,
         memory_limit: problem.memory_limit,
         groups: Vec::new(),
-        traits: BTreeMap::new(),
+        trait_hints: BTreeMap::new(),
         generator: None,
         arguments: None,
       };
@@ -486,7 +486,7 @@ fn run_test_cases(
       };
       {
         let mut live_scores = live_scores.lock().unwrap();
-        // IMPORTANT: never trust `test_case.traits` from problem metadata here.
+        // IMPORTANT: never trust `test_case.trait_hints` from problem metadata here.
         // Those values are author declarations, while subtask membership must be
         // computed from the validator-derived traits we actually observed at
         // runtime. Using the declared traits here would reintroduce the exact
@@ -1130,7 +1130,7 @@ mod tests {
           tick_limit: 1,
           memory_limit: 1,
           groups: Vec::new(),
-          traits: BTreeMap::new(),
+          trait_hints: BTreeMap::new(),
           generator: None,
           arguments: None,
         },
@@ -1140,7 +1140,7 @@ mod tests {
           tick_limit: 1,
           memory_limit: 1,
           groups: Vec::new(),
-          traits: BTreeMap::new(),
+          trait_hints: BTreeMap::new(),
           generator: None,
           arguments: None,
         },
@@ -1272,9 +1272,9 @@ mod tests {
       scoring_method: "min".to_string(),
       traits: BTreeMap::from([("x".to_string(), true)]),
     }];
-    problem.test_cases[0].traits =
+    problem.test_cases[0].trait_hints =
       BTreeMap::from([("x".to_string(), true), ("y".to_string(), true)]);
-    problem.test_cases[1].traits = BTreeMap::from([("y".to_string(), true)]);
+    problem.test_cases[1].trait_hints = BTreeMap::from([("y".to_string(), true)]);
 
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report("accepted", 1.0)),

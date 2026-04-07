@@ -108,7 +108,7 @@
           tickLimit = tc.tickLimit;
           memoryLimit = tc.memoryLimit;
           groups = tc.groups;
-          traits = tc.traits;
+          traitHints = tc.traitHints;
         }) allTestCases;
         subtasks = map (st: {
           fullScore = st.fullScore;

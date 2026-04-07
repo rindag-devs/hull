@@ -473,7 +473,7 @@ mod tests {
         tick_limit: 1,
         memory_limit: 1,
         groups: Vec::new(),
-        traits: BTreeMap::new(),
+        trait_hints: BTreeMap::new(),
         generator: None,
         arguments: None,
       }],

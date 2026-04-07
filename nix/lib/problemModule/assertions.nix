@@ -80,11 +80,11 @@
             '';
         };
 
-        # Assertion: All traits defined in `testCases.<name>.traits` must be declared in `problem.traits`.
+        # Assertion: All trait hints defined in `testCases.<name>.traitHints` must be declared in `problem.traits`.
         casesWithUndeclaredTraits = builtins.filter (
           tc:
           let
-            definedTraits = builtins.attrNames tc.traits;
+            definedTraits = builtins.attrNames tc.traitHints;
             undeclared = builtins.filter (
               trait: !(lib.elem trait (builtins.attrNames config.traits))
             ) definedTraits;
@@ -98,7 +98,7 @@
               report = lib.concatMapStringsSep "\n" (
                 tc:
                 let
-                  definedTraits = builtins.attrNames tc.traits;
+                  definedTraits = builtins.attrNames tc.traitHints;
                   undeclared = builtins.filter (
                     trait: !(lib.elem trait (builtins.attrNames config.traits))
                   ) definedTraits;
@@ -118,13 +118,13 @@
             '';
         };
 
-        # Assertion: The user-defined `traits` in a test case must be a subset of the traits in validator's output.
+        # Assertion: The user-defined `traitHints` in a test case must be a subset of the traits in validator's output.
         casesWithMismatchedTraits = builtins.filter (
           tc:
           let
             unmatchedTraits = lib.filterAttrs (
-              n: v: (!builtins.hasAttr n tc.traits) || (tc.traits.${n} != v)
-            ) tc.traits;
+              n: v: (!builtins.hasAttr n tc.inputValidation.traits) || (tc.inputValidation.traits.${n} != v)
+            ) tc.traitHints;
           in
           unmatchedTraits != { }
         ) (builtins.attrValues config.testCases);
@@ -134,14 +134,14 @@
             let
               report = lib.concatMapStringsSep "\n" (tc: ''
                 - ${getTestCaseName tc}:
-                    The traits you defined do not match the traits returned by the validator.
-                    - Defined in test case: ${builtins.toJSON tc.traits}
+                    The trait hints you defined do not match the traits returned by the validator.
+                    - Defined in test case: ${builtins.toJSON tc.traitHints}
                     - Runtime traits: ${builtins.toJSON tc.inputValidation.traits}
               '') casesWithMismatchedTraits;
             in
             ''
-              Problem `${config.name}` has test cases with mismatched trait definitions.
-              The `traits` attribute set in a test case should reflect the output of the validator for that case.
+              Problem `${config.name}` has test cases with mismatched trait hints.
+              The `traitHints` attribute set in a test case should reflect the output of the validator for that case.
               Details:
               ${report}
             '';

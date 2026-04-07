@@ -44,7 +44,7 @@
             "--k-max=1023"
             "--salt=${toString i}"
           ];
-          traits = {
+          traitHints = {
             k_lt_1024 = true;
           };
         };

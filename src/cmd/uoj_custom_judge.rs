@@ -110,7 +110,7 @@ struct TestCaseMaterial {
   tick_limit: u64,
   memory_limit: u64,
   groups: Vec<String>,
-  traits: BTreeMap<String, bool>,
+  trait_hints: BTreeMap<String, bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -730,7 +730,7 @@ fn evaluate_test_case(
     tick_limit: test_case.tick_limit,
     memory_limit: test_case.memory_limit,
     groups: test_case.groups.clone(),
-    traits: loaded.validation.traits,
+    trait_hints: loaded.validation.traits,
     generator: None,
     arguments: None,
   };
@@ -786,7 +786,7 @@ fn write_result(
         tick_limit: test_case.tick_limit,
         memory_limit: test_case.memory_limit,
         groups: test_case.groups.clone(),
-        traits: runtime_traits
+        trait_hints: runtime_traits
           .get(&test_case.name)
           .cloned()
           .unwrap_or_default(),
@@ -805,7 +805,6 @@ fn write_result(
   let mut max_memory = 0u64;
   let mut details = String::with_capacity(test_cases.len().saturating_mul(160));
   details.push_str("<tests>");
-  let mut seen_test_cases = BTreeSet::new();
   let mut emitted_test_index = 0usize;
 
   for (index, subtask) in problem.subtasks.iter().enumerate() {
@@ -829,10 +828,6 @@ fn write_result(
     let mut skip_rest = false;
 
     for test_case_name in matching {
-      if !seen_test_cases.insert(test_case_name.clone()) {
-        continue;
-      }
-
       let compact_test_num = compact_uoj_extra_test_num(emitted_test_index);
       emitted_test_index += 1;
 
@@ -941,7 +936,7 @@ fn load_normal_test_cases(
         tick_limit: test_case.tick_limit,
         memory_limit: test_case.memory_limit,
         groups: test_case.groups.clone(),
-        traits: loaded.validation.traits,
+        trait_hints: loaded.validation.traits,
       })
     })
     .collect::<Result<Vec<_>>>()?;
@@ -976,7 +971,7 @@ fn load_normal_test_cases(
       tick_limit: problem.tick_limit,
       memory_limit: problem.memory_limit,
       groups: Vec::new(),
-      traits: loaded.validation.traits,
+      trait_hints: loaded.validation.traits,
     });
   }
 
@@ -986,7 +981,7 @@ fn load_normal_test_cases(
 fn collect_runtime_traits(test_cases: &[TestCaseMaterial]) -> TestCaseTraitsMap {
   test_cases
     .iter()
-    .map(|test_case| (test_case.name.clone(), test_case.traits.clone()))
+    .map(|test_case| (test_case.name.clone(), test_case.trait_hints.clone()))
     .collect()
 }
 
@@ -1271,7 +1266,7 @@ fn run_hack_mode(
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
     groups: Vec::new(),
-    traits: BTreeMap::new(),
+    trait_hints: BTreeMap::new(),
     generator: None,
     arguments: None,
   };
@@ -1283,7 +1278,7 @@ fn run_hack_mode(
     return Ok(());
   }
   let std_test_case = TestCaseSpec {
-    traits: validation.traits.clone(),
+    trait_hints: validation.traits.clone(),
     ..hack_test_case.clone()
   };
   let official_outputs_dir = run_generate_outputs(

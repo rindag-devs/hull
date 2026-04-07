@@ -90,7 +90,7 @@
         "--w-max=1"
         "--salt=0"
       ];
-      traits = {
+      traitHints = {
         w_eq_1 = true;
       };
       groups = [ "sample" ];
@@ -120,7 +120,7 @@
         "--w-max=1"
         "--salt=0"
       ];
-      traits = {
+      traitHints = {
         w_eq_1 = true;
       };
     };

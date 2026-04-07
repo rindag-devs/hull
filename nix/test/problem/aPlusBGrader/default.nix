@@ -41,7 +41,7 @@
         "--n-min=1"
         "--n-max=10"
       ];
-      traits = {
+      traitHints = {
         a_positive = true;
         b_positive = true;
       };
@@ -52,7 +52,7 @@
         "--n-min=-10"
         "--n-max=-1"
       ];
-      traits = {
+      traitHints = {
         a_positive = false;
         b_positive = false;
       };

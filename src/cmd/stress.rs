@@ -254,7 +254,7 @@ fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTe
               .memory_limit_override
               .unwrap_or(context.problem.memory_limit),
             groups: Vec::new(),
-            traits: BTreeMap::new(),
+            trait_hints: BTreeMap::new(),
             generator: Some(context.generator_name.to_string()),
             arguments: Some(generator_args.to_vec()),
           }];

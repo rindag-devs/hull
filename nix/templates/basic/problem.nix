@@ -89,7 +89,7 @@
     {
       manual1 = {
         inputFile = ./data/1.in;
-        traits = {
+        traitHints = {
           a_positive = true;
           b_positive = true;
         };

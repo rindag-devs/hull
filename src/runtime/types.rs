@@ -103,7 +103,7 @@ pub struct TestCaseSpec {
   pub tick_limit: u64,
   pub memory_limit: u64,
   pub groups: Vec<String>,
-  pub traits: BTreeMap<String, bool>,
+  pub trait_hints: BTreeMap<String, bool>,
   pub generator: Option<String>,
   pub arguments: Option<Vec<String>>,
 }
@@ -215,7 +215,7 @@ pub struct BundleJudgeTestCaseSpec {
   pub tick_limit: u64,
   pub memory_limit: u64,
   pub groups: Vec<String>,
-  pub traits: BTreeMap<String, bool>,
+  pub trait_hints: BTreeMap<String, bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

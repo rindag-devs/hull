@@ -337,7 +337,7 @@ fn evaluate_problem(
       tick_limit: test_case.tick_limit,
       memory_limit: test_case.memory_limit,
       groups: test_case.groups.clone(),
-      traits: test_case.traits.clone(),
+      trait_hints: test_case.trait_hints.clone(),
       generator: None,
       arguments: None,
     };
@@ -387,7 +387,7 @@ fn evaluate_problem(
           tick_limit: test_case.tick_limit,
           memory_limit: test_case.memory_limit,
           groups: test_case.groups.clone(),
-          traits: test_case.traits.clone(),
+          trait_hints: test_case.trait_hints.clone(),
           generator: None,
           arguments: None,
         }

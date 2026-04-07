@@ -413,11 +413,11 @@ in
             default = null;
             description = "A store path to a manually provided input file. If set, `generator` should be null.";
           };
-          traits = lib.mkOption {
+          traitHints = lib.mkOption {
             type = attrsOf bool;
             default = { };
             description = ''
-              An attribute set of declared traits for this test case.
+              An attribute set of declared trait hints for this test case.
 
               In normal workflows this is only a hint or a subset of the traits that will actually be
               observed by the validator at runtime. Unless a feature explicitly documents otherwise,
