@@ -18,9 +18,16 @@
   pkgs,
   hull,
   hullPkgs,
+  hullPkgsForSystem,
+  targetPkgsForSystem,
+  hullForSystem,
 }:
 
 {
+  # System used to build the bundled runtime tools.
+  # Defaults to cross-machine compatible Linux x86_64 for UOJ deployment.
+  targetSystem ? "x86_64-linux",
+
   # Whether to emit a single zip archive or an unpacked directory tree.
   zipped ? true,
 
@@ -66,7 +73,23 @@
       ...
     }@problem:
     let
-      nixUserChroot = hullPkgs.nix-user-chroot;
+      targetHullPkgs = hullPkgsForSystem targetSystem;
+      targetPkgs = targetPkgsForSystem targetSystem;
+      targetHull = hullForSystem targetSystem;
+      nixUserChroot = targetHullPkgs.nix-user-chroot;
+      retargetRunner =
+        runner:
+        if runner ? retarget then
+          runner.retarget {
+            inherit targetPkgs targetHullPkgs targetHull;
+          }
+        else
+          runner;
+      targetJudger = {
+        prepareSolution = retargetRunner problem.judger.prepareSolution;
+        generateOutputs = retargetRunner problem.judger.generateOutputs;
+        judge = retargetRunner problem.judger.judge;
+      };
       allTestCases = builtins.attrValues testCases;
 
       metadata = {
@@ -90,15 +113,15 @@
         };
         judger = {
           prepareSolutionRunner = {
-            path = builtins.unsafeDiscardStringContext (lib.getExe problem.judger.prepareSolution);
+            path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.prepareSolution);
             drvPath = null;
           };
           generateOutputsRunner = {
-            path = builtins.unsafeDiscardStringContext (lib.getExe problem.judger.generateOutputs);
+            path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.generateOutputs);
             drvPath = null;
           };
           judgeRunner = {
-            path = builtins.unsafeDiscardStringContext (lib.getExe problem.judger.judge);
+            path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.judge);
             drvPath = null;
           };
         };
@@ -172,14 +195,14 @@
 
       nixUserChrootStorePath = builtins.unsafeDiscardStringContext (toString nixUserChroot);
       nixUserChrootRelative = "/nix/store/${baseNameOf nixUserChrootStorePath}/bin/nix-user-chroot";
-      customJudgeRunner = pkgs.writeShellScriptBin "hull-uoj-custom-judge-runner-${problem.name}" ''
+      customJudgeRunner = targetPkgs.writeShellScriptBin "hull-uoj-custom-judge-runner-${problem.name}" ''
         bundle_root="$1"
         submission_file="$2"
         submission_language="$3"
         uoj_work_path="$4"
         uoj_result_path="$5"
         uoj_data_path="$6"
-        exec ${lib.getExe hullPkgs.default} uoj-custom-judge \
+        exec ${lib.getExe targetHullPkgs.default} uoj-custom-judge \
           --bundle-root "$bundle_root" \
           --metadata-path "problem.json" \
           --submission-file "$submission_file" \
@@ -197,14 +220,14 @@
       targetClosure = pkgs.closureInfo {
         rootPaths = [
           customJudgeRunner
-          hullPkgs.default
-          hullPkgs.wasm32-wasi-wasip1.clang
+          targetHullPkgs.default
+          targetHullPkgs.wasm32-wasi-wasip1.clang
           nixUserChroot
           problem.checker.wasm
           problem.validator.wasm
-          problem.judger.prepareSolution
-          problem.judger.generateOutputs
-          problem.judger.judge
+          targetJudger.prepareSolution
+          targetJudger.generateOutputs
+          targetJudger.judge
         ];
       };
 

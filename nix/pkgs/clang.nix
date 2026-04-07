@@ -15,56 +15,51 @@
 
 {
   lib,
-  llvmPackages,
-  stdenvNoCC,
-  makeWrapper,
+  pkgs,
+  llvmPackages ? pkgs.llvmPackages,
   sysroot,
   compiler-rt,
 }:
 
-stdenvNoCC.mkDerivation {
-  pname = "wasm32-wasi-wasip1-clang";
-  version = llvmPackages.clang.version;
-
-  nativeBuildInputs = [
-    makeWrapper
+let
+  commonFlags = [
+    "--target=wasm32-wasi-wasip1"
+    "-mcpu=mvp"
+    "--sysroot=${sysroot}"
   ];
 
-  dontUnpack = true;
-  dontConfigure = true;
-  dontBuild = true;
-  dontCheck = true;
+  lldBinPath = lib.makeBinPath [ llvmPackages.lld ];
+in
+pkgs.symlinkJoin {
+  name = "wasm32-wasi-wasip1-clang-${llvmPackages.clang.version}";
 
-  installPhase = ''
-    runHook preInstall
+  paths = [
+    (pkgs.writeShellScriptBin "wasm32-wasi-wasip1-clang" ''
+      wrapper_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+      exec ${llvmPackages.clang-unwrapped}/bin/clang \
+        -resource-dir="$wrapper_dir/../resource-dir" \
+        ${lib.escapeShellArgs commonFlags} \
+        "$@"
+    '')
+    (pkgs.writeShellScriptBin "wasm32-wasi-wasip1-clang++" ''
+      export PATH=${lib.escapeShellArg lldBinPath}:$PATH
+      wrapper_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+      exec ${llvmPackages.clang-unwrapped}/bin/clang++ \
+        -stdlib=libstdc++ \
+        -nostdlib++ \
+        -lstdc++ \
+        -lsupc++ \
+        -fno-exceptions \
+        -resource-dir="$wrapper_dir/../resource-dir" \
+        ${lib.escapeShellArgs commonFlags} \
+        "$@"
+    '')
+  ];
 
-    mkdir -p $out/bin
+  postBuild = ''
     mkdir -p $out/resource-dir
-
     ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include $out/resource-dir/include
     ln -s ${compiler-rt}/lib $out/resource-dir/lib
-
-    local common_flags=(
-      "--target=wasm32-wasi-wasip1"
-      "-mcpu=mvp"
-      "--sysroot=${sysroot}"
-      "-resource-dir=$out/resource-dir"
-    )
-
-    makeWrapper ${llvmPackages.clang-unwrapped}/bin/clang $out/bin/wasm32-wasi-wasip1-clang \
-      --add-flags "''${common_flags[*]}" \
-      --prefix PATH : ${lib.makeBinPath [ llvmPackages.lld ]}
-
-    makeWrapper ${llvmPackages.clang-unwrapped}/bin/clang++ $out/bin/wasm32-wasi-wasip1-clang++ \
-      --add-flags "-stdlib=libstdc++" \
-      --add-flags "-nostdlib++" \
-      --add-flags "-lstdc++" \
-      --add-flags "-lsupc++" \
-      --add-flags "-fno-exceptions" \
-      --add-flags "''${common_flags[*]}" \
-      --prefix PATH : ${lib.makeBinPath [ llvmPackages.lld ]}
-
-    runHook postInstall
   '';
 
   meta = {

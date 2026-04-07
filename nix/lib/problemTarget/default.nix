@@ -17,6 +17,9 @@
   pkgs,
   hull,
   hullPkgs,
+  hullPkgsForSystem,
+  targetPkgsForSystem,
+  hullForSystem,
   lib,
   cplib,
   cplibInitializers,
@@ -100,6 +103,9 @@
       hull
       pkgs
       hullPkgs
+      hullPkgsForSystem
+      targetPkgsForSystem
+      hullForSystem
       ;
   };
 

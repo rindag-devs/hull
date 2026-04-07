@@ -210,7 +210,9 @@ let
       # A sized language has a custom stack size.
       let
         defaultLang = {
-          "${langPrefix}.${std}" = mkCFamilyLanguage { inherit isCpp std; };
+          "${langPrefix}.${std}" = mkCFamilyLanguage {
+            inherit isCpp std;
+          };
         };
         sizedLangs = builtins.listToAttrs (
           map (sizeInfo: {
@@ -257,6 +259,10 @@ in
   inherit cLanguages cppLanguages;
 
   commons = cLanguages // cppLanguages;
+
+  retarget =
+    { targetHull, ... }:
+    languages: lib.mapAttrs (name: _: targetHull.language.commons.${name}) languages;
 
   matchBaseName =
     baseName: languages:

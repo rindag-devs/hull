@@ -18,6 +18,9 @@
   pkgs,
   hull,
   hullPkgs,
+  hullPkgsForSystem,
+  targetPkgsForSystem,
+  hullForSystem,
   ...
 }:
 
@@ -28,6 +31,9 @@
       pkgs
       hull
       hullPkgs
+      hullPkgsForSystem
+      targetPkgsForSystem
+      hullForSystem
       ;
   };
 

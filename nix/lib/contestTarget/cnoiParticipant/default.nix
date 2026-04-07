@@ -18,9 +18,16 @@
   pkgs,
   hull,
   hullPkgs,
+  hullPkgsForSystem,
+  targetPkgsForSystem,
+  hullForSystem,
 }:
 
 {
+  # System used to build bundled self-eval tools.
+  # Defaults to cross-machine compatible Linux x86_64 for judge deployment.
+  targetSystem ? "x86_64-linux",
+
   # Display languages for documents.
   displayLanguages ? [ ],
 
@@ -75,7 +82,18 @@
       ...
     }@contest:
     let
-      nixUserChroot = hullPkgs.nix-user-chroot;
+      targetHullPkgs = hullPkgsForSystem targetSystem;
+      targetPkgs = targetPkgsForSystem targetSystem;
+      targetHull = hullForSystem targetSystem;
+      nixUserChroot = targetHullPkgs.nix-user-chroot;
+      retargetRunner =
+        runner:
+        if runner ? retarget then
+          runner.retarget {
+            inherit targetPkgs targetHullPkgs targetHull;
+          }
+        else
+          runner;
 
       mkSampleCommand =
         { samples, ... }@problem:
@@ -211,12 +229,16 @@
               fullScore = problem.config.fullScore;
               judger = {
                 prepareSolutionRunner = {
-                  path = builtins.unsafeDiscardStringContext (lib.getExe problem.config.judger.prepareSolution);
+                  path = builtins.unsafeDiscardStringContext (
+                    lib.getExe (retargetRunner problem.config.judger.prepareSolution)
+                  );
                   drvPath = null;
                 };
                 generateOutputsRunner = null;
                 judgeRunner = {
-                  path = builtins.unsafeDiscardStringContext (lib.getExe problem.config.judger.judge);
+                  path = builtins.unsafeDiscardStringContext (
+                    lib.getExe (retargetRunner problem.config.judger.judge)
+                  );
                   drvPath = null;
                 };
               };
@@ -241,24 +263,24 @@
         ) problems}
       '';
 
-      selfEvalRunner = pkgs.writeShellScriptBin "selfeval-run" ''
+      selfEvalRunner = targetPkgs.writeShellScriptBin "selfeval-run" ''
         bundle_root="$1"
         package_root="$2"
         shift
         shift
-        exec ${lib.getExe hullPkgs.default} cnoi-self-eval --bundle-root "$bundle_root" --package-root "$package_root" "$@"
+        exec ${lib.getExe targetHullPkgs.default} cnoi-self-eval --bundle-root "$bundle_root" --package-root "$package_root" "$@"
       '';
 
       selfEvalTargets = [
         selfEvalRunner
-        hullPkgs.default
-        hullPkgs.wasm32-wasi-wasip1.clang
+        targetHullPkgs.default
+        targetHullPkgs.wasm32-wasi-wasip1.clang
         selfEvalData
         nixUserChroot
       ]
       ++ lib.concatMap (problem: [
-        problem.config.judger.prepareSolution
-        problem.config.judger.judge
+        (retargetRunner problem.config.judger.prepareSolution)
+        (retargetRunner problem.config.judger.judge)
       ]) problems;
 
       selfEvalClosure = pkgs.closureInfo { rootPaths = selfEvalTargets; };

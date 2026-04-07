@@ -54,31 +54,46 @@ in
 {
   _type = "hullJudger";
 
-  prepareSolution = pkgs.writeShellApplication {
+  prepareSolution = hull.judger.writeShellApplication {
     name = "hull-judger-stdioInteraction-prepareSolution-${problem.name}";
     inheritPath = false;
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.jq
-    ];
-    text = ''
-      cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
-      ${compileExecutableScript}
-      jq -nc \
-        --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
-        --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
-        '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
-    '';
+    runtimeInputs =
+      { targetPkgs, ... }:
+      [
+        targetPkgs.coreutils
+        targetPkgs.jq
+      ];
+    text =
+      { targetHull, ... }:
+      let
+        targetLanguages = targetHull.language.retarget { inherit targetHull; } languages;
+      in
+      ''
+        cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
+        ${targetHull.compile.executableMatchScript {
+          languages = targetLanguages;
+          srcExpr = ''"$HULL_SOLUTION_SRC"'';
+          outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
+          includes = problem.includes;
+          extraObjects = [ ];
+        }}
+        jq -nc \
+          --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
+          --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
+          '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
+      '';
   };
 
-  judge = pkgs.writeShellApplication {
+  judge = hull.judger.writeShellApplication {
     name = "hull-judger-stdioInteraction-judge-${problem.name}";
     inheritPath = false;
-    runtimeInputs = [
-      hullPkgs.default
-      pkgs.coreutils
-      pkgs.jq
-    ];
+    runtimeInputs =
+      { targetHullPkgs, targetPkgs, ... }:
+      [
+        targetHullPkgs.default
+        targetPkgs.coreutils
+        targetPkgs.jq
+      ];
     text = ''
       workdir=$(mktemp -d)
       cleanup() {
@@ -172,10 +187,10 @@ in
     '';
   };
 
-  generateOutputs = pkgs.writeShellApplication {
+  generateOutputs = hull.judger.writeShellApplication {
     name = "hull-judger-stdioInteraction-generateOutputs-${problem.name}";
     inheritPath = false;
-    runtimeInputs = [ pkgs.coreutils ];
+    runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
     text = ''
       mkdir -p "$HULL_OUTPUTS_DIR"
     '';

@@ -232,6 +232,9 @@
     };
     uoj = hull.problemTarget.uoj { };
     uojCustom = hull.problemTarget.uojCustom { };
+    uojCustomAarch64 = hull.problemTarget.uojCustom {
+      targetSystem = "aarch64-linux";
+    };
     uojOld = hull.problemTarget.uoj {
       oldJudgerWrapper = true;
       checkerSuffix = ".cpp";

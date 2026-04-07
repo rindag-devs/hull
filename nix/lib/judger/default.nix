@@ -22,6 +22,43 @@
 }:
 
 let
+  writeShellApplicationWithContext =
+    {
+      targetPkgs,
+      targetHullPkgs,
+      targetHull,
+    }:
+    args@{
+      text,
+      runtimeInputs ? [ ],
+      passthru ? { },
+      ...
+    }:
+    let
+      evalArg =
+        value:
+        if builtins.isFunction value then
+          value {
+            inherit targetPkgs targetHullPkgs targetHull;
+          }
+        else
+          value;
+    in
+    targetPkgs.writeShellApplication (
+      (builtins.removeAttrs args [
+        "text"
+        "runtimeInputs"
+        "passthru"
+      ])
+      // {
+        text = evalArg text;
+        runtimeInputs = evalArg runtimeInputs;
+        passthru = passthru // {
+          retarget = context: writeShellApplicationWithContext context args;
+        };
+      }
+    );
+
   exportEnv = name: value: ''
     export ${name}=${lib.escapeShellArg value}
   '';
@@ -122,6 +159,12 @@ let
     '';
 in
 {
+  writeShellApplication = writeShellApplicationWithContext {
+    targetPkgs = pkgs;
+    targetHullPkgs = hullPkgs;
+    targetHull = hull;
+  };
+
   batch = import ./batch.nix {
     inherit
       lib

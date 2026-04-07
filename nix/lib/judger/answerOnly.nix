@@ -23,13 +23,15 @@
 problem: {
   _type = "hullJudger";
 
-  prepareSolution = pkgs.writeShellApplication {
+  prepareSolution = hull.judger.writeShellApplication {
     name = "hull-judger-answerOnly-prepareSolution-${problem.name}";
     inheritPath = false;
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.jq
-    ];
+    runtimeInputs =
+      { targetPkgs, ... }:
+      [
+        targetPkgs.coreutils
+        targetPkgs.jq
+      ];
     text = ''
       cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
       jq -nc \
@@ -38,48 +40,52 @@ problem: {
     '';
   };
 
-  generateOutputs = pkgs.writeShellApplication {
+  generateOutputs = hull.judger.writeShellApplication {
     name = "hull-judger-answerOnly-generateOutputs-${problem.name}";
     inheritPath = false;
-    runtimeInputs = [ pkgs.coreutils ];
+    runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
     text = ''
       mkdir -p "$HULL_OUTPUTS_DIR"
       install -Tm644 "$HULL_SOLUTION_SRC" "$HULL_OUTPUTS_DIR/output"
     '';
   };
 
-  judge = pkgs.writeShellApplication {
+  judge = hull.judger.writeShellApplication {
     name = "hull-judger-answerOnly-judge-${problem.name}";
     inheritPath = false;
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.jq
-    ];
-    text = ''
-      ${hull.check.script {
-        checkerWasm = problem.checker.wasm;
-        input = "$HULL_INPUT_PATH";
-        output = "$HULL_SOLUTION_SRC";
-        answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
-      }}
+    runtimeInputs =
+      { targetPkgs, ... }:
+      [
+        targetPkgs.coreutils
+        targetPkgs.jq
+      ];
+    text =
+      { targetHull, ... }:
+      ''
+        ${targetHull.check.script {
+          checkerWasm = problem.checker.wasm;
+          input = "$HULL_INPUT_PATH";
+          output = "$HULL_SOLUTION_SRC";
+          answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
+        }}
 
-      final_status=$(jq -r .status check.json)
-      final_score=$(jq -r .score check.json)
-      final_message=$(jq -r .message check.json)
+        final_status=$(jq -r .status check.json)
+        final_score=$(jq -r .score check.json)
+        final_message=$(jq -r .message check.json)
 
-      jq -nc \
-        --arg status "$final_status" \
-        --argjson score "$final_score" \
-        --arg message "$final_message" \
-        '{
-          status: $status,
-          score: $score,
-          message: $message,
-          tick: 0,
-          memory: 0
-        }' > "$HULL_REPORT_PATH"
+        jq -nc \
+          --arg status "$final_status" \
+          --argjson score "$final_score" \
+          --arg message "$final_message" \
+          '{
+            status: $status,
+            score: $score,
+            message: $message,
+            tick: 0,
+            memory: 0
+          }' > "$HULL_REPORT_PATH"
 
-      install -Tm644 "$HULL_SOLUTION_SRC" "$HULL_OUTPUTS_DIR/output"
-    '';
+        install -Tm644 "$HULL_SOLUTION_SRC" "$HULL_OUTPUTS_DIR/output"
+      '';
   };
 }

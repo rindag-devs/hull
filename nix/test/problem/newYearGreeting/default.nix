@@ -126,5 +126,8 @@
   targets = {
     default = hull.problemTarget.common;
     uojCustom = hull.problemTarget.uojCustom { };
+    uojCustomAarch64 = hull.problemTarget.uojCustom {
+      targetSystem = "aarch64-linux";
+    };
   };
 }
