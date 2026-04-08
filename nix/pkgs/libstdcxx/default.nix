@@ -28,9 +28,9 @@
 
 let
   wasmResourceDir = runCommand "wasm32-wasi-wasip1-resource-dir" { } ''
-    mkdir -p $out
-    ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include $out/include
-    ln -s ${compiler-rt}/lib $out/lib
+    mkdir -p $out/include $out/lib
+    cp -r ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include/. $out/include/
+    cp -r ${compiler-rt}/lib/. $out/lib/
   '';
 in
 stdenvNoCC.mkDerivation (finalAttrs: {

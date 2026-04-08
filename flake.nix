@@ -60,17 +60,7 @@
         "aarch64-darwin"
       ];
       forEachSystem = nixpkgs.lib.genAttrs supportedSystems;
-      libForSystem = system: self.perSystem.${system}.hull;
-      packagesForSystem = system: self.perSystem.${system}.packages;
-      targetHullPkgsForSystem =
-        buildSystem: targetSystem: self.perSystem.${buildSystem}.targetHullPkgsForSystem targetSystem;
-      targetPkgsForSystem =
-        buildSystem: targetSystem: self.perSystem.${buildSystem}.targetPkgsForSystem targetSystem;
-      targetHullForSystem =
-        buildSystem: targetSystem: self.perSystem.${buildSystem}.targetHullForSystem targetSystem;
-    in
-    {
-      perSystem = forEachSystem (
+      mkPerSystem =
         system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
@@ -98,7 +88,6 @@
             );
 
           rustToolchain = rustToolchainFor pkgs;
-
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
           mkTargetHullPkgs =
@@ -191,9 +180,7 @@
           hullPkgs = import ./nix/pkgs { inherit pkgs; } // {
             default = craneLib.buildPackage {
               src = craneLib.cleanCargoSource self;
-              nativeBuildInputs = [
-                pkgs.makeBinaryWrapper
-              ];
+              nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
               postInstall = ''
                 wrapProgram $out/bin/hull \
                   --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix-output-monitor ]}
@@ -249,22 +236,31 @@
           hullContests = {
             test.allProblems = hull.evalContest ./nix/test/contest/allProblems.nix { };
           };
-        }
-      );
+        };
 
-      devShells = forEachSystem (system: self.perSystem.${system}.devShells);
+      libForSystem = system: (mkPerSystem system).hull;
+      targetHullPkgsForSystem =
+        buildSystem: targetSystem: (mkPerSystem buildSystem).targetHullPkgsForSystem targetSystem;
+      targetPkgsForSystem =
+        buildSystem: targetSystem: (mkPerSystem buildSystem).targetPkgsForSystem targetSystem;
+      targetHullForSystem =
+        buildSystem: targetSystem: (mkPerSystem buildSystem).targetHullForSystem targetSystem;
+    in
+    {
+      perSystem = forEachSystem mkPerSystem;
+
+      devShells = forEachSystem (system: (mkPerSystem system).devShells);
       inherit
         libForSystem
-        packagesForSystem
         targetHullPkgsForSystem
         targetPkgsForSystem
         targetHullForSystem
         ;
       lib = forEachSystem libForSystem;
-      packages = forEachSystem packagesForSystem;
+      packages = forEachSystem (system: (mkPerSystem system).hullPkgs);
       formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
-      hullProblems = forEachSystem (system: self.perSystem.${system}.hullProblems);
-      hullContests = forEachSystem (system: self.perSystem.${system}.hullContests);
+      hullProblems = forEachSystem (system: (mkPerSystem system).hullProblems);
+      hullContests = forEachSystem (system: (mkPerSystem system).hullContests);
       templates = import ./nix/templates;
       defaultTemplate = self.templates.basic;
     };

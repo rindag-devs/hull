@@ -36,7 +36,7 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           hullLib = hull.libForSystem system;
-          hullPackages = hull.packagesForSystem system;
+          hullPackages = hull.packages.${system};
         in
         {
           devShells.default = pkgs.mkShell {

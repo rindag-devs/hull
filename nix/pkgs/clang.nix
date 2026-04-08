@@ -27,44 +27,38 @@ let
     "-mcpu=mvp"
     "--sysroot=${sysroot}"
   ];
-
-  lldBinPath = lib.makeBinPath [ llvmPackages.lld ];
 in
-pkgs.symlinkJoin {
-  name = "wasm32-wasi-wasip1-clang-${llvmPackages.clang.version}";
+pkgs.runCommandLocal "wasm32-wasi-wasip1-clang-${llvmPackages.clang.version}" { } ''
+  mkdir -p "$out/bin" "$out/resource-dir" "$out/toolchain/bin"
 
-  paths = [
-    (pkgs.writeShellScriptBin "wasm32-wasi-wasip1-clang" ''
-      wrapper_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-      exec ${llvmPackages.clang-unwrapped}/bin/clang \
-        -resource-dir="$wrapper_dir/../resource-dir" \
-        ${lib.escapeShellArgs commonFlags} \
-        "$@"
-    '')
-    (pkgs.writeShellScriptBin "wasm32-wasi-wasip1-clang++" ''
-      export PATH=${lib.escapeShellArg lldBinPath}:$PATH
-      wrapper_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-      exec ${llvmPackages.clang-unwrapped}/bin/clang++ \
-        -stdlib=libstdc++ \
-        -nostdlib++ \
-        -lstdc++ \
-        -lsupc++ \
-        -fno-exceptions \
-        -resource-dir="$wrapper_dir/../resource-dir" \
-        ${lib.escapeShellArgs commonFlags} \
-        "$@"
-    '')
-  ];
+  cp ${llvmPackages.clang-unwrapped}/bin/clang "$out/toolchain/bin/clang"
+  cp ${llvmPackages.clang-unwrapped}/bin/clang++ "$out/toolchain/bin/clang++"
+  cp ${llvmPackages.lld}/bin/ld.lld "$out/toolchain/bin/ld.lld"
+  cp ${llvmPackages.lld}/bin/wasm-ld "$out/toolchain/bin/wasm-ld"
+  chmod +x "$out/toolchain/bin/clang" "$out/toolchain/bin/clang++" "$out/toolchain/bin/ld.lld" "$out/toolchain/bin/wasm-ld"
 
-  postBuild = ''
-    mkdir -p $out/resource-dir
-    ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include $out/resource-dir/include
-    ln -s ${compiler-rt}/lib $out/resource-dir/lib
-  '';
+  install -Dm755 ${pkgs.writeShellScript "wasm32-wasi-wasip1-clang" ''
+    wrapper_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+    exec "$wrapper_dir/../toolchain/bin/clang" \
+      -resource-dir="$wrapper_dir/../resource-dir" \
+      ${lib.escapeShellArgs commonFlags} \
+      "$@"
+  ''} "$out/bin/wasm32-wasi-wasip1-clang"
 
-  meta = {
-    description = "Wrapper for clang / clang++ to compile for wasm judge";
-    platforms = lib.platforms.all;
-    mainProgram = "wasm32-wasi-wasip1-clang";
-  };
-}
+  install -Dm755 ${pkgs.writeShellScript "wasm32-wasi-wasip1-clang++" ''
+    wrapper_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+    export PATH="$wrapper_dir/../toolchain/bin:$PATH"
+    exec "$wrapper_dir/../toolchain/bin/clang++" \
+      -stdlib=libstdc++ \
+      -nostdlib++ \
+      -lstdc++ \
+      -lsupc++ \
+      -fno-exceptions \
+      -resource-dir="$wrapper_dir/../resource-dir" \
+      ${lib.escapeShellArgs commonFlags} \
+      "$@"
+  ''} "$out/bin/wasm32-wasi-wasip1-clang++"
+
+  ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include "$out/resource-dir/include"
+  ln -s ${compiler-rt}/lib "$out/resource-dir/lib"
+''
