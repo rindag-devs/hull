@@ -44,4 +44,8 @@
   lemon = import ./lemon.nix {
     inherit lib pkgs;
   };
+
+  lemonCustom = import ./lemonCustom.nix {
+    inherit lib pkgs;
+  };
 }

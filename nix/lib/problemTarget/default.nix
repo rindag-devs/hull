@@ -76,6 +76,18 @@
       ;
   };
 
+  lemonCustom = import ./lemonCustom {
+    inherit
+      lib
+      hull
+      pkgs
+      hullPkgs
+      targetHullPkgsForSystem
+      targetPkgsForSystem
+      targetHullForSystem
+      ;
+  };
+
   luogu = import ./luogu {
     inherit
       lib

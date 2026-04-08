@@ -15,6 +15,7 @@
 
 pub mod build;
 pub mod build_contest;
+pub mod bundle_judge;
 pub mod cnoi_self_eval;
 pub mod judge;
 pub mod patch;

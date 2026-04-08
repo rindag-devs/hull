@@ -19,6 +19,8 @@ pub mod analysis;
 pub mod artifact;
 /// High-level problem and contest build entry points.
 pub mod build;
+/// Exported bundle judge helpers shared by judge adapters.
+pub mod bundle_judge;
 /// Runtime metadata loading from flakes and exported bundles.
 pub mod metadata;
 /// WASM sandbox execution.

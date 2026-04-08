@@ -16,9 +16,9 @@
 use clap::{Parser, Subcommand};
 
 use crate::cmd::{
-  build::BuildOpts, build_contest::BuildContestOpts, cnoi_self_eval::CnoiSelfEvalOpts,
-  judge::JudgeOpts, patch::PatchOpts, run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
-  uoj_custom_judge::UojCustomJudgeOpts,
+  build::BuildOpts, build_contest::BuildContestOpts, bundle_judge::BundleJudgeOpts,
+  cnoi_self_eval::CnoiSelfEvalOpts, judge::JudgeOpts, patch::PatchOpts, run::RunOpts,
+  run_wasm::RunWasmOpts, stress::StressOpts, uoj_custom_judge::UojCustomJudgeOpts,
 };
 use crate::interactive::InteractiveMode;
 
@@ -82,6 +82,8 @@ pub enum Command {
     long_about = "Run a generator repeatedly, build one temporary test case per generated input, judge the selected solutions against the problem's main correct solution, and stop when a non-accepted result is found."
   )]
   Stress(StressOpts),
+  #[command(hide = true)]
+  BundleJudge(BundleJudgeOpts),
   #[command(hide = true)]
   UojCustomJudge(UojCustomJudgeOpts),
 }

@@ -23,6 +23,9 @@
 
   targets = {
     default = hull.contestTarget.common { };
+    lemonCustom = hull.contestTarget.lemonCustom {
+      problemTarget = "lemonCustom";
+    };
     cnoiParticipant =
       let
         displayLanguages = [

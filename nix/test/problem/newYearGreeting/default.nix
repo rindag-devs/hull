@@ -125,6 +125,14 @@
 
   targets = {
     default = hull.problemTarget.common;
+    lemonCustom = hull.problemTarget.lemonCustom {
+      solutionExtNames = {
+        std = "cpp";
+        smallOnly = "cpp";
+        bruteForce = "cpp";
+      };
+      participantHullLanguage = "cpp.26.s64m";
+    };
     uojCustom = hull.problemTarget.uojCustom { };
     uojCustomAarch64 = hull.problemTarget.uojCustom {
       targetSystem = "aarch64-linux";

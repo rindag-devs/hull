@@ -80,6 +80,14 @@
 
   targets = {
     default = hull.problemTarget.common;
+    lemonCustom = hull.problemTarget.lemonCustom {
+      solutionExtNames = {
+        std = "txt";
+        pc = "txt";
+        formatError = "txt";
+      };
+      participantHullLanguage = "txt";
+    };
     hydro = hull.problemTarget.hydro {
       type = "answerOnly";
     };

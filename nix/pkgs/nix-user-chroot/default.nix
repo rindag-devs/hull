@@ -21,7 +21,7 @@ pkgs.pkgsStatic.stdenv.mkDerivation {
   src = ./.;
 
   buildPhase = ''
-    $CC -O2 -static -Wall -Wextra -o nix-user-chroot main.c
+    $CC -O3 -static -Wall -Wextra -o nix-user-chroot main.c
   '';
 
   installPhase = ''

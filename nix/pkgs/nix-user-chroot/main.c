@@ -166,6 +166,11 @@ static int child_proc(const char *rootdir, const char *nixdir, int clear_env,
   }
 
   for (struct dir_mapping *m = dir_mappings; m; m = m->next) {
+    struct stat src_st;
+    if (stat(m->src, &src_st) < 0) {
+      if (errno == ENOENT) continue;
+      die_errno("stat dir mapping source");
+    }
     add_path(m->src, m->dest, rootdir);
   }
 
