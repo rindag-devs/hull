@@ -7,9 +7,7 @@
 [license]: https://github.com/rindag-devs/hull/blob/main/COPYING.LESSER
 [docs]: https://hull.aberter0x3f.top/
 
-**A Nix-powered framework for creating and judging competitive programming problems with unparalleled determinism.**
-
-Hull provides a complete, hermetic environment for the entire lifecycle of a competitive programming problem — from creation and validation to judging and packaging. By leveraging the power of Nix and WebAssembly, it guarantees that every step of the process is bit-for-bit reproducible, eliminating the "works on my machine" problem common in traditional judging setups.
+**A Nix-based framework for competitive programming problem authoring, analysis, and packaging.**
 
 ## Getting Started
 
@@ -17,11 +15,11 @@ Visit the [documentation home page][docs] to learn more.
 
 ## Features
 
-- **Declarative Problem Configuration:** Define every aspect of your problem — test cases, subtasks, solutions, checkers, validators, and documents — in a single, comprehensive Nix file.
-- **Integrated Toolchain:** Built-in support for validators, checkers, test data generators, and solution analysis.
-- **Flexible Judging Logic:** Supports batch problems, interactive problems (via stdio or grader), and answer-only tasks. You can also package a custom judger runner to implement more flexible judging logic and workflows.
-- **Automated Sanity Checks:** The framework automatically validates test data, verifies that solution performance matches predictions, and runs tests on your checker and validator to ensure correctness.
-- **High-Quality Document Generation:** Uses [Typst](https://typst.app/) to produce professional-grade PDF problem statements from your problem data.
+- Declarative problem and contest configuration in Nix.
+- Reproducible compilation and runtime analysis.
+- Built-in support for validators, checkers, generators, and solution checks.
+- Packagers for common judge formats, including custom UOJ and participant bundles.
+- Typst-based document generation.
 
 ## License
 

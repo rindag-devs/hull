@@ -4,13 +4,11 @@
 
 = Understanding `contest.nix`
 
-While the `problem.nix` file is the heart of a single problem, the `contest.nix` file is the conductor that orchestrates multiple problems into a single, cohesive contest package. It is a declarative file used to group problems, define contest-wide metadata, and specify how the entire contest should be built and packaged for different platforms.
-
-Compared to `problem.nix`, the structure of `contest.nix` is significantly simpler, as its primary role is aggregation.
+`contest.nix` defines one contest.
 
 == A Minimal Example
 
-Here is a complete example of a `contest.nix` file. It defines a contest with two problems and specifies a single, common way to package them.
+Minimal example:
 
 ```nix
 {
@@ -108,7 +106,7 @@ result/
 
 == Relationship Between Contest and Problem Targets
 
-It is crucial to understand that a contest target's job is often to collect and arrange the outputs of individual *problem targets*.
+Contest targets often collect outputs of problem targets.
 
 Consider the `hull.contestTarget.common` target. It takes an argument named `problemTarget`.
 
@@ -128,4 +126,4 @@ When you run `hull build-contest`, the following happens:
 
 Use `-j` / `--jobs` to control how many problems Hull analyzes in parallel. Arguments after `--` are forwarded to the final `nix build`, so debugging flags like `--show-trace` remain available.
 
-This powerful mechanism allows you to create complex contest packages by composing pre-defined problem packages, ensuring consistency and modularity.
+Contest packaging is composed from problem targets.

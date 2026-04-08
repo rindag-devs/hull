@@ -4,7 +4,7 @@
 
 = Understanding `problem.nix`
 
-The `problem.nix` file is the heart of every Hull project. It is a single, declarative file where you define every aspect of your competitive programming problem, from its name and resource limits to its test data, subtasks, and solutions. This chapter provides a comprehensive overview of the essential options within this file.
+`problem.nix` defines one problem.
 
 == Basic Metadata
 
@@ -42,7 +42,7 @@ Hull relies on several key programs to manage the problem's lifecycle. You provi
 
 - `checker`: The program responsible for comparing a solution's output against the standard answer to determine correctness. It can award partial scores.
 - `validator`: The program that reads a test case input file and verifies that it conforms to the problem's specified format and constraints. This is a critical step to ensure all test data is valid.
-- `generators`: An attribute set of programs used to generate test case inputs. Each attribute in the set defines a generator (e.g., `generators.rand`).
+- `generators`: An attribute set of input generators.
 
 == Test Data
 
@@ -121,7 +121,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
 
 == Solutions
 
-The `solutions` set is where you list all known implementations for the problem, including the standard correct solution, brute-force solutions, and various incorrect solutions. This is crucial for testing and validation.
+`solutions` lists implementations used for analysis and checks.
 
 ```nix
 {
@@ -148,20 +148,20 @@ The `solutions` set is where you list all known implementations for the problem,
 }
 ```
 
-- `mainCorrectSolution`: A boolean flag that *must be set to `true` for exactly one solution*. This solution is considered the canonical one and is used to generate the standard answer files for all test cases.
-- `subtaskPredictions`: This is a powerful validation feature. It's an attribute set where keys are zero-based subtask indices (as strings, e.g., `"0"`, `"1"`) and values are Nix functions. Each function takes a result (containing `score` and `statuses`) and returns `true` if the solution's performance matches your expectation. When you run `hull build`, Hull analyzes all solutions through its runtime and verifies that these predictions hold, catching inconsistencies early.
+- `mainCorrectSolution`: Exactly one solution must set this to `true`. Hull uses it to generate official outputs.
+- `subtaskPredictions`: An attribute set keyed by zero-based subtask indices as strings. Each value is a Nix function that checks the analyzed result.
 
 == Documents & Targets
 
-Finally, you can define how to generate documents and package the final problem.
+Documents and targets:
 
 ```nix
 {
   documents = {
     "statement.en.pdf" = {
-      src = hull.document.mkProblemTypstDocument config {
-        src = ./document/statement;
-        inputs = { language = "en"; };
+      path = hull.xcpcStatement config {
+        statement = ./document/statement/en.typ;
+        displayLanguage = "en";
       };
       displayLanguage = "en";
       participantVisibility = true;
@@ -176,5 +176,5 @@ Finally, you can define how to generate documents and package the final problem.
 }
 ```
 
-- `documents`: An attribute set for generating documents. The example shows how to create a PDF problem statement from a Typst template using `hull.document.mkProblemTypstDocument`.
-- `targets`: Defines different packaging formats for the problem. A target specifies how to structure the final output directory to be compatible with various online judge systems. Hull provides built-in targets like `common`, `hydro`, and `uoj`. The `default` target is the one built by the `hull build` command.
+- `documents`: generated files such as statements or reports.
+- `targets`: packaging formats. `default` is used by `hull build`.

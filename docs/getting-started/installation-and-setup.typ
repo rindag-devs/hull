@@ -4,21 +4,22 @@
 
 = Installation & Setup
 
-This chapter will guide you through the initial setup process required to use Hull. We will cover the necessary prerequisites, how to create a problem project from the official template, and how to enter the specialized development environment.
+This chapter shows the required setup and the standard project entry points.
 
 == Prerequisites
 
-Hull's core philosophy of perfect reproducibility is built upon the Nix package manager. Therefore, the only prerequisite is a working Nix installation with Flakes support enabled.
+Hull requires Nix with Flakes enabled.
 
 === 1. Install Nix
 
-If you do not have Nix installed, please follow the official instructions at #link("https://nixos.org/download/"). The recommended installation method for non-NixOS systems is the "Multi-user installation".
+Install Nix by following #link("https://nixos.org/download/").
 
 === 2. Enable Flakes
 
-Flakes are a Nix feature that provides reproducibility and a more user-friendly interface. Hull relies on them. To enable Flakes, you need to edit your Nix configuration file.
+Enable Flakes in the Nix configuration file.
 
 The location of this file depends on your system:
+
 - On NixOS: `/etc/nixos/configuration.nix`
 - On Linux (multi-user install) or macOS: `~/.config/nix/nix.conf` (you may need to create the file and directory).
 
@@ -28,13 +29,13 @@ Add the following lines to your configuration file:
 experimental-features = nix-command flakes
 ```
 
-After saving the file, you may need to restart the Nix daemon for the changes to take effect. You can typically do this with:
+Restart the Nix daemon if required.
 
 ```bash
 sudo systemctl restart nix-daemon
 ```
 
-To verify that Flakes are enabled, run the following command. It should execute without errors.
+Verify the setup with:
 
 ```bash
 nix flake --version
@@ -42,7 +43,7 @@ nix flake --version
 
 == Creating a New Problem
 
-The easiest way to start a problem is by using the official Hull flake template. This provides a standard directory structure and a pre-configured `problem.nix` file.
+Use the Hull template to create a project.
 
 === Creating a New Project Directory
 
@@ -65,20 +66,17 @@ nix flake init -t github:rindag-devs/hull#basic
 
 == Entering the Development Environment
 
-Once your project is created, you need to enter the Nix development shell. This is a crucial step.
+Enter the development shell:
 
 ```bash
 cd myProblem
 nix develop
 ```
 
-The `nix develop` command launches a shell session that is configured for your Hull project. Inside this shell:
+Inside this shell:
+
 - The `hull` command-line interface (CLI) is available in your `PATH`.
 - All necessary compilers (e.g., `wasm32-wasi-wasip1-clang++`) and tools are ready to use.
 - Environment variables are set up for seamless integration with libraries like `cplib`.
 
-This shell is a hermetic, isolated environment. The tools and their versions are precisely defined by the `flake.nix` file. This ensures that you and anyone else working on the problem are using the exact same versions of all tools, which is fundamental to Hull's guarantee of reproducibility.
-
-You will notice your shell prompt change, indicating that you are inside the development environment. All `hull` commands described in the following chapters must be run from within this shell.
-
-With the environment set up, you are now ready to start working with your problem.
+Run Hull commands inside this shell.

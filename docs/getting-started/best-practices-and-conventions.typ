@@ -4,11 +4,11 @@
 
 = Best Practices & Conventions
 
-This chapter outlines a set of recommended practices and conventions for developing problems with Hull. Adhering to these guidelines will help maintain consistency, readability, and robustness in your projects, making them easier to manage, debug, and collaborate on.
+Use consistent names and a predictable layout.
 
 == Naming Conventions
 
-Consistent naming is crucial for a clean and understandable problem definition. While Hull does not enforce a strict naming scheme, we strongly recommend adopting a consistent style for different types of identifiers within your `problem.nix` and file structure.
+Recommended naming:
 
 - *Problem Name, Test Cases, Generators, Solutions*: Use `camelCase` for the machine-readable identifier. This name is often used in directory paths, so avoid spaces or special characters.
   - Good: `aPlusB`, `newYearGreeting`.
@@ -17,11 +17,9 @@ Consistent naming is crucial for a clean and understandable problem definition. 
   - Good: `n_is_small`, `all_positive`, `is_tree`.
   - Bad: `trait1`, `subtask2_property`.
 
-The key is to choose a style and apply it consistently throughout your project.
-
 == Directory Structure
 
-The official Hull template provides a standard directory structure that organizes all components of a problem logically. It is highly recommended to follow this structure to maintain clarity and consistency.
+Recommended layout:
 
 A typical problem directory looks like this:
 
@@ -31,7 +29,7 @@ A typical problem directory looks like this:
 │   └── 1.in
 ├── document/
 │   └── statement/
-│       ├── main.typ
+│       ├── en.typ
 │       └── ...
 ├── generator/
 │   └── rand.20.cpp
@@ -108,7 +106,7 @@ When you run `hull build`, these tests are executed automatically. If any predic
 
 === Predicting Solution Behavior
 
-The `subtaskPredictions` attribute for each solution is another powerful testing tool. It verifies that your solutions perform exactly as you expect. This is especially useful for ensuring that time-limit-exceeded (TLE) solutions actually time out and wrong-answer (WA) solutions fail on the correct subtasks.
+`subtaskPredictions` checks expected solution behavior.
 
 For a brute-force solution that is expected to be too slow for larger subtasks, you can write a prediction that accepts either "accepted" (for small cases) or "time_limit_exceeded".
 
@@ -158,4 +156,4 @@ The `.editorconfig` file helps maintain consistent coding styles (like indentati
 
 == Version Control
 
-A well-configured `.gitignore` file is crucial to keep your repository clean by excluding build artifacts and temporary files. The template provides a comprehensive default and ensures that temporary Nix store links, compiled binaries, and other generated files are not committed to your version control system.
+Keep build artifacts and temporary files out of version control.

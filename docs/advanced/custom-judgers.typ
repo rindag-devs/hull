@@ -4,15 +4,13 @@
 
 = Custom Judgers
 
-While Hull's built-in judgers (`batch`, `stdioInteraction`, and `answerOnly`) cover many common problem types, some problems require a fully custom evaluation pipeline. For these scenarios, Hull lets you define a custom judger directly in your `problem.nix`.
+Hull includes `batch`, `stdioInteraction`, and `answerOnly`. A problem can also define a custom judger.
 
-Custom judgers are expressed as *packaged runners*. A judger exposes executable derivations that Hull runs through a uniform environment contract. This keeps the interface compact and makes the whole judging workflow easy to package.
-
-The `newYearGreeting` problem in Hull's test suite is a complete example of this style.
+`nix/test/problem/newYearGreeting/judger.nix` is a complete example.
 
 == When to Use a Custom Judger
 
-You should consider writing a custom judger when your problem's evaluation process does not fit the built-in models. Common use cases include:
+Use a custom judger when the built-in models do not fit the evaluation workflow.
 
 - *Multi-stage Problems*: Problems where evaluation has multiple dependent phases, such as "encode first, then decode based on the first output".
 - *Special Interaction*: Problems that need custom communication over files, FIFOs, or a protocol that does not match the built-in interactive model.
@@ -21,56 +19,45 @@ You should consider writing a custom judger when your problem's evaluation proce
 
 == The Judger Interface
 
-A judger is an attribute set assigned to the `judger` option. It must contain `_type = "hullJudger"`, and it usually contains three fields:
+A judger is an attribute set assigned to `judger`. It must contain `_type = "hullJudger"`. It usually contains:
 
-- `prepareSolution`: Converts a solution into the artifacts that the runner needs, such as a compiled `cwasm` executable.
-- `generateOutputs`: An executable derivation that Hull runs to generate the official outputs for one test case.
-- `judge`: An executable derivation that Hull runs to judge one solution on one test case.
+- `prepareSolution`: a runner or function that prepares one solution
+- `generateOutputs`: a runner or function that generates official outputs for one test case
+- `judge`: a runner or function that judges one `(solution, testCase)` pair
 
-Here is the basic skeleton:
+Basic skeleton:
 
 ```nix
 {
-  judger =
-    let
-      helperWasm = hull.compile.executable {
-        inherit (config) languages includes;
-        src = ./helper.20.cpp;
-        name = "${config.name}-helper";
-        extraObjects = [ ];
-      };
-      helperCwasm = hull.compile.cwasm {
-        name = "${config.name}-helper";
-        wasm = helperWasm;
-      };
-    in
-    {
+  judger = {
       _type = "hullJudger";
 
-      prepareSolution =
-        solution:
-        let
-          solutionWasm = hull.compile.executable {
-            inherit (config) languages includes;
-            src = solution.src;
-            name = "${config.name}-solution-${solution.name}";
+      prepareSolution = hull.judger.writeShellApplication {
+        name = "hull-judger-${config.name}-prepareSolution";
+        inheritPath = false;
+        runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils targetPkgs.jq ];
+        text = { targetHull, ... }: ''
+          ${targetHull.compile.executableMatchScript {
+            languages = targetHull.language.retarget { inherit targetHull; } config.languages;
+            srcExpr = ''"$HULL_SOLUTION_SRC"'';
+            outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
+            includes = config.includes;
             extraObjects = [ ];
-          };
-        in
-        {
-          src = solution.src;
-          executable = hull.compile.cwasm {
-            name = "${config.name}-solution-${solution.name}";
-            wasm = solutionWasm;
-          };
-        };
+          }}
 
-      generateOutputs = pkgs.writeShellApplication {
+          jq -nc \
+            --arg src "$HULL_SOLUTION_SRC" \
+            --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
+            '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
+        '';
+      };
+
+      generateOutputs = hull.judger.writeShellApplication {
         name = "hull-judger-${config.name}-generateOutputs";
         inheritPath = false;
-        runtimeInputs = [ pkgs.coreutils ];
-        text = ''
-          ${hull.runWasm.script {
+        runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
+        text = { targetHull, ... }: ''
+          ${targetHull.runWasm.script {
             wasm = "$HULL_SOLUTION_EXECUTABLE";
             stdin = "$HULL_INPUT_PATH";
             tickLimit = "$HULL_TICK_LIMIT";
@@ -83,12 +70,12 @@ Here is the basic skeleton:
         '';
       };
 
-      judge = pkgs.writeShellApplication {
+      judge = hull.judger.writeShellApplication {
         name = "hull-judger-${config.name}-judge";
         inheritPath = false;
-        runtimeInputs = [ pkgs.coreutils pkgs.jq ];
-        text = ''
-          ${hull.runWasm.script {
+        runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils targetPkgs.jq ];
+        text = { targetHull, ... }: ''
+          ${targetHull.runWasm.script {
             wasm = "$HULL_SOLUTION_EXECUTABLE";
             stdin = "$HULL_INPUT_PATH";
             tickLimit = "$HULL_TICK_LIMIT";
@@ -119,13 +106,12 @@ Here is the basic skeleton:
 
 == `prepareSolution`
 
-`prepareSolution` is evaluated by Hull during judger setup. Its job is to translate a solution definition into the store artifacts that the runner expects.
+`prepareSolution` prepares one solution for the packaged runners.
 
-Typical responsibilities:
+Typical tasks:
 
-- Keep `src = solution.src` if the raw source file is needed by the runner.
-- Compile the solution to WASM and then to `cwasm` if the runner wants an executable.
-- Return an attribute set that may contain fields such as `src` and `executable`.
+- keep `src` when the runner needs the original source
+- produce `executable` when the runner needs an executable path
 
 For example, a source-only problem may use:
 
@@ -135,7 +121,7 @@ prepareSolution = solution: {
 };
 ```
 
-while a runnable problem usually produces:
+Example with an executable path:
 
 ```nix
 prepareSolution =
@@ -150,20 +136,15 @@ prepareSolution =
   in
   {
     src = solution.src;
-    executable = hull.compile.cwasm {
-      name = "${config.name}-solution-${solution.name}";
-      inherit wasm;
-    };
+    executable = { path = toString wasm; drvPath = null; };
   };
 ```
 
 == `generateOutputs`
 
-`generateOutputs` is an executable derivation.
+`generateOutputs` runs once for each test case, using the solution with `mainCorrectSolution = true`.
 
-Hull runs it once for each test case, using the solution marked with `mainCorrectSolution = true`. The runner must write all official output files into `$HULL_OUTPUTS_DIR`.
-
-During execution, Hull provides these environment variables:
+Environment variables:
 
 - `HULL_MODE`: `generateOutputs` or `judge`.
 - `HULL_TESTCASE_NAME`: the test case name.
@@ -175,7 +156,7 @@ During execution, Hull provides these environment variables:
 - `HULL_SOLUTION_EXECUTABLE`: executable path returned by `prepareSolution` when present.
 - `HULL_OUTPUTS_DIR`: directory where the runner must place generated outputs.
 
-In `generateOutputs` mode, `HULL_REPORT_PATH` is unset because no report file is expected.
+`HULL_REPORT_PATH` is unset in `generateOutputs` mode.
 
 If a runner needs a deterministic salt derived from the test case name, it can compute one inside the script, for example:
 
@@ -185,14 +166,14 @@ testCaseNameHash=$(printf '%s' "$HULL_TESTCASE_NAME" | sha256sum | cut -d' ' -f1
 
 == `judge`
 
-`judge` is an executable derivation. Hull runs it once per `(testCase, solution)` pair.
+`judge` runs once per `(testCase, solution)` pair.
 
 The runner must:
 
 - write all produced output files into `$HULL_OUTPUTS_DIR`
 - write the final judge report JSON to `$HULL_REPORT_PATH`
 
-Hull uses the following report format:
+Report format:
 
 ```json
 {
@@ -204,7 +185,7 @@ Hull uses the following report format:
 }
 ```
 
-In `judge` mode, Hull additionally provides:
+Additional variable in `judge` mode:
 
 - `HULL_OFFICIAL_OUTPUTS_DIR`: directory containing the official outputs generated for this test case
 
@@ -214,87 +195,22 @@ This is the directory you should compare against when running a checker or imple
 
 Inside a packaged runner, the most common helpers are:
 
-- `hull.runWasm.script` to execute a compiled WASM or CWASM program
+- `hull.runWasm.script` to execute a WASM program
 - `hull.check.script` to run the checker
 - `hull.validate.script` to run the validator
 
-For example:
+Example:
 
 ```nix
 ${hull.check.script {
-  checkerWasm = config.checker.cwasm;
+  checkerWasm = config.checker.wasm;
   input = "$HULL_INPUT_PATH";
   output = "$run_stdout";
   answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
 }}
 ```
 
-Because the actual work happens inside the shell script, you can describe arbitrarily complex judging pipelines while keeping Nix evaluation declarative.
-
-== The Golden Rule
-
-Keep Nix evaluation declarative.
-
-Evaluation should only assemble derivations and dependency graphs. All steps that inspect outputs, run programs, or branch on runtime data must happen inside the returned runner.
-
-=== Correct Pattern
-
-This is the correct pattern:
-
-```nix
-judge = pkgs.writeShellApplication {
-  name = "hull-judger-demo-judge";
-  inheritPath = false;
-  runtimeInputs = [ pkgs.coreutils pkgs.jq ];
-  text = ''
-    ${hull.runWasm.script {
-      wasm = "$HULL_SOLUTION_EXECUTABLE";
-      stdin = "$HULL_INPUT_PATH";
-      tickLimit = "$HULL_TICK_LIMIT";
-      memoryLimit = "$HULL_MEMORY_LIMIT";
-      ensureAccepted = false;
-    }}
-
-    run_status=$(jq -r .status report.json)
-
-    if [ "$run_status" = accepted ]; then
-      ${hull.check.script {
-        checkerWasm = config.checker.cwasm;
-        input = "$HULL_INPUT_PATH";
-        output = "$PWD/stdout";
-        answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
-      }}
-    fi
-
-    # produce $HULL_REPORT_PATH here
-  '';
-};
-```
-
-Nix evaluation only sees an executable derivation. The operational logic stays inside the runner.
-
-=== Anti-Pattern
-
-The following is wrong:
-
-```nix
-# THIS IS WRONG! DO NOT DO THIS!
-let
-  runDerivation = pkgs.runCommandLocal "run-solution" { } ''
-    ${hull.runWasm.script {
-      wasm = someCompiledProgram;
-      stdin = someInput;
-    }}
-    jq -r .status report.json > $out
-  '';
-
-  # This forces evaluation to wait for a build result.
-  runStatus = builtins.readFile runDerivation;
-in
-if runStatus == "accepted" then ... else ...
-```
-
-This forces evaluation to depend on build results and defeats Hull's runtime orchestration model.
+Keep runtime logic inside the runner.
 
 == Practical Advice
 

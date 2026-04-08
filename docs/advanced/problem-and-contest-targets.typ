@@ -4,13 +4,11 @@
 
 = Problem and Contest Targets
 
-While `problem.nix` and `contest.nix` define the abstract logic of your problems, *targets* define their concrete, physical representation. A target is a Nix function that takes a fully evaluated problem or contest configuration and packages it into a specific directory structure, tailored for a particular online judge (OJ) system or use case.
-
-This mechanism makes Hull problems highly portable. You can define a problem once and then generate packages for multiple platforms like Hydro, UOJ, or a generic local format, simply by defining different targets.
+Targets package a fully evaluated problem or contest into a concrete directory or archive format.
 
 == Introduction to Targets
 
-Targets are defined within the `targets` attribute set in your `problem.nix` or `contest.nix` file. The `default` target is special; it's the one built when you run `hull build` or `hull build-contest` without specifying a target name, after Hull has finished the runtime analysis needed by that package.
+Define targets in the `targets` attribute set of `problem.nix` or `contest.nix`. `default` is used when no target is specified.
 
 ```nix
 # In problem.nix
@@ -30,7 +28,7 @@ Targets are defined within the `targets` attribute set in your `problem.nix` or 
 }
 ```
 
-Hull provides a suite of built-in targets that cover common OJ systems and packaging needs.
+Hull includes built-in targets for local inspection and judge-specific packaging.
 
 == Built-in Problem Targets
 
@@ -38,7 +36,7 @@ Problem targets operate on a single problem's configuration.
 
 === `common`
 
-The `hull.problemTarget.common` target is a general-purpose format that is useful for debugging, inspection, and local use. It organizes all components of the problem into a clear, human-readable directory structure.
+`hull.problemTarget.common` packages one problem into a readable local layout.
 
 - *`data/`*: Contains all test case inputs and their corresponding standard answer files.
 - *`solution/`*: Contains detailed judging results for every solution.
@@ -47,7 +45,7 @@ The `hull.problemTarget.common` target is a general-purpose format that is usefu
 
 === `hydro`
 
-The `hull.problemTarget.hydro` target generates a package compatible with the #link("https://hydro.ac/")[Hydro-OJ] system. It creates the necessary YAML configuration files and directory structure that Hydro expects.
+`hull.problemTarget.hydro` packages one problem for #link("https://hydro.ac/")[Hydro-OJ].
 
 - *`problem.yaml`*: Top-level metadata for the problem.
 - *`testdata/config.yaml`*: Detailed judging configuration, including subtasks, time/memory limits, and paths to checker/validator programs.
@@ -56,7 +54,7 @@ The `hull.problemTarget.hydro` target generates a package compatible with the #l
 
 === `lemon`
 
-The `hull.problemTarget.lemon` target is designed for #link("https://github.com/Project-LemonLime/Project_LemonLime")[Project LemonLime]. It produces a directory structure centered around a `.cdf` (Contest Definition File) and organizes test data and contestant solutions accordingly.
+`hull.problemTarget.lemon` packages one problem for #link("https://github.com/Project-LemonLime/Project_LemonLime")[Project LemonLime].
 
 - *`<problem-name>.cdf`*: A JSON file containing all metadata, test case configurations, and contestant information.
 - *`data/<problem-name>/`*: Contains test data and the native checker executable.
@@ -64,19 +62,27 @@ The `hull.problemTarget.lemon` target is designed for #link("https://github.com/
 
 === `uoj`
 
-The `hull.problemTarget.uoj` target creates a package for #link("https://uoj.ac/")[Universal Online Judge]. It generates a `problem.conf` file and renumbers test cases to fit UOJ's linear test point model.
+`hull.problemTarget.uoj` packages one problem for #link("https://uoj.ac/")[Universal Online Judge].
 
 - *`problem.conf`*: The main configuration file defining subtasks, scoring, and resource limits.
 - *`<problem-name>1.in`, `<problem-name>1.out`, etc.*: Test data files following UOJ's naming convention.
 - *`chk.20.cpp`, `val.20.cpp`*: Checker and validator source files.
 
+=== `uojCustom`
+
+`hull.problemTarget.uojCustom` packages one problem as a custom UOJ bundle.
+
+- It includes a bundled Hull runtime, custom judger runners, and problem data.
+- It accepts `targetSystem`.
+- The default `targetSystem` is `x86_64-linux`.
+
 == Built-in Contest Targets
 
-Contest targets orchestrate the packaging of multiple problems into a single cohesive unit. They often work by invoking a specific problem target for each problem in the contest.
+Contest targets package multiple problems into one contest output.
 
 === `common`
 
-The `hull.contestTarget.common` target is the simplest contest packager. It builds a specified problem target for each problem and places the result into a corresponding subdirectory.
+`hull.contestTarget.common` builds one selected problem target for each problem and places each output in its own subdirectory.
 
 ```nix
 # In contest.nix
@@ -102,7 +108,7 @@ result/
 
 === `lemon`
 
-The `hull.contestTarget.lemon` target is more integrated. It requires each problem to have a `lemon` problem target. It then merges the outputs of all these problem targets into a single, unified Lemon contest package.
+`hull.contestTarget.lemon` merges per-problem Lemon outputs into one contest package.
 
 - It combines all individual `.cdf` files into a single, contest-wide `.cdf` file.
 - It merges all `data/` directories into one.
@@ -112,19 +118,21 @@ This creates a complete contest package ready to be imported into LemonLime.
 
 === `cnoiParticipant`
 
-The `hull.contestTarget.cnoiParticipant` target is a specialized packager designed to create a distributable package for contestants, particularly for CNOI-series events. Its key features are:
+`hull.contestTarget.cnoiParticipant` packages a contestant bundle with statements, samples, participant-visible files, and optional offline self-eval tools.
 
 - It gathers all sample cases from each problem.
 - It includes any participant-visible files (e.g., graders, skeleton code).
-- Most importantly, it uses Typst to compile a single, comprehensive PDF booklet containing the formatted problem statements for every problem in the contest, complete with a table of contents and consistent styling.
+- It can build one PDF booklet for all problem statements.
+- It accepts `targetSystem`.
+- The default `targetSystem` is `x86_64-linux`.
 
 == Writing a Custom Target
 
-For proprietary OJ systems or unique packaging requirements, you can write your own target directly in your `.nix` file.
+Custom targets can be defined directly in `problem.nix` or `contest.nix`.
 
 === The Target Interface
 
-A target in Hull is not just a function, but a specific attribute set that follows a functor pattern. This allows for type checking and makes targets configurable.
+A target is an attribute set with `_type` and `__functor`.
 
 The structure of a target attribute set is as follows:
 
@@ -225,13 +233,14 @@ The functor pattern allows you to create configurable targets. Let's modify our 
             '') (builtins.attrValues problem.testCases)}
           '';
 
-        # The option is now part of the target's attribute set.
+        # The option is part of the target attribute set.
         inherit solutionFileName;
       }
-    ) { solutionFileName = "main_solution.cpp"; }; # We can now configure it.
+    ) { solutionFileName = "main_solution.cpp"; };
   };
 }
 ```
+
 In this advanced example, we wrap the target definition in a function to accept arguments. The `solutionFileName` is passed into the attribute set and can be accessed via `self.solutionFileName` inside the `__functor`. This is the same pattern used by Hull's built-in targets like `hull.problemTarget.hydro`.
 
 === Custom Contest Target Example
