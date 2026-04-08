@@ -100,7 +100,6 @@
         tooManyOp = "c";
         infinityRead = "cpp";
       };
-      participantHullLanguage = "cpp.26.s64m";
     };
     hydro = hull.problemTarget.hydro {
       type = "stdioInteraction";

@@ -198,7 +198,11 @@ int main(int argc, char **argv) {
   char bundle_mount[PATH_MAX * 2];
   char problem_name_path[PATH_MAX];
   char problem_name[PATH_MAX];
+  char submission_name_path[PATH_MAX];
+  char submission_name[PATH_MAX];
+  char bundled_submission_path[PATH_MAX];
   char current_input_path[PATH_MAX];
+  char language_map_path[PATH_MAX];
   char report_json_path[PATH_MAX];
   char report_txt_path[PATH_MAX];
   char inner_report_json_path[PATH_MAX];
@@ -254,8 +258,12 @@ int main(int argc, char **argv) {
       snprintf(bundle_mount, sizeof(bundle_mount), "%s:%s", bundle_root, "/bundle") >=
           (int)sizeof(bundle_mount) ||
       make_path(problem_name_path, sizeof(problem_name_path), extract_root, "/problem-name") != 0 ||
+      make_path(submission_name_path, sizeof(submission_name_path), extract_root,
+                "/submission-name") != 0 ||
       make_path(current_input_path, sizeof(current_input_path), extract_root, "/current-input") !=
           0 ||
+      make_path(language_map_path, sizeof(language_map_path), bundle_root,
+                "/lemon-language-map.json") != 0 ||
       make_path(report_json_path, sizeof(report_json_path), extract_root, "/watcher-report.json") !=
           0 ||
       make_path(report_txt_path, sizeof(report_txt_path), extract_root, "/watcher-report.txt") !=
@@ -281,7 +289,18 @@ int main(int argc, char **argv) {
     fprintf(stderr, "failed to read HullBundle metadata from %s\n", problem_name_path);
     return 1;
   }
+  if (read_text_file(submission_name_path, submission_name, sizeof(submission_name)) != 0) {
+    fprintf(stderr, "failed to read HullBundle submission metadata from %s\n",
+            submission_name_path);
+    return 1;
+  }
   trim_newline(problem_name);
+  trim_newline(submission_name);
+  if (snprintf(bundled_submission_path, sizeof(bundled_submission_path), "/bundle-host/%s",
+               submission_name) >= (int)sizeof(bundled_submission_path)) {
+    fprintf(stderr, "bundled submission path too long\n");
+    return 1;
+  }
 
   input_path = argv[3];
   output_path = argv[4];
@@ -364,26 +383,28 @@ int main(int argc, char **argv) {
   child_argv[11] = "--metadata-path";
   child_argv[12] = "problem.json";
   child_argv[13] = "--submission-file";
-  child_argv[14] = "/bundle-host/submission";
+  child_argv[14] = bundled_submission_path;
   child_argv[15] = "--submission-language";
   child_argv[16] = "HullBundle";
-  child_argv[17] = "--testcase-name";
-  child_argv[18] = testcase_name;
-  child_argv[19] = "--input-path";
-  child_argv[20] = "/bundle-host/current-input";
-  child_argv[21] = "--official-data-path";
-  child_argv[22] = official_data_path;
-  child_argv[23] = "--tick-limit";
-  child_argv[24] = tick_limit_buf;
-  child_argv[25] = "--memory-limit";
-  child_argv[26] = memory_limit_buf;
-  child_argv[27] = "--participant-solution-name";
-  child_argv[28] = "lemonCustom";
-  child_argv[29] = "--output-path";
-  child_argv[30] = inner_report_json_path;
-  child_argv[31] = "--plain-output-path";
-  child_argv[32] = inner_report_txt_path;
-  child_argv[33] = NULL;
+  child_argv[17] = "--language-map-path";
+  child_argv[18] = "lemon-language-map.json";
+  child_argv[19] = "--testcase-name";
+  child_argv[20] = testcase_name;
+  child_argv[21] = "--input-path";
+  child_argv[22] = "/bundle-host/current-input";
+  child_argv[23] = "--official-data-path";
+  child_argv[24] = official_data_path;
+  child_argv[25] = "--tick-limit";
+  child_argv[26] = tick_limit_buf;
+  child_argv[27] = "--memory-limit";
+  child_argv[28] = memory_limit_buf;
+  child_argv[29] = "--participant-solution-name";
+  child_argv[30] = "lemonCustom";
+  child_argv[31] = "--output-path";
+  child_argv[32] = inner_report_json_path;
+  child_argv[33] = "--plain-output-path";
+  child_argv[34] = inner_report_txt_path;
+  child_argv[35] = NULL;
 
   child_pid = fork();
   if (child_pid < 0) {

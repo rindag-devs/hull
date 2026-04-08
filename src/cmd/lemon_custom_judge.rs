@@ -16,17 +16,17 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use clap::Parser;
 
 use crate::runtime::bundle_judge::{
-  BundleJudgeTestCaseInput, judge_test_case_from_paths, prepare_bundle_judge_context,
+  judge_test_case_from_paths, prepare_bundle_judge_context, BundleJudgeTestCaseInput,
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
 
 #[derive(Parser)]
-/// Hidden entry point that judges one bundled testcase through exported Hull runtime artifacts.
-pub struct BundleJudgeOpts {
+/// Hidden entry point that judges one Lemon custom testcase through exported Hull artifacts.
+pub struct LemonCustomJudgeOpts {
   /// Bundle root directory containing exported problem metadata and testcase assets.
   #[arg(long)]
   pub bundle_root: String,
@@ -42,6 +42,10 @@ pub struct BundleJudgeOpts {
   /// Submission language identifier kept for CLI compatibility.
   #[arg(long)]
   pub submission_language: String,
+
+  /// Relative path to the bundled Lemon-to-Hull language map.
+  #[arg(long)]
+  pub language_map_path: String,
 
   /// Testcase name passed through to the bundled judger.
   #[arg(long)]
@@ -76,20 +80,17 @@ pub struct BundleJudgeOpts {
   pub plain_output_path: Option<String>,
 }
 
-/// Executes one bundled judging request and writes the raw judge report as JSON.
-pub fn run(opts: &BundleJudgeOpts) -> Result<()> {
+/// Executes one Lemon custom bundled judging request and writes the judge report.
+pub fn run(opts: &LemonCustomJudgeOpts) -> Result<()> {
   let bundle_root = PathBuf::from(&opts.bundle_root);
   let output_path = PathBuf::from(&opts.output_path);
   let problem = load_bundle_judge_problem_spec(&bundle_root, &opts.metadata_path)?;
 
-  let hull_language = if problem.participant_hull_language.is_empty() {
-    return Err(anyhow!(
-      "Bundle problem `{}` is missing participantHullLanguage",
-      problem.name
-    ));
-  } else {
-    problem.participant_hull_language.clone()
-  };
+  let hull_language = resolve_submission_hull_language(
+    &bundle_root,
+    &opts.language_map_path,
+    Path::new(&opts.submission_file),
+  )?;
 
   let prepared = prepare_bundle_judge_context(
     &bundle_root,
@@ -115,7 +116,7 @@ pub fn run(opts: &BundleJudgeOpts) -> Result<()> {
   }
   std::fs::write(&output_path, serde_json::to_vec(&report)?).with_context(|| {
     format!(
-      "Failed to write bundled judge report to {}",
+      "Failed to write Lemon custom judge report to {}",
       output_path.display()
     )
   })?;
@@ -130,10 +131,42 @@ pub fn run(opts: &BundleJudgeOpts) -> Result<()> {
     );
     std::fs::write(&plain_output_path, plain_report).with_context(|| {
       format!(
-        "Failed to write bundled plain judge report to {}",
+        "Failed to write Lemon custom plain judge report to {}",
         plain_output_path.display()
       )
     })?;
   }
   Ok(())
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LemonLanguageMap {
+  lemon_to_hull_language_map: BTreeMap<String, String>,
+}
+
+fn resolve_submission_hull_language(
+  bundle_root: &Path,
+  language_map_path: &str,
+  submission_file: &Path,
+) -> Result<String> {
+  let extension = submission_file
+    .extension()
+    .and_then(|ext| ext.to_str())
+    .with_context(|| {
+      format!(
+        "Submission file {} does not have a usable extension",
+        submission_file.display()
+      )
+    })?;
+  let map_path = bundle_root.join(language_map_path);
+  let content = std::fs::read_to_string(&map_path)
+    .with_context(|| format!("Failed to read Lemon language map {}", map_path.display()))?;
+  let map: LemonLanguageMap =
+    serde_json::from_str(&content).context("Failed to parse Lemon language map JSON")?;
+  map
+    .lemon_to_hull_language_map
+    .get(extension)
+    .cloned()
+    .with_context(|| format!("No Hull language mapping found for extension `{extension}`"))
 }

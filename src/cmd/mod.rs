@@ -15,9 +15,9 @@
 
 pub mod build;
 pub mod build_contest;
-pub mod bundle_judge;
 pub mod cnoi_self_eval;
 pub mod judge;
+pub mod lemon_custom_judge;
 pub mod patch;
 pub mod run;
 pub mod run_wasm;

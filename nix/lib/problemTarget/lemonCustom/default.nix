@@ -36,8 +36,11 @@
   compilerName ? "HullBundle",
   # Lemon compiler configuration name expected by imported task compilerConfiguration entries.
   compilerConfigurationName ? "default",
-  # Hull language used to compile contestant submissions inside the bundled runtime.
-  participantHullLanguage,
+  # Mapping from Lemon source extension to Hull language.
+  lemonToHullLanguageMap ? {
+    c = "c.23.s64m";
+    cpp = "cpp.26.s64m";
+  },
 }:
 
 {
@@ -73,11 +76,12 @@
       allTestCases = builtins.attrValues testCases;
 
       metadata = {
-        name = problem.name;
-        tickLimit = problem.tickLimit;
-        memoryLimit = problem.memoryLimit;
-        fullScore = problem.fullScore;
-        participantHullLanguage = participantHullLanguage;
+        inherit (problem)
+          name
+          tickLimit
+          memoryLimit
+          fullScore
+          ;
         checker = {
           src = null;
           wasm = {
@@ -151,6 +155,13 @@
         mkdir -p $out/data/${problem.name} $out/solutions
         cp ${pkgs.writeText "hull-lemonCustom-${problem.name}.json" (builtins.toJSON metadata)} \
           $out/data/${problem.name}/problem.json
+        cp ${
+          pkgs.writeText "hull-lemon-language-map-${problem.name}.json" (
+            builtins.toJSON {
+              lemonToHullLanguageMap = lemonToHullLanguageMap;
+            }
+          )
+        } $out/data/${problem.name}/lemon-language-map.json
         ${lib.concatMapStringsSep "\n" (
           tc:
           let
@@ -170,7 +181,7 @@
       '';
 
       customJudgeRunner = targetPkgs.writeShellScriptBin "hull-lemon-custom-judge-runner-${problem.name}" ''
-        exec ${lib.getExe targetHullPkgs.default} bundle-judge "$@"
+        exec ${lib.getExe targetHullPkgs.default} lemon-custom-judge "$@"
       '';
 
       targetClosure = pkgs.closureInfo {
@@ -206,22 +217,6 @@
               outputFiles = [ "${problem.name}/${tc.name}/official-data.tar" ];
             }) st.testCases
           else
-            let
-              firstTc = builtins.head st.testCases;
-              firstTl = firstTc.tickLimit;
-              firstMl = firstTc.memoryLimit;
-              reduceSame =
-                first: list:
-                builtins.foldl' (
-                  a: b:
-                  if a == b then
-                    a
-                  else
-                    throw "In problem ${problem.name}, subtask #${toString index}, test cases have different limits, which is not allowed for Lemon custom target min-scoring subtasks."
-                ) first list;
-              reducedTl = reduceSame firstTl (map ({ tickLimit, ... }: tickLimit) st.testCases);
-              reducedMl = reduceSame firstMl (map ({ memoryLimit, ... }: memoryLimit) st.testCases);
-            in
             [
               {
                 fullScore = builtins.floor (st.fullScore * scoreScale);
@@ -336,8 +331,9 @@
         cp -r "$data_root/$problem_name"/. "$tmpdir/root/bundle/"
         printf '%s\n' "$problem_name" > "$tmpdir/root/problem-name"
         cp -RL --no-preserve=ownership "$data_root/_hull/nix/store"/. "$tmpdir/root/runtime-nix/store/"
-        cp "$src" "$tmpdir/submission"
-        mv "$tmpdir/submission" "$tmpdir/root/submission"
+        submission_name=$(basename "$src")
+        printf '%s\n' "$submission_name" > "$tmpdir/root/submission-name"
+        cp "$src" "$tmpdir/root/$submission_name"
         tar -C "$tmpdir/root" -cf "$base.hullbundle" .
       '';
 

@@ -194,8 +194,6 @@ pub struct BundleJudgeProblemSpec {
   pub tick_limit: u64,
   pub memory_limit: u64,
   pub full_score: f64,
-  #[serde(default)]
-  pub participant_hull_language: String,
   #[serde(default = "default_program_spec")]
   pub checker: ProgramSpec,
   #[serde(default = "default_program_spec")]

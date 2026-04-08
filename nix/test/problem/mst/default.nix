@@ -167,10 +167,7 @@
   targets = {
     default = hull.problemTarget.common;
     lemonCustom = hull.problemTarget.lemonCustom {
-      solutionExtNames = {
-        std = "cpp";
-      };
-      participantHullLanguage = "cpp.26.s64m";
+      solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
   };
 }

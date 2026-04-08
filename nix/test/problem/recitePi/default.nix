@@ -86,7 +86,6 @@
         pc = "txt";
         formatError = "txt";
       };
-      participantHullLanguage = "txt";
     };
     hydro = hull.problemTarget.hydro {
       type = "answerOnly";

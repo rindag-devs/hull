@@ -16,8 +16,8 @@
 use clap::{Parser, Subcommand};
 
 use crate::cmd::{
-  build::BuildOpts, build_contest::BuildContestOpts, bundle_judge::BundleJudgeOpts,
-  cnoi_self_eval::CnoiSelfEvalOpts, judge::JudgeOpts, patch::PatchOpts, run::RunOpts,
+  build::BuildOpts, build_contest::BuildContestOpts, cnoi_self_eval::CnoiSelfEvalOpts,
+  judge::JudgeOpts, lemon_custom_judge::LemonCustomJudgeOpts, patch::PatchOpts, run::RunOpts,
   run_wasm::RunWasmOpts, stress::StressOpts, uoj_custom_judge::UojCustomJudgeOpts,
 };
 use crate::interactive::InteractiveMode;
@@ -83,7 +83,7 @@ pub enum Command {
   )]
   Stress(StressOpts),
   #[command(hide = true)]
-  BundleJudge(BundleJudgeOpts),
+  LemonCustomJudge(LemonCustomJudgeOpts),
   #[command(hide = true)]
   UojCustomJudge(UojCustomJudgeOpts),
 }

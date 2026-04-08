@@ -115,7 +115,6 @@
     };
     lemonCustom = hull.problemTarget.lemonCustom {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
-      participantHullLanguage = "cpp.26.s64m";
     };
     uoj = hull.problemTarget.uoj {
       graderSrcs.cpp = ./grader.17.cpp;
