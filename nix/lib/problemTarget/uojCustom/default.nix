@@ -18,9 +18,9 @@
   pkgs,
   hull,
   hullPkgs,
-  hullPkgsForSystem,
+  targetHullPkgsForSystem,
   targetPkgsForSystem,
-  hullForSystem,
+  targetHullForSystem,
 }:
 
 {
@@ -73,9 +73,9 @@
       ...
     }@problem:
     let
-      targetHullPkgs = hullPkgsForSystem targetSystem;
+      targetHullPkgs = targetHullPkgsForSystem targetSystem;
       targetPkgs = targetPkgsForSystem targetSystem;
-      targetHull = hullForSystem targetSystem;
+      targetHull = targetHullForSystem targetSystem;
       nixUserChroot = targetHullPkgs.nix-user-chroot;
       retargetRunner =
         runner:
@@ -290,6 +290,7 @@
         chmod -R u+rwX "$tmpdir/hull-bundle"
         tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
         rm -rf "$tmpdir/hull-bundle/nix/store"
+        rmdir "$tmpdir/hull-bundle/nix"
         cp ${pkgs.writeText "problem.conf" problemConf} "$tmpdir/problem.conf"
         cp ${./judger.mk} "$tmpdir/Makefile"
         cp ${./judger.c} "$tmpdir/judger.c"

@@ -18,9 +18,9 @@
   pkgs,
   hull,
   hullPkgs,
-  hullPkgsForSystem,
+  targetHullPkgsForSystem,
   targetPkgsForSystem,
-  hullForSystem,
+  targetHullForSystem,
 }:
 
 {
@@ -82,9 +82,9 @@
       ...
     }@contest:
     let
-      targetHullPkgs = hullPkgsForSystem targetSystem;
+      targetHullPkgs = targetHullPkgsForSystem targetSystem;
       targetPkgs = targetPkgsForSystem targetSystem;
-      targetHull = hullForSystem targetSystem;
+      targetHull = targetHullForSystem targetSystem;
       nixUserChroot = targetHullPkgs.nix-user-chroot;
       retargetRunner =
         runner:

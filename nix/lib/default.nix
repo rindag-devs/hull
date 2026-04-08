@@ -16,9 +16,9 @@
 {
   pkgs,
   hullPkgs,
-  hullPkgsForSystem,
+  targetHullPkgsForSystem,
   targetPkgsForSystem,
-  hullForSystem,
+  targetHullForSystem,
   typixLib,
   cplib,
   cplibInitializers,
@@ -33,9 +33,9 @@ let
         hull
         pkgs
         hullPkgs
-        hullPkgsForSystem
+        targetHullPkgsForSystem
         targetPkgsForSystem
-        hullForSystem
+        targetHullForSystem
         typixLib
         cplib
         cplibInitializers

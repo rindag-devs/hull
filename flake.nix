@@ -62,11 +62,12 @@
       forEachSystem = nixpkgs.lib.genAttrs supportedSystems;
       libForSystem = system: self.perSystem.${system}.hull;
       packagesForSystem = system: self.perSystem.${system}.packages;
-      crossPackagesForSystem =
-        buildSystem: targetSystem: self.perSystem.${buildSystem}.crossPackagesForSystem targetSystem;
+      targetHullPkgsForSystem =
+        buildSystem: targetSystem: self.perSystem.${buildSystem}.targetHullPkgsForSystem targetSystem;
       targetPkgsForSystem =
         buildSystem: targetSystem: self.perSystem.${buildSystem}.targetPkgsForSystem targetSystem;
-      hullForSystem = buildSystem: targetSystem: self.perSystem.${buildSystem}.hullForSystem targetSystem;
+      targetHullForSystem =
+        buildSystem: targetSystem: self.perSystem.${buildSystem}.targetHullForSystem targetSystem;
     in
     {
       perSystem = forEachSystem (
@@ -100,52 +101,54 @@
 
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
-          mkCrossHullPackages =
+          mkTargetHullPkgs =
             targetSystem:
             let
-              pkgsCrossName =
+              targetCrossPkgsName =
                 targetSystemToPkgsCrossName.${targetSystem}
                   or (throw "Unsupported cross target system `${targetSystem}`");
-              crossPkgs = pkgs.pkgsCross.${pkgsCrossName};
-              nativeTargetPkgs = nixpkgs.legacyPackages.${targetSystem};
+              targetCrossPkgs = pkgs.pkgsCross.${targetCrossPkgsName};
+              targetNativePkgs = nixpkgs.legacyPackages.${targetSystem};
               targetPkgs =
                 if targetSystem == system then
                   pkgs
                 else
                   pkgs.pkgsCross.${targetSystemToPkgsCrossName.${targetSystem}};
-              rustTarget = crossPkgs.stdenv.hostPlatform.rust.rustcTarget;
+              rustTarget = targetCrossPkgs.stdenv.hostPlatform.rust.rustcTarget;
               rustTargetEnv = pkgs.lib.toUpper (pkgs.lib.replaceStrings [ "-" "." ] [ "_" "_" ] rustTarget);
               baseWasmPkgs = (import ./nix/pkgs { inherit pkgs; }).wasm32-wasi-wasip1;
-              crossRustToolchainFor =
+              targetRustToolchainFor =
                 _p:
                 rustPkgs.combine [
                   rustPkgs.stable.cargo
                   rustPkgs.stable.rustc
                   rustPkgs.targets.${rustTarget}.stable.rust-std
                 ];
-              crossCraneLib = (crane.mkLib crossPkgs).overrideToolchain crossRustToolchainFor;
+              targetCraneLib = (crane.mkLib targetCrossPkgs).overrideToolchain targetRustToolchainFor;
             in
             {
-              nix-user-chroot = crossPkgs.callPackage ./nix/pkgs/nix-user-chroot { pkgs = crossPkgs; };
+              nix-user-chroot = targetCrossPkgs.callPackage ./nix/pkgs/nix-user-chroot {
+                pkgs = targetCrossPkgs;
+              };
 
               wasm32-wasi-wasip1 = baseWasmPkgs // {
                 clang = targetPkgs.callPackage ./nix/pkgs/clang.nix {
-                  llvmPackages = nativeTargetPkgs.llvmPackages;
+                  llvmPackages = targetNativePkgs.llvmPackages;
                   compiler-rt = baseWasmPkgs.compiler-rt;
                   sysroot = baseWasmPkgs.sysroot;
                 };
               };
 
-              default = crossCraneLib.buildPackage {
-                src = crossCraneLib.cleanCargoSource self;
+              default = targetCraneLib.buildPackage {
+                src = targetCraneLib.cleanCargoSource self;
                 cargoExtraArgs = "--target ${rustTarget}";
                 doCheck = false;
                 strictDeps = true;
                 CARGO_BUILD_TARGET = rustTarget;
-                "CARGO_TARGET_${rustTargetEnv}_LINKER" = "${crossPkgs.stdenv.cc.targetPrefix}cc";
-                "CC_${rustTargetEnv}" = "${crossPkgs.stdenv.cc.targetPrefix}cc";
+                "CARGO_TARGET_${rustTargetEnv}_LINKER" = "${targetCrossPkgs.stdenv.cc.targetPrefix}cc";
+                "CC_${rustTargetEnv}" = "${targetCrossPkgs.stdenv.cc.targetPrefix}cc";
                 meta = {
-                  license = crossPkgs.lib.licenses.lgpl3Plus;
+                  license = targetCrossPkgs.lib.licenses.lgpl3Plus;
                   mainProgram = "hull";
                 };
               };
@@ -160,7 +163,7 @@
               pkgs.cargo-watch
               pkgs.pkg-config
               pkgs.nix-output-monitor
-              packages.wasm32-wasi-wasip1.clang
+              hullPkgs.wasm32-wasi-wasip1.clang
             ];
 
             env = {
@@ -174,18 +177,18 @@
           hull = import ./nix/lib {
             inherit
               pkgs
+              hullPkgs
+              targetHullPkgsForSystem
+              targetPkgsForSystem
+              targetHullForSystem
               typixLib
               cplib
               cplibInitializers
               x86_64-linux-gnu217-cross
               ;
-            hullPkgs = packages;
-            hullPkgsForSystem = hullPkgsForSystemLocal;
-            targetPkgsForSystem = targetPkgsForSystemLocal;
-            hullForSystem = hullForSystemLocal;
           };
 
-          packages = import ./nix/pkgs { inherit pkgs; } // {
+          hullPkgs = import ./nix/pkgs { inherit pkgs; } // {
             default = craneLib.buildPackage {
               src = craneLib.cleanCargoSource self;
               nativeBuildInputs = [
@@ -203,38 +206,34 @@
             docs = hull.docs;
           };
 
-          hullPkgsForSystemLocal =
-            targetSystem: if targetSystem == system then packages else mkCrossHullPackages targetSystem;
+          targetHullPkgsForSystem =
+            targetSystem: if targetSystem == system then hullPkgs else mkTargetHullPkgs targetSystem;
 
-          targetPkgsForSystemLocal =
+          targetPkgsForSystem =
             targetSystem:
             if targetSystem == system then
               pkgs
             else
               pkgs.pkgsCross.${targetSystemToPkgsCrossName.${targetSystem}};
 
-          hullForSystemLocal =
+          targetHullForSystem =
             targetSystem:
             if targetSystem == system then
               hull
             else
               import ./nix/lib {
-                pkgs = targetPkgsForSystemLocal targetSystem;
-                hullPkgs = hullPkgsForSystemLocal targetSystem;
-                hullPkgsForSystem = hullPkgsForSystemLocal;
-                targetPkgsForSystem = targetPkgsForSystemLocal;
-                hullForSystem = hullForSystemLocal;
+                pkgs = targetPkgsForSystem targetSystem;
+                hullPkgs = targetHullPkgsForSystem targetSystem;
                 inherit
+                  targetHullPkgsForSystem
+                  targetPkgsForSystem
+                  targetHullForSystem
                   typixLib
                   cplib
                   cplibInitializers
                   x86_64-linux-gnu217-cross
                   ;
               };
-
-          crossPackagesForSystem = mkCrossHullPackages;
-          targetPkgsForSystem = targetPkgsForSystemLocal;
-          hullForSystem = hullForSystemLocal;
 
           hullProblems = {
             test = {
@@ -257,9 +256,9 @@
       inherit
         libForSystem
         packagesForSystem
-        crossPackagesForSystem
+        targetHullPkgsForSystem
         targetPkgsForSystem
-        hullForSystem
+        targetHullForSystem
         ;
       lib = forEachSystem libForSystem;
       packages = forEachSystem packagesForSystem;
