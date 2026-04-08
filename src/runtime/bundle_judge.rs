@@ -19,7 +19,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tar::{Archive, Builder, Header};

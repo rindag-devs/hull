@@ -20,7 +20,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use crate::runtime::bundle_judge::{
-  judge_test_case_from_paths, prepare_bundle_judge_context, BundleJudgeTestCaseInput,
+  BundleJudgeTestCaseInput, judge_test_case_from_paths, prepare_bundle_judge_context,
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
 
@@ -75,9 +75,9 @@ pub struct LemonCustomJudgeOpts {
   #[arg(long)]
   pub output_path: String,
 
-  /// Optional plain-text output path for lightweight watcher integrations.
+  /// Plain-text output path for lightweight watcher integrations.
   #[arg(long)]
-  pub plain_output_path: Option<String>,
+  pub plain_output_path: String,
 }
 
 /// Executes one Lemon custom bundled judging request and writes the judge report.
@@ -120,22 +120,20 @@ pub fn run(opts: &LemonCustomJudgeOpts) -> Result<()> {
       output_path.display()
     )
   })?;
-  if let Some(plain_output_path) = &opts.plain_output_path {
-    let plain_output_path = PathBuf::from(plain_output_path);
-    if let Some(parent) = plain_output_path.parent() {
-      std::fs::create_dir_all(parent)?;
-    }
-    let plain_report = format!(
-      "{}\n{}\n{}\n{}\n{}",
-      report.tick, report.memory, report.score, report.status, report.message
-    );
-    std::fs::write(&plain_output_path, plain_report).with_context(|| {
-      format!(
-        "Failed to write Lemon custom plain judge report to {}",
-        plain_output_path.display()
-      )
-    })?;
+  let plain_output_path = PathBuf::from(&opts.plain_output_path);
+  if let Some(parent) = plain_output_path.parent() {
+    std::fs::create_dir_all(parent)?;
   }
+  let plain_report = format!(
+    "{}\n{}\n{}\n{}\n{}",
+    report.tick, report.memory, report.score, report.status, report.message
+  );
+  std::fs::write(&plain_output_path, plain_report).with_context(|| {
+    format!(
+      "Failed to write Lemon custom plain judge report to {}",
+      plain_output_path.display()
+    )
+  })?;
   Ok(())
 }
 
