@@ -199,20 +199,17 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
     })?;
   let participant_solution = runtime_problem
     .solutions
-    .first()
+    .iter()
+    .find(|solution| solution.name == "uojCustom")
     .cloned()
-    .context("uojCustom runtime problem must contain one solution")?;
+    .context("uojCustom runtime problem must contain participant solution `uojCustom`")?;
 
   progress.write_message("Compiling submission")?;
   let prepared_solution =
     match run_prepare_solution(&runtime_problem, &participant_solution, &workspace) {
       Ok(solution) => solution,
       Err(err) => {
-        let error = err.to_string();
-        if error.contains("Unsupported solution language") {
-          return write_compile_error_result(&result_path, &error);
-        }
-        return Err(err);
+        return write_compile_error_result(&result_path, &format_prepare_solution_error(&err));
       }
     };
 
@@ -284,6 +281,25 @@ fn write_internal_error_result(result_path: &Path, message: &str) -> Result<()> 
       result_path.display()
     )
   })
+}
+
+fn format_prepare_solution_error(err: &anyhow::Error) -> String {
+  let message = err.to_string();
+  let Some(stderr_marker) = message.find("\nStderr:\n") else {
+    return message;
+  };
+  let stderr = &message[(stderr_marker + "\nStderr:\n".len())..];
+  if !stderr.trim().is_empty() {
+    return stderr.trim().to_string();
+  }
+  let Some(stdout_marker) = message.find("\nStdout:\n") else {
+    return message;
+  };
+  let stdout = &message[(stdout_marker + "\nStdout:\n".len())..stderr_marker];
+  if !stdout.trim().is_empty() {
+    return stdout.trim().to_string();
+  }
+  message
 }
 
 fn load_language_config(bundle_root: &Path) -> Result<UojCustomLanguageConfig> {
@@ -664,6 +680,18 @@ fn evaluate_test_case(
 
 fn write_compile_error_result(result_path: &Path, message: &str) -> Result<()> {
   let escaped = xml_escape(message);
+  fs::create_dir_all(result_path).with_context(|| {
+    format!(
+      "Failed to create UOJ result directory for compile error {}",
+      result_path.display()
+    )
+  })?;
+  fs::write(result_path.join("cur_status.txt"), "Compile Error").with_context(|| {
+    format!(
+      "Failed to write compile status into {}",
+      result_path.display()
+    )
+  })?;
   fs::write(
     result_path.join("result.txt"),
     format!("error Compile Error\ndetails\n<error>{escaped}</error>\n"),
@@ -1175,4 +1203,96 @@ fn xml_escape(text: &str) -> String {
     .replace('>', "&gt;")
     .replace('"', "&quot;")
     .replace('\'', "&apos;")
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::runtime::bundle_judge::build_runtime_solutions;
+  use crate::runtime::types::BundleJudgeProblemSpec;
+  use std::fs;
+
+  #[test]
+  fn keeps_participant_solution_distinct() {
+    let problem: BundleJudgeProblemSpec = serde_json::from_str(
+      r#"{
+        "name": "aplusb",
+        "tickLimit": 1000,
+        "memoryLimit": 268435456,
+        "fullScore": 100.0,
+        "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drvPath": null } },
+        "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drvPath": null } },
+        "judger": {
+          "prepareSolutionRunner": { "path": "/prepare", "drvPath": null },
+          "generateOutputsRunner": { "path": "/generate", "drvPath": null },
+          "judgeRunner": { "path": "/judge", "drvPath": null }
+        },
+        "mainCorrectSolution": "std",
+        "subtasks": [],
+        "solutions": [
+          {
+            "name": "std",
+            "src": "solutions/std.cpp",
+            "mainCorrectSolution": true,
+            "participantVisibility": false
+          }
+        ],
+        "testCases": []
+      }"#,
+    )
+    .expect("valid bundled problem spec");
+
+    let runtime_solutions = build_runtime_solutions(
+      Path::new("/bundle-root"),
+      &problem,
+      "/tmp/submission.c.89.s64m",
+      "uojCustom",
+    );
+
+    assert_eq!(runtime_solutions[0].name, "std");
+    assert_eq!(runtime_solutions[1].name, "uojCustom");
+
+    let participant_solution = runtime_solutions
+      .iter()
+      .find(|solution| solution.name == "uojCustom")
+      .expect("participant solution should exist");
+    assert_eq!(participant_solution.src, "/tmp/submission.c.89.s64m");
+    assert!(!participant_solution.main_correct_solution);
+  }
+
+  #[test]
+  fn formats_prepare_solution_error() {
+    let err = anyhow!(
+      "prepareSolution `/runner` failed.\nStdout:\n\nStderr:\nclass A{{}}; is invalid in C89"
+    );
+    assert_eq!(
+      format_prepare_solution_error(&err),
+      "class A{}; is invalid in C89"
+    );
+  }
+
+  #[test]
+  fn writes_compile_error_result() {
+    let result_path = std::env::temp_dir().join(format!(
+      "hull-uoj-custom-test-{}-{}",
+      std::process::id(),
+      "compile-error"
+    ));
+    if result_path.exists() {
+      fs::remove_dir_all(&result_path).expect("remove stale result dir");
+    }
+
+    write_compile_error_result(&result_path, "compile failed").expect("write compile result");
+
+    assert_eq!(
+      fs::read_to_string(result_path.join("cur_status.txt")).expect("read cur status"),
+      "Compile Error"
+    );
+    assert_eq!(
+      fs::read_to_string(result_path.join("result.txt")).expect("read result"),
+      "error Compile Error\ndetails\n<error>compile failed</error>\n"
+    );
+
+    fs::remove_dir_all(&result_path).expect("cleanup result dir");
+  }
 }

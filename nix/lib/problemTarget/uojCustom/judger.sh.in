@@ -69,4 +69,7 @@ if [ -d "$inner_result_dir" ]; then
     cp -f "$inner_result_dir/std_output.txt" "$work_path/std_output.txt" 2>/dev/null || true
   fi
 fi
+if [ -f "$result_path/result.txt" ]; then
+  exit 0
+fi
 exit "$status"
