@@ -19,15 +19,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use comfy_table::presets::UTF8_FULL_CONDENSED;
-use comfy_table::{Cell, Table};
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::format::{format_size, format_tick};
-use crate::report::{
-  JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult, get_subtask_status,
-};
+use crate::report::{JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult};
 use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
 use crate::runtime::metadata::{load_bundle_contest_spec, load_bundle_judge_problem_spec};
 use crate::runtime::types::{
@@ -151,55 +146,26 @@ pub fn run(opts: &CnoiSelfEvalOpts) -> Result<()> {
   if opts.json {
     println!("{}", serde_json::to_string(&overall)?);
   } else {
-    print_human_readable_report(&overall);
+    println!(
+      "Overall Score: {:.3} / {:.3}\n",
+      overall.score, overall.full_score
+    );
+    for problem in &overall.problems {
+      println!(
+        "Problem {}: {:.3} / {:.3}",
+        problem.name, problem.score, problem.full_score
+      );
+      let single_problem_report = JudgeCliReport {
+        score: problem.score,
+        full_score: problem.full_score,
+        subtask_results: problem.subtask_results.clone(),
+        test_case_results: problem.test_case_results.clone().into_iter().collect(),
+      };
+      println!("{}\n", single_problem_report.render_human_readable());
+    }
   }
 
   Ok(())
-}
-
-fn print_human_readable_report(report: &CliReport) {
-  println!(
-    "Overall Score: {:.3} / {:.3}\n",
-    report.score, report.full_score
-  );
-
-  for problem in &report.problems {
-    println!(
-      "Problem {}: {:.3} / {:.3}",
-      problem.name, problem.score, problem.full_score
-    );
-
-    let mut subtask_table = Table::new();
-    subtask_table.load_preset(UTF8_FULL_CONDENSED);
-    subtask_table.set_header(vec!["#", "Status", "Score", "Full Score"]);
-    for (index, subtask) in problem.subtask_results.iter().enumerate() {
-      subtask_table.add_row(vec![
-        Cell::new(index),
-        Cell::new(get_subtask_status(&subtask.statuses)),
-        Cell::new(format!("{:.3}", subtask.scaled_score)),
-        Cell::new(format!("{:.3}", subtask.full_score)),
-      ]);
-    }
-    println!("Subtasks:");
-    println!("{subtask_table}");
-
-    let mut test_case_table = Table::new();
-    test_case_table.load_preset(UTF8_FULL_CONDENSED);
-    test_case_table.set_header(vec!["Name", "Status", "Score", "Tick", "Memory"]);
-    let mut sorted_test_cases: Vec<_> = problem.test_case_results.iter().collect();
-    sorted_test_cases.sort_by_key(|(name, _)| *name);
-    for (name, case) in sorted_test_cases {
-      test_case_table.add_row(vec![
-        Cell::new(name),
-        Cell::new(&case.status),
-        Cell::new(format!("{:.3}", case.score)),
-        Cell::new(format_tick(case.tick)),
-        Cell::new(format_size(case.memory)),
-      ]);
-    }
-    println!("Test Cases:");
-    println!("{test_case_table}\n");
-  }
 }
 
 fn evaluate_problem(
@@ -265,20 +231,21 @@ fn evaluate_problem(
     run_prepare_solution(&runtime_problem, &participant_solution, &workspace)?;
 
   if problem.test_cases.is_empty() {
-    return Ok(JudgeCliReport {
-      score: 0.0,
-      full_score: problem.full_score,
-      subtask_results: problem
+    return Ok(JudgeCliReport::from_subtask_reports(
+      problem.full_score,
+      &problem.subtasks,
+      &problem
         .subtasks
         .iter()
-        .map(|subtask| JudgeCliSubtaskResult {
-          full_score: subtask.full_score,
-          scaled_score: 0.0,
+        .map(|_| crate::runtime::types::SubtaskRuntimeReport {
+          test_cases: BTreeMap::new(),
           statuses: Vec::new(),
+          raw_score: 0.0,
+          scaled_score: 0.0,
         })
-        .collect(),
-      test_case_results: BTreeMap::new().into_iter().collect(),
-    });
+        .collect::<Vec<_>>(),
+      &BTreeMap::new(),
+    ));
   }
 
   let mut test_case_results = BTreeMap::new();
@@ -402,33 +369,14 @@ fn evaluate_problem(
     .map(|report| report.scaled_score)
     .sum();
 
-  Ok(JudgeCliReport {
-    score,
-    full_score: problem.full_score,
-    subtask_results: subtask_reports
-      .iter()
-      .zip(problem.subtasks.iter())
-      .map(|(report, subtask)| JudgeCliSubtaskResult {
-        full_score: subtask.full_score,
-        scaled_score: report.scaled_score,
-        statuses: report.statuses.clone(),
-      })
-      .collect(),
-    test_case_results: test_case_results
-      .into_iter()
-      .map(|(name, report)| {
-        (
-          name,
-          JudgeCliTestCaseResult {
-            status: report.status,
-            score: report.score,
-            tick: report.tick,
-            memory: report.memory,
-          },
-        )
-      })
-      .collect(),
-  })
+  let mut report = JudgeCliReport::from_subtask_reports(
+    problem.full_score,
+    &problem.subtasks,
+    &subtask_reports,
+    &test_case_results,
+  );
+  report.score = score;
+  Ok(report)
 }
 
 fn find_participant_source(

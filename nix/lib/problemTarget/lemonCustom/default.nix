@@ -198,35 +198,15 @@
         ];
       };
 
-      lemonTestCases =
-        let
-          subtasksWithIndex = lib.imap0 (index: st: { inherit index st; }) subtasks;
-        in
-        lib.concatMap (
-          { index, st }:
-          if st.scoringMethod == "sum" then
-            let
-              numTestCases = builtins.length st.testCases;
-              scorePerCase = if numTestCases > 0 then st.fullScore / numTestCases else 0;
-            in
-            map (tc: {
-              fullScore = builtins.floor (scorePerCase * scoreScale);
-              timeLimit = lemonWatcherTimeLimitMs;
-              memoryLimit = 16777216;
-              inputFiles = [ "${problem.name}/${tc.name}/input" ];
-              outputFiles = [ "${problem.name}/${tc.name}/official-data.tar" ];
-            }) st.testCases
-          else
-            [
-              {
-                fullScore = builtins.floor (st.fullScore * scoreScale);
-                timeLimit = lemonWatcherTimeLimitMs;
-                memoryLimit = 16777216;
-                inputFiles = map (tc: "${problem.name}/${tc.name}/input") st.testCases;
-                outputFiles = map (tc: "${problem.name}/${tc.name}/official-data.tar") st.testCases;
-              }
-            ]
-        ) subtasksWithIndex;
+      lemonTestCases = [
+        {
+          fullScore = builtins.floor (problem.fullScore * scoreScale);
+          timeLimit = lemonWatcherTimeLimitMs;
+          memoryLimit = 16777216;
+          inputFiles = [ "${problem.name}/hull.in" ];
+          outputFiles = [ "${problem.name}/hull.out" ];
+        }
+      ];
 
       lemonJsonContent = {
         version = "1.0";
@@ -346,17 +326,13 @@
         full_score="$4"
         score_path="$5"
         message_path="$6"
-        report_path="$contestant_output.hull-report.json"
         if [ ! -f "$contestant_output" ]; then
-          : > "$contestant_output"
-        fi
-        if [ ! -f "$report_path" ]; then
           printf '0\n' > "$score_path"
-          printf 'missing hull report: %s\n' "$report_path" > "$message_path"
+          printf 'missing hull report: %s\n' "$contestant_output" > "$message_path"
           exit 0
         fi
-        score=$( ${lib.getExe pkgs.jq} -r --argjson fullScore "$full_score" '(.score * $fullScore) | floor' "$report_path" )
-        message=$( ${lib.getExe pkgs.jq} -r 'if .message == "" then .status else (.status + ": " + .message) end' "$report_path" )
+        score=$( ${lib.getExe pkgs.jq} -r --argjson fullScore "$full_score" '(.score * $fullScore) | round' "$contestant_output" )
+        message=$( ${lib.getExe pkgs.jq} -r 'if .message == "" then .status else (.status + ":\n" + .message) end' "$contestant_output" )
         printf '%s\n' "$score" > "$score_path"
         printf '%s\n' "$message" > "$message_path"
       '';
@@ -383,6 +359,8 @@
       done < ${targetClosure}/store-paths
 
       cp -r ${judgeBundleData}/data/${problem.name}/. $out/data/${problem.name}/
+      : > $out/data/${problem.name}/hull.in
+      : > $out/data/${problem.name}/hull.out
       cp ${lemonCompilerScript} $out/data/_hull/lemon-custom-compiler
       chmod +x $out/data/_hull/lemon-custom-compiler
       cp ${compiledWatcher}/bin/lemon-custom-watcher $out/data/_hull/lemon-custom-watcher

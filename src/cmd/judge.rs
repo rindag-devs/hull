@@ -19,9 +19,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use crate::interactive;
-use crate::report::{
-  JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult, print_human_readable_report,
-};
+use crate::report::JudgeCliReport;
 use crate::runtime::analysis::analyze_problem;
 use crate::runtime::metadata::load_ad_hoc_problem_spec;
 use crate::runtime::types::RuntimeOptions;
@@ -66,40 +64,12 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
     .solutions
     .get(&ad_hoc_name)
     .context("Ad-hoc judged solution was not produced by runtime analysis")?;
-  let report = JudgeCliReport {
-    score: solution.score,
-    full_score: problem.full_score,
-    subtask_results: solution
-      .subtask_results
-      .iter()
-      .zip(problem.subtasks.iter())
-      .map(|(result, subtask)| JudgeCliSubtaskResult {
-        full_score: subtask.full_score,
-        scaled_score: result.scaled_score,
-        statuses: result.statuses.clone(),
-      })
-      .collect(),
-    test_case_results: solution
-      .test_case_results
-      .iter()
-      .map(|(name, result)| {
-        (
-          name.clone(),
-          JudgeCliTestCaseResult {
-            status: result.status.clone(),
-            score: result.score,
-            tick: result.tick,
-            memory: result.memory,
-          },
-        )
-      })
-      .collect(),
-  };
+  let report = JudgeCliReport::from_runtime_solution(&problem, solution);
 
   if judge_opts.json {
     println!("{}", serde_json::to_string(&report)?);
   } else {
-    print_human_readable_report(&report);
+    println!("{}", report.render_human_readable());
   }
 
   Ok(())

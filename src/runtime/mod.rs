@@ -21,6 +21,8 @@ pub mod artifact;
 pub mod build;
 /// Exported bundle judge helpers shared by judge adapters.
 pub mod bundle_judge;
+/// Shared testcase scheduler for custom-judge adapters.
+pub mod custom_judge_scheduler;
 /// Runtime metadata loading from flakes and exported bundles.
 pub mod metadata;
 /// WASM sandbox execution.

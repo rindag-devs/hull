@@ -223,7 +223,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn unescape_handles_common_escape_sequences() {
+  fn unescape_common_escapes() {
     // Simple cases
     assert_eq!(unescape("hello\\nworld"), "hello\nworld");
     assert_eq!(unescape("\\tindented"), "\tindented");
@@ -256,7 +256,7 @@ mod tests {
   }
 
   #[test]
-  fn replacer_supports_simple_replacement() -> Result<()> {
+  fn replacer_simple_replacement() -> Result<()> {
     let replacer = Replacer::new("foo".to_string(), "bar".to_string(), None)?;
     let result = replacer.replace(b"this is foo text");
     assert_eq!(result, b"this is bar text".as_slice());
@@ -264,7 +264,7 @@ mod tests {
   }
 
   #[test]
-  fn replacer_supports_case_insensitive_matching() -> Result<()> {
+  fn replacer_case_insensitive() -> Result<()> {
     let replacer = Replacer::new("foo".to_string(), "bar".to_string(), Some("i".to_string()))?;
     let result = replacer.replace(b"this is Foo text, and foo too");
     assert_eq!(result, b"this is bar text, and bar too".as_slice());
@@ -272,7 +272,7 @@ mod tests {
   }
 
   #[test]
-  fn replacer_supports_whole_word_matching() -> Result<()> {
+  fn replacer_whole_word() -> Result<()> {
     let replacer = Replacer::new("cat".to_string(), "dog".to_string(), Some("w".to_string()))?;
     let result = replacer.replace(b"the cat in the cathedral");
     assert_eq!(result, b"the dog in the cathedral".as_slice());
@@ -280,7 +280,7 @@ mod tests {
   }
 
   #[test]
-  fn replacer_unescapes_replacement_text() -> Result<()> {
+  fn replacer_unescapes_text() -> Result<()> {
     let replacer = Replacer::new(" ".to_string(), "\\n".to_string(), None)?;
     let result = replacer.replace(b"one two three");
     assert_eq!(result, b"one\ntwo\nthree".as_slice());
@@ -288,7 +288,7 @@ mod tests {
   }
 
   #[test]
-  fn replacer_rejects_invalid_regex() {
+  fn replacer_invalid_regex() {
     let result = Replacer::new("[".to_string(), "bar".to_string(), None);
     assert!(result.is_err());
   }

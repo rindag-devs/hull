@@ -43,7 +43,7 @@
   };
 
   tickLimit = 100 * 10000000;
-  memoryLimit = 16 * 1024 * 1024;
+  memoryLimit = 128 * 1024 * 1024;
 
   solutions =
     let

@@ -13,22 +13,25 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use clap::Parser;
-use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::Deserialize;
 
-use crate::platform::default_parallelism;
 use crate::runtime::analysis::{
   aggregate_subtask_results, run_generate_outputs, run_judge, run_prepare_solution, run_validator,
 };
 use crate::runtime::bundle_judge::{
-  OFFICIAL_DATA_TAR_NAME, copy_submission_source, load_official_data, make_runtime_problem,
-  missing_language_error, pack_official_data_tar,
+  BundleJudgeTestCaseInput, OFFICIAL_DATA_TAR_NAME, copy_submission_source,
+  judge_test_case_with_parts, load_official_data, make_runtime_problem, missing_language_error,
+  pack_official_data_tar,
+};
+use crate::runtime::custom_judge_scheduler::{
+  ScheduledTestCase, SchedulerProgress, collect_runtime_traits, execute_scheduled_test_cases,
+  test_case_matches_traits,
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
 use crate::runtime::types::{
@@ -74,27 +77,6 @@ struct UojCustomLanguageConfig {
   uoj_to_hull_language_map: HashMap<String, Option<String>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum TestCaseState {
-  Pending,
-  Running,
-  Done,
-}
-
-#[derive(Clone, Debug)]
-struct SubtaskSchedule {
-  test_case_names: Vec<String>,
-  scoring_method: String,
-  next_index: usize,
-  skipped: bool,
-}
-
-#[derive(Clone, Debug)]
-struct SchedulerState {
-  test_case_states: BTreeMap<String, TestCaseState>,
-  subtask_schedules: Vec<SubtaskSchedule>,
-}
-
 struct JudgeProgressTracker {
   result_path: PathBuf,
   completed: usize,
@@ -104,6 +86,7 @@ struct JudgeProgressTracker {
 
 #[derive(Clone, Debug)]
 struct TestCaseMaterial {
+  scheduled: ScheduledTestCase,
   name: String,
   input_path: PathBuf,
   official_data_tar_path: PathBuf,
@@ -129,8 +112,6 @@ struct TrivialTestSummary {
   max_tick: u64,
   max_memory: u64,
 }
-
-type TestCaseTraitsMap = BTreeMap<String, BTreeMap<String, bool>>;
 
 /// Executes one UOJ judging request using Hull's `uojCustom` runtime.
 pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
@@ -249,19 +230,39 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
   }
 
   let test_cases = load_normal_test_cases(&bundle_root, &uoj_data_path, &problem)?;
-  let runtime_traits = collect_runtime_traits(&test_cases);
+  let scheduled_test_cases = test_cases
+    .iter()
+    .map(|test_case| test_case.scheduled.clone())
+    .collect::<Vec<_>>();
+  let runtime_traits = collect_runtime_traits(&scheduled_test_cases);
   progress = JudgeProgressTracker::new(result_path.clone(), test_cases.len());
 
-  progress.write_test_progress()?;
-
-  let test_case_reports = execute_unique_test_cases(
-    &workspace,
-    &test_cases,
-    &runtime_problem,
-    &participant_solution,
-    &prepared_solution,
+  let test_case_reports = execute_scheduled_test_cases(
+    &scheduled_test_cases,
+    &runtime_problem.subtasks,
     opts.threads,
-    &mut progress,
+    |snapshot| progress.update(snapshot),
+    |test_case_name| {
+      let test_case = test_cases
+        .iter()
+        .find(|test_case| test_case.name == test_case_name)
+        .with_context(|| format!("Missing test case `{test_case_name}` in uojCustom scheduling"))?;
+      judge_test_case_with_parts(
+        &workspace,
+        &runtime_problem,
+        &participant_solution,
+        &prepared_solution,
+        BundleJudgeTestCaseInput {
+          test_case_name: &test_case.name,
+          input_path: &test_case.input_path,
+          official_data_path: &test_case.official_data_tar_path,
+          tick_limit: test_case.tick_limit,
+          memory_limit: test_case.memory_limit,
+          groups: test_case.groups.clone(),
+          trait_hints: test_case.trait_hints.clone(),
+        },
+      )
+    },
   )?;
 
   write_result(
@@ -331,67 +332,6 @@ fn load_language_config(bundle_root: &Path) -> Result<UojCustomLanguageConfig> {
   serde_json::from_str(&content).context("Failed to parse uoj custom language config JSON")
 }
 
-fn execute_unique_test_cases(
-  workspace: &RuntimeWorkspace,
-  test_cases: &[TestCaseMaterial],
-  runtime_problem: &ProblemSpec,
-  participant_solution: &SolutionSpec,
-  prepared_solution: &PreparedSolutionSpec,
-  threads: usize,
-  progress: &mut JudgeProgressTracker,
-) -> Result<BTreeMap<String, JudgeReport>> {
-  let mut reports = BTreeMap::new();
-  let thread_count = if threads > 0 {
-    threads
-  } else {
-    default_parallelism()
-  };
-  let thread_pool = build_uoj_custom_thread_pool(thread_count)?;
-
-  let runtime_traits = collect_runtime_traits(test_cases);
-  let mut scheduler = SchedulerState::new(test_cases, &runtime_problem.subtasks, &runtime_traits);
-
-  while !scheduler.is_finished() {
-    let ready_test_case_names = scheduler.collect_ready_test_case_names(thread_count);
-    if ready_test_case_names.is_empty() {
-      scheduler.mark_irrelevant_pending_test_cases_done();
-      if scheduler.is_finished() {
-        break;
-      }
-      return Err(anyhow!(
-        "uojCustom scheduler reached a dead end with unfinished active subtasks"
-      ));
-    }
-
-    scheduler.mark_running(&ready_test_case_names);
-    progress.completed = scheduler.completed_count();
-    progress.running = ready_test_case_names.len();
-    progress.write_test_progress()?;
-
-    let executions = evaluate_test_case_batch(
-      workspace,
-      test_cases,
-      runtime_problem,
-      participant_solution,
-      prepared_solution,
-      &ready_test_case_names,
-      thread_pool.as_ref(),
-    )?;
-
-    scheduler.finish_batch(&ready_test_case_names, &executions);
-    for (test_case_name, report) in executions {
-      reports.insert(test_case_name, report);
-    }
-
-    scheduler.mark_irrelevant_pending_test_cases_done();
-    progress.completed = scheduler.completed_count();
-    progress.running = 0;
-    progress.write_test_progress()?;
-  }
-
-  Ok(reports)
-}
-
 impl JudgeProgressTracker {
   fn new(result_path: PathBuf, total: usize) -> Self {
     Self {
@@ -424,276 +364,12 @@ impl JudgeProgressTracker {
       self.completed, self.running, remaining
     ))
   }
-}
-
-impl SchedulerState {
-  fn new(
-    test_cases: &[TestCaseMaterial],
-    subtasks: &[crate::runtime::types::SubtaskSpec],
-    runtime_traits: &TestCaseTraitsMap,
-  ) -> Self {
-    let test_case_states = test_cases
-      .iter()
-      .map(|test_case| (test_case.name.clone(), TestCaseState::Pending))
-      .collect::<BTreeMap<_, _>>();
-    let subtask_schedules = subtasks
-      .iter()
-      .map(|subtask| SubtaskSchedule {
-        test_case_names: test_cases
-          .iter()
-          .filter(|test_case| {
-            test_case_matches_traits(&test_case.name, &subtask.traits, runtime_traits)
-          })
-          .map(|test_case| test_case.name.clone())
-          .collect(),
-        scoring_method: subtask.scoring_method.clone(),
-        next_index: 0,
-        skipped: false,
-      })
-      .collect();
-    Self {
-      test_case_states,
-      subtask_schedules,
-    }
+  fn update(&mut self, progress: SchedulerProgress) -> Result<()> {
+    self.completed = progress.completed;
+    self.running = progress.running;
+    self.total = progress.total;
+    self.write_test_progress()
   }
-
-  fn is_finished(&self) -> bool {
-    self
-      .subtask_schedules
-      .iter()
-      .all(|schedule| schedule.skipped || schedule.next_index >= schedule.test_case_names.len())
-  }
-
-  fn completed_count(&self) -> usize {
-    self
-      .test_case_states
-      .values()
-      .filter(|state| **state == TestCaseState::Done)
-      .count()
-  }
-
-  fn collect_ready_test_case_names(&self, limit: usize) -> Vec<String> {
-    if limit == 0 {
-      return Vec::new();
-    }
-
-    let mut ready = Vec::new();
-    let mut seen = BTreeSet::new();
-
-    let mut scan_indices = self
-      .subtask_schedules
-      .iter()
-      .map(|schedule| schedule.next_index)
-      .collect::<Vec<_>>();
-
-    while ready.len() < limit {
-      let mut made_progress = false;
-
-      for (subtask_index, schedule) in self.subtask_schedules.iter().enumerate() {
-        if schedule.skipped {
-          continue;
-        }
-
-        while scan_indices[subtask_index] < schedule.test_case_names.len() {
-          let test_case_name = &schedule.test_case_names[scan_indices[subtask_index]];
-          scan_indices[subtask_index] += 1;
-
-          let Some(state) = self.test_case_states.get(test_case_name) else {
-            continue;
-          };
-          if *state != TestCaseState::Pending {
-            continue;
-          }
-
-          if seen.insert(test_case_name.clone()) {
-            ready.push(test_case_name.clone());
-          }
-          made_progress = true;
-          break;
-        }
-
-        if ready.len() >= limit {
-          break;
-        }
-      }
-
-      if !made_progress {
-        break;
-      }
-    }
-
-    ready
-  }
-
-  fn mark_running(&mut self, test_case_names: &[String]) {
-    for test_case_name in test_case_names {
-      self
-        .test_case_states
-        .insert(test_case_name.clone(), TestCaseState::Running);
-    }
-  }
-
-  fn finish_batch(
-    &mut self,
-    scheduled_test_case_names: &[String],
-    executions: &BTreeMap<String, JudgeReport>,
-  ) {
-    for test_case_name in scheduled_test_case_names {
-      self
-        .test_case_states
-        .insert(test_case_name.clone(), TestCaseState::Done);
-    }
-
-    for schedule in &mut self.subtask_schedules {
-      if schedule.skipped {
-        continue;
-      }
-      while let Some(test_case_name) = schedule.current_test_case_name().cloned() {
-        let Some(state) = self.test_case_states.get(&test_case_name) else {
-          break;
-        };
-        if *state != TestCaseState::Done {
-          break;
-        }
-        schedule.next_index += 1;
-        if schedule.scoring_method == "min"
-          && executions
-            .get(&test_case_name)
-            .is_some_and(|report| report.score <= 0.0)
-        {
-          schedule.skipped = true;
-          break;
-        }
-      }
-    }
-  }
-
-  fn mark_irrelevant_pending_test_cases_done(&mut self) {
-    let active_test_case_names = self
-      .subtask_schedules
-      .iter()
-      .filter(|schedule| !schedule.skipped)
-      .flat_map(|schedule| schedule.test_case_names.iter().skip(schedule.next_index))
-      .cloned()
-      .collect::<BTreeSet<_>>();
-
-    for (test_case_name, state) in &mut self.test_case_states {
-      if *state == TestCaseState::Pending && !active_test_case_names.contains(test_case_name) {
-        *state = TestCaseState::Done;
-      }
-    }
-  }
-}
-
-impl SubtaskSchedule {
-  fn current_test_case_name(&self) -> Option<&String> {
-    self.test_case_names.get(self.next_index)
-  }
-}
-
-fn evaluate_test_case_batch(
-  workspace: &RuntimeWorkspace,
-  test_cases: &[TestCaseMaterial],
-  runtime_problem: &ProblemSpec,
-  participant_solution: &SolutionSpec,
-  prepared_solution: &PreparedSolutionSpec,
-  test_case_names: &[String],
-  thread_pool: Option<&ThreadPool>,
-) -> Result<BTreeMap<String, JudgeReport>> {
-  let test_cases = test_case_names
-    .iter()
-    .map(|test_case_name| {
-      test_cases
-        .iter()
-        .find(|test_case| test_case.name == *test_case_name)
-        .with_context(|| format!("Missing test case `{test_case_name}` in uojCustom scheduling"))
-    })
-    .collect::<Result<Vec<_>>>()?;
-
-  let evaluate = || {
-    test_cases
-      .par_iter()
-      .map(|test_case| {
-        let execution = evaluate_test_case(
-          workspace,
-          runtime_problem,
-          participant_solution,
-          prepared_solution,
-          test_case,
-        )?;
-        Ok((test_case.name.clone(), execution))
-      })
-      .collect::<Result<BTreeMap<_, _>>>()
-  };
-
-  if test_cases.len() <= 1 {
-    return evaluate();
-  }
-
-  if let Some(thread_pool) = thread_pool {
-    return thread_pool.install(evaluate);
-  }
-
-  evaluate()
-}
-
-fn build_uoj_custom_thread_pool(thread_count: usize) -> Result<Option<ThreadPool>> {
-  if thread_count <= 1 {
-    return Ok(None);
-  }
-
-  Ok(Some(
-    ThreadPoolBuilder::new()
-      .num_threads(thread_count)
-      .build()
-      .context("Failed to build uojCustom thread pool")?,
-  ))
-}
-
-fn evaluate_test_case(
-  workspace: &RuntimeWorkspace,
-  runtime_problem: &ProblemSpec,
-  participant_solution: &SolutionSpec,
-  prepared_solution: &PreparedSolutionSpec,
-  test_case: &TestCaseMaterial,
-) -> Result<JudgeReport> {
-  let local_case_dir = workspace.root().join("uoj-data").join(&test_case.name);
-  fs::create_dir_all(&local_case_dir)?;
-
-  let input_path = local_case_dir.join("input");
-  fs::copy(&test_case.input_path, &input_path).with_context(|| {
-    format!(
-      "Failed to copy testcase input {} to {}",
-      test_case.input_path.display(),
-      input_path.display()
-    )
-  })?;
-
-  let official_outputs_dir = local_case_dir.join("outputs");
-  let loaded = load_official_data(
-    &test_case.official_data_tar_path,
-    Some(&official_outputs_dir),
-  )?;
-
-  let runtime_test_case = TestCaseSpec {
-    name: loaded.execution_name,
-    input_file: Some(input_path.to_string_lossy().into_owned()),
-    tick_limit: test_case.tick_limit,
-    memory_limit: test_case.memory_limit,
-    groups: test_case.groups.clone(),
-    trait_hints: loaded.validation.traits,
-    generator: None,
-    arguments: None,
-  };
-
-  run_judge(
-    runtime_problem,
-    &runtime_test_case,
-    &participant_solution.name,
-    prepared_solution,
-    &official_outputs_dir,
-    workspace,
-  )
 }
 
 fn write_compile_error_result(result_path: &Path, message: &str) -> Result<()> {
@@ -726,7 +402,7 @@ fn write_result(
   result_path: &Path,
   problem: &BundleJudgeProblemSpec,
   test_cases: &[TestCaseMaterial],
-  runtime_traits: &TestCaseTraitsMap,
+  runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   test_case_reports: &BTreeMap<String, JudgeReport>,
   round_top_level_score: bool,
 ) -> Result<()> {
@@ -901,6 +577,10 @@ fn load_normal_test_cases(
         )
       })?;
       Ok(TestCaseMaterial {
+        scheduled: ScheduledTestCase {
+          name: test_case.name.clone(),
+          traits: loaded.validation.traits.clone(),
+        },
         name: test_case.name.clone(),
         input_path: bundle_root.join("data").join(&test_case.name).join("input"),
         official_data_tar_path,
@@ -936,6 +616,10 @@ fn load_normal_test_cases(
       )
     })?;
     test_cases.push(TestCaseMaterial {
+      scheduled: ScheduledTestCase {
+        name: format!("ex{ex_index}"),
+        traits: loaded.validation.traits.clone(),
+      },
       name: format!("ex{ex_index}"),
       input_path,
       official_data_tar_path,
@@ -947,13 +631,6 @@ fn load_normal_test_cases(
   }
 
   Ok(test_cases)
-}
-
-fn collect_runtime_traits(test_cases: &[TestCaseMaterial]) -> TestCaseTraitsMap {
-  test_cases
-    .iter()
-    .map(|test_case| (test_case.name.clone(), test_case.trait_hints.clone()))
-    .collect()
 }
 
 fn load_problem_conf(problem_conf_path: &Path) -> Result<ProblemConf> {
@@ -1334,19 +1011,6 @@ fn is_trivial_test_case(report: &JudgeReport) -> bool {
   report.score >= 1.0 && report.status == "accepted" && report.message.is_empty()
 }
 
-fn test_case_matches_traits(
-  test_case_name: &str,
-  required_traits: &BTreeMap<String, bool>,
-  runtime_traits: &TestCaseTraitsMap,
-) -> bool {
-  required_traits.iter().all(|(name, value)| {
-    runtime_traits
-      .get(test_case_name)
-      .and_then(|traits| traits.get(name))
-      == Some(value)
-  })
-}
-
 fn subtask_status(statuses: &[String], raw_score: f64) -> String {
   if statuses.is_empty() {
     return "Skipped".to_string();
@@ -1400,6 +1064,8 @@ fn xml_escape(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+  use anyhow::anyhow;
+
   use super::*;
   use crate::runtime::bundle_judge::build_runtime_solutions;
   use crate::runtime::types::BundleJudgeProblemSpec;

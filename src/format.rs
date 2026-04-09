@@ -77,7 +77,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn format_tick_uses_scientific_notation_above_threshold() {
+  fn format_tick_scientific_threshold() {
     assert_eq!(format_tick(0), "0");
     assert_eq!(format_tick(99_999), "99999");
     assert_eq!(format_tick(12345), "12345");
@@ -89,7 +89,7 @@ mod tests {
   }
 
   #[test]
-  fn format_size_uses_iec_units() {
+  fn format_size_iec_units() {
     const KIB: u64 = 1024;
     const MIB: u64 = 1024 * KIB;
     const GIB: u64 = 1024 * MIB;

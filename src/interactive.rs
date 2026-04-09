@@ -1009,13 +1009,13 @@ mod tests {
   }
 
   #[test]
-  fn scoped_id_uses_scope() {
+  fn scoped_id_scope() {
     assert_eq!(scoped_id(None, "std"), "std");
     assert_eq!(scoped_id(Some("aPlusB"), "std"), "aPlusB/std");
   }
 
   #[test]
-  fn summary_counts_reduce_tree() {
+  fn summary_counts_tree() {
     let node = group(
       TaskKind::Problem,
       "contest",
@@ -1047,7 +1047,7 @@ mod tests {
   }
 
   #[test]
-  fn finished_solution_subtree_collapses() {
+  fn finished_solution_collapses() {
     let node = group(
       TaskKind::Solution,
       "std",
@@ -1061,7 +1061,7 @@ mod tests {
   }
 
   #[test]
-  fn visible_children_prioritize_running_and_failed() {
+  fn visible_children_priority() {
     let mut finished_a = leaf("finished-a", ExecutionState::Passed);
     finished_a.finished_at = Some(Instant::now() - Duration::from_secs(3));
     let mut finished_b = leaf("finished-b", ExecutionState::Passed);
@@ -1086,7 +1086,7 @@ mod tests {
   }
 
   #[test]
-  fn problem_items_render_nested_nodes() {
+  fn problem_items_nested_nodes() {
     let child_solution = group(
       TaskKind::Solution,
       "std",
@@ -1106,7 +1106,7 @@ mod tests {
   }
 
   #[test]
-  fn labels_and_phase_names_are_stable() {
+  fn labels_and_phase_names() {
     assert_eq!(task_label(TaskKind::Problem), "Problems");
     assert_eq!(task_label(TaskKind::Validator), "Validator tests");
     assert_eq!(phase_label(PhaseKind::NixPrepare), "Nix prepare");
@@ -1114,7 +1114,7 @@ mod tests {
   }
 
   #[test]
-  fn phase_guard_sets_and_clears() {
+  fn phase_guard_lifecycle() {
     let progress = ProblemProgressHandle::disabled();
     {
       let _phase = progress.phase(PhaseKind::Runtime, "Running tests");
@@ -1131,7 +1131,7 @@ mod tests {
   }
 
   #[test]
-  fn item_guard_marks_internal_error() {
+  fn item_guard_internal_error() {
     let progress = ProblemProgressHandle::disabled();
     let handle = progress.register_group(TaskKind::Solution, "std", ["case1"], Some(0.0));
 
@@ -1147,7 +1147,7 @@ mod tests {
   }
 
   #[test]
-  fn suspend_guard_restores_state() {
+  fn suspend_guard_restores() {
     let guard = suspend_live_render();
     assert!(
       *LIVE_RENDER_SUSPENDED

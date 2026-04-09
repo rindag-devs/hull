@@ -245,13 +245,29 @@ pub fn judge_test_case_from_paths(
   prepared: &BundlePreparedJudgeContext,
   test_case: BundleJudgeTestCaseInput<'_>,
 ) -> Result<JudgeReport> {
-  let local_case_dir = prepared
-    .workspace
+  judge_test_case_with_parts(
+    &prepared.workspace,
+    &prepared.runtime_problem,
+    &prepared.participant_solution,
+    &prepared.prepared_solution,
+    test_case,
+  )
+}
+
+/// Judges one testcase using an existing prepared bundle runtime context.
+pub fn judge_test_case_with_parts(
+  workspace: &RuntimeWorkspace,
+  runtime_problem: &ProblemSpec,
+  participant_solution: &SolutionSpec,
+  prepared_solution: &PreparedSolutionSpec,
+  test_case: BundleJudgeTestCaseInput<'_>,
+) -> Result<JudgeReport> {
+  let local_case_dir = workspace
     .root()
     .join("bundle-data")
     .join(sanitize_path_component(&format!(
       "{}-{}",
-      prepared.runtime_problem.name, test_case.test_case_name
+      runtime_problem.name, test_case.test_case_name
     )));
   fs::create_dir_all(&local_case_dir)?;
   let local_input_path = local_case_dir.join("input");
@@ -283,12 +299,12 @@ pub fn judge_test_case_from_paths(
     arguments: None,
   };
   run_judge(
-    &prepared.runtime_problem,
+    runtime_problem,
     &runtime_test_case,
-    &prepared.participant_solution.name,
-    &prepared.prepared_solution,
+    &participant_solution.name,
+    prepared_solution,
     &official_outputs_dir,
-    &prepared.workspace,
+    workspace,
   )
 }
 

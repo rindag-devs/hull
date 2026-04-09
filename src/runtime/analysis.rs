@@ -1157,7 +1157,7 @@ mod tests {
   }
 
   #[test]
-  fn judge_failure_context_mentions_problem_solution_and_test_case() {
+  fn judge_failure_context_fields() {
     let message = judge_failure_context("aplusb", "wa", "sample-1");
     assert!(message.contains("problem `aplusb`"));
     assert!(message.contains("solution `wa`"));
@@ -1165,7 +1165,7 @@ mod tests {
   }
 
   #[test]
-  fn generate_outputs_failure_context_mentions_problem_solution_and_test_case() {
+  fn generate_outputs_failure_context_fields() {
     let message = generate_outputs_failure_context("wind", "std", "3");
     assert!(message.contains("problem `wind`"));
     assert!(message.contains("solution `std`"));
@@ -1173,7 +1173,7 @@ mod tests {
   }
 
   #[test]
-  fn fatal_status_helpers_match() {
+  fn fatal_status_helpers() {
     assert!(is_fatal_judge_status("internal_error"));
     assert!(!is_fatal_judge_status("memory_limit_exceeded"));
     assert!(is_fatal_validation_status("internal_error"));
@@ -1183,7 +1183,7 @@ mod tests {
   }
 
   #[test]
-  fn valid_test_case_input_passes_fail_fast_check() {
+  fn valid_input_passes_fail_fast() {
     let report = ValidationReport {
       status: "valid".to_string(),
       message: String::new(),
@@ -1196,7 +1196,7 @@ mod tests {
   }
 
   #[test]
-  fn invalid_test_case_input_fails_fast_check() {
+  fn invalid_input_fails_fast() {
     let report = ValidationReport {
       status: "invalid".to_string(),
       message: "out of range".to_string(),
@@ -1213,7 +1213,7 @@ mod tests {
   }
 
   #[test]
-  fn subtask_results_use_min_scoring() {
+  fn subtask_results_min() {
     let problem = problem_with_subtasks("min");
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report("accepted", 1.0)),
@@ -1232,7 +1232,7 @@ mod tests {
   }
 
   #[test]
-  fn subtask_results_use_average_for_sum() {
+  fn subtask_results_sum_average() {
     let problem = problem_with_subtasks("sum");
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report("accepted", 1.0)),
@@ -1250,7 +1250,7 @@ mod tests {
   }
 
   #[test]
-  fn subtask_results_ignore_missing_cases() {
+  fn subtask_results_ignore_missing() {
     let problem = problem_with_subtasks("min");
     let reports = BTreeMap::from([("a".to_string(), judge_report("accepted", 1.0))]);
     let traits = BTreeMap::from([
@@ -1265,7 +1265,7 @@ mod tests {
   }
 
   #[test]
-  fn subtasks_match_trait_subsets() {
+  fn subtasks_match_trait_subset() {
     let mut problem = problem_with_subtasks("min");
     problem.subtasks = vec![SubtaskSpec {
       full_score: 1.0,

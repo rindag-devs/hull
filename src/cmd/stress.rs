@@ -241,8 +241,15 @@ fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTe
         .enumerate()
         .map(|(case_index, generator_args)| {
           let test_case_name = format!("stress-round-{}-case-{case_index}", context.round);
-          let generated_input =
-            generate_input(context.generator_wasm, generator_args, &test_case_name)?;
+          let workspace = RuntimeWorkspace::new(
+            std::env::temp_dir().join(format!("hull-stress-{}-{case_index}", context.round)),
+          )?;
+          let generated_input = generate_input(
+            context.generator_wasm,
+            generator_args,
+            workspace.root(),
+            &test_case_name,
+          )?;
           let mut dynamic_problem = context.problem.clone();
           dynamic_problem.test_cases = vec![TestCaseSpec {
             name: test_case_name.clone(),
@@ -266,9 +273,6 @@ fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTe
             traits: BTreeMap::new(),
           }];
 
-          let workspace = RuntimeWorkspace::new(
-            std::env::temp_dir().join(format!("hull-stress-{}-{case_index}", context.round)),
-          )?;
           let runtime = analyze_problem(&dynamic_problem, &workspace, context.options.clone())?;
 
           for solution in dynamic_problem
@@ -322,6 +326,7 @@ struct StressRoundContext<'a> {
 fn generate_input(
   generator_wasm: &str,
   arguments: &[String],
+  workspace_root: &std::path::Path,
   test_case_name: &str,
 ) -> Result<std::path::PathBuf> {
   let result = run_wasm_for_stdio(
@@ -332,7 +337,7 @@ fn generate_input(
     u32::MAX as u64,
     &[],
   )?;
-  let path = std::env::temp_dir().join(format!("hull-stress-input-{test_case_name}.txt"));
+  let path = workspace_root.join(format!("generated-input-{test_case_name}.txt"));
   std::fs::write(&path, result.stdout)
     .with_context(|| format!("Failed to write generated stress input {}", path.display()))?;
   Ok(path)

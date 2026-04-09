@@ -407,7 +407,7 @@ mod tests {
   }
 
   #[test]
-  fn native_module_temp_names_are_unique_across_threads() {
+  fn native_module_temp_names_unique() {
     let cache_key = "cache-key";
     let handles = (0..32)
       .map(|_| {
@@ -515,7 +515,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_builds_includes_all_runtime_artifacts() {
+  fn collect_builds_all_artifacts() {
     let problem = problem_with_artifacts();
     let commands = collect_problem_realize_builds(&problem)
       .into_iter()
@@ -550,7 +550,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_builds_deduplicates_identical_entries() {
+  fn collect_builds_deduplicates() {
     let problem = problem_with_artifacts();
     let commands = collect_problem_realize_builds(&problem)
       .into_iter()
@@ -565,7 +565,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_builds_fall_back_to_parent_path() {
+  fn collect_builds_parent_fallback() {
     let mut problem = problem_with_artifacts();
     problem.validator.wasm = Some(artifact("/tmp/hull/validator/output.wasm", None));
     let commands = collect_problem_realize_builds(&problem)
