@@ -23,7 +23,6 @@ use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::Deserialize;
 
 use crate::platform::default_parallelism;
-use crate::runner::RunStatus;
 use crate::runtime::analysis::{
   aggregate_subtask_results, run_generate_outputs, run_judge, run_prepare_solution, run_validator,
 };
@@ -32,7 +31,6 @@ use crate::runtime::bundle_judge::{
   missing_language_error, pack_official_data_tar,
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
-use crate::runtime::sandbox::run_wasm_for_stdio;
 use crate::runtime::types::{
   BundleJudgeProblemSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec, SolutionSpec,
   TestCaseSpec,
@@ -234,11 +232,17 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
 
   let custom_test_input_path = uoj_work_path.join("input.txt");
   if custom_test_input_path.is_file() {
+    let std_prepared_solution =
+      run_prepare_solution(&runtime_problem, &main_correct_solution, &workspace)
+        .context("Failed to prepare main correct solution for custom test")?;
     return run_custom_test_mode(CustomTestContext {
       problem: &problem,
       runtime_problem: &runtime_problem,
       workspace: &workspace,
+      participant_solution: &participant_solution,
       prepared_solution: &prepared_solution,
+      main_correct_solution: &main_correct_solution,
+      std_prepared_solution: &std_prepared_solution,
       result_path: &result_path,
       input_path: &custom_test_input_path,
     });
@@ -1011,7 +1015,10 @@ struct CustomTestContext<'a> {
   problem: &'a BundleJudgeProblemSpec,
   runtime_problem: &'a ProblemSpec,
   workspace: &'a RuntimeWorkspace,
+  participant_solution: &'a SolutionSpec,
   prepared_solution: &'a PreparedSolutionSpec,
+  main_correct_solution: &'a SolutionSpec,
+  std_prepared_solution: &'a PreparedSolutionSpec,
   result_path: &'a Path,
   input_path: &'a Path,
 }
@@ -1022,6 +1029,7 @@ fn run_custom_test_mode(ctx: CustomTestContext<'_>) -> Result<()> {
   if validation.status != "valid" {
     return write_custom_test_result(
       ctx.result_path,
+      0.0,
       "Wrong Answer",
       &validation.message,
       0,
@@ -1041,38 +1049,30 @@ fn run_custom_test_mode(ctx: CustomTestContext<'_>) -> Result<()> {
     arguments: None,
   };
 
-  let executable = ctx
-    .prepared_solution
-    .executable
-    .as_ref()
-    .context("Prepared custom test solution is missing executable artifact")?;
-  let wasm_path = &executable.path;
-  let run = run_wasm_for_stdio(
-    wasm_path,
-    Some(ctx.input_path),
-    &[],
-    ctx.problem.tick_limit,
-    ctx.problem.memory_limit,
-    &[],
+  let official_outputs_dir = run_generate_outputs(
+    ctx.runtime_problem,
+    &custom_test_case,
+    &ctx.main_correct_solution.name,
+    ctx.std_prepared_solution,
+    ctx.workspace,
+  )
+  .context("Failed to generate official outputs for custom test")?;
+  let report = run_judge(
+    ctx.runtime_problem,
+    &custom_test_case,
+    &ctx.participant_solution.name,
+    ctx.prepared_solution,
+    &official_outputs_dir,
+    ctx.workspace,
   )?;
-  let outputs_dir = if run.status == RunStatus::Accepted {
-    Some(run_generate_outputs(
-      ctx.runtime_problem,
-      &custom_test_case,
-      &ctx.runtime_problem.main_correct_solution,
-      ctx.prepared_solution,
-      ctx.workspace,
-    )?)
-  } else {
-    None
-  };
   write_custom_test_result(
     ctx.result_path,
-    &to_uoj_custom_test_info(run.status),
-    &custom_test_message(&run),
-    run.tick,
-    run.memory,
-    outputs_dir.as_deref(),
+    report.score * 100.0,
+    &to_uoj_custom_test_info(&report.status),
+    &report.message,
+    report.tick,
+    report.memory,
+    Some(Path::new(&report.outputs)),
   )
 }
 
@@ -1155,24 +1155,14 @@ fn write_hack_result(result_path: &Path, report: &JudgeReport) -> Result<()> {
   let hack_succeeded = report.score < 1.0;
   let point_score = if hack_succeeded { 0.0 } else { 100.0 };
   let message = xml_escape(&report.message);
-  let test_xml = if message.is_empty() {
-    format!(
-      "<test num=\"1\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res/></test>",
-      point_score,
-      to_uoj_info(&report.status),
-      report.tick,
-      report.memory
-    )
-  } else {
-    format!(
-      "<test num=\"1\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
-      point_score,
-      to_uoj_info(&report.status),
-      report.tick,
-      report.memory,
-      message,
-    )
-  };
+  let test_xml = format!(
+    "<test num=\"1\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\"><res>{}</res></test>",
+    point_score,
+    to_uoj_info(&report.status),
+    report.tick,
+    report.memory,
+    message,
+  );
 
   fs::write(
     result_path.join("result.txt"),
@@ -1194,29 +1184,25 @@ fn write_hack_result(result_path: &Path, report: &JudgeReport) -> Result<()> {
 
 fn write_custom_test_result(
   result_path: &Path,
+  score: f64,
   info: &str,
   message: &str,
   tick: u64,
   memory: u64,
   outputs_dir: Option<&Path>,
 ) -> Result<()> {
-  let escaped = xml_escape(message);
-  let output_blocks = match outputs_dir {
-    Some(path) => custom_test_output_blocks(path)?,
-    None => String::new(),
-  };
-  let result_block = if escaped.is_empty() {
-    String::new()
-  } else {
-    format!("<res>{escaped}</res>")
-  };
+  let output_blocks = outputs_dir
+    .map(custom_test_output_blocks)
+    .transpose()?
+    .unwrap_or_default();
   let details = format!(
-    "<tests><custom-test info=\"{}\" time=\"{}\" memory=\"{}\">{}{}</custom-test></tests>",
+    "<tests><test num=\"0\" score=\"{}\" info=\"{}\" time=\"{}\" memory=\"{}\">{}<res>{}</res></test></tests>",
+    score,
     xml_escape(info),
     tick,
     memory,
     output_blocks,
-    result_block,
+    xml_escape(message),
   );
 
   fs::write(result_path.join("cur_status.txt"), format!("{info}\n")).with_context(|| {
@@ -1240,22 +1226,26 @@ fn write_custom_test_result(
   })
 }
 
+fn to_uoj_custom_test_info(status: &str) -> String {
+  match status {
+    "accepted" => "Success".to_string(),
+    _ => to_uoj_info(status),
+  }
+}
+
 fn custom_test_output_blocks(outputs_dir: &Path) -> Result<String> {
   let mut outputs = Vec::new();
   collect_custom_test_outputs(outputs_dir, outputs_dir, &mut outputs)?;
+  let preview_limit = custom_test_output_preview_limit(outputs.len());
   Ok(
     outputs
       .into_iter()
       .map(|(name, content)| {
-        let title = if name == "output" {
-          "output".to_string()
-        } else {
-          format!("output: {name}")
-        };
+        let preview = truncate_custom_test_output(&content, preview_limit);
         format!(
-          "<h4>{}</h4><pre>{}</pre>",
-          xml_escape(&title),
-          xml_escape(&content)
+          "<h4>output: {}</h4><pre>{}</pre>",
+          xml_escape(&name),
+          xml_escape(&preview)
         )
       })
       .collect(),
@@ -1265,7 +1255,7 @@ fn custom_test_output_blocks(outputs_dir: &Path) -> Result<String> {
 fn collect_custom_test_outputs(
   root_dir: &Path,
   current_dir: &Path,
-  outputs: &mut Vec<(String, String)>,
+  outputs: &mut Vec<(String, Vec<u8>)>,
 ) -> Result<()> {
   let mut entries = fs::read_dir(current_dir)
     .with_context(|| format!("Failed to read outputs directory {}", current_dir.display()))?
@@ -1285,36 +1275,31 @@ fn collect_custom_test_outputs(
     let relative = path
       .strip_prefix(root_dir)
       .with_context(|| format!("Failed to relativize output path {}", path.display()))?;
-    let content = fs::read_to_string(&path).unwrap_or_else(|_| "<binary output>".to_string());
+    let content = fs::read(&path).unwrap_or_else(|_| b"<binary output>".to_vec());
     outputs.push((relative.to_string_lossy().into_owned(), content));
   }
 
   Ok(())
 }
 
-fn custom_test_message(run: &crate::runtime::sandbox::WasmRunResult) -> String {
-  if run.status == RunStatus::Accepted {
-    return String::new();
+fn custom_test_output_preview_limit(outputs_count: usize) -> usize {
+  const CUSTOM_TEST_OUTPUT_TOTAL_PREVIEW_LIMIT: usize = 12 * 1024;
+
+  if outputs_count == 0 {
+    return CUSTOM_TEST_OUTPUT_TOTAL_PREVIEW_LIMIT;
   }
-  if !run.error_message.trim().is_empty() {
-    return run.error_message.trim().to_string();
-  }
-  let stderr = String::from_utf8_lossy(&run.stderr).trim().to_string();
-  if !stderr.is_empty() {
-    return stderr;
-  }
-  String::new()
+
+  CUSTOM_TEST_OUTPUT_TOTAL_PREVIEW_LIMIT / outputs_count
 }
 
-fn to_uoj_custom_test_info(status: RunStatus) -> String {
-  match status {
-    RunStatus::Accepted => "Success",
-    RunStatus::RuntimeError => "Runtime Error",
-    RunStatus::TimeLimitExceeded => "Time Limit Exceeded",
-    RunStatus::MemoryLimitExceeded => "Memory Limit Exceeded",
-    RunStatus::InternalError => "Judgment Failed",
+fn truncate_custom_test_output(content: &[u8], preview_limit: usize) -> String {
+  if content.len() <= preview_limit {
+    return String::from_utf8_lossy(content).into_owned();
   }
-  .to_string()
+
+  let omitted = content.len() - preview_limit;
+  let preview = String::from_utf8_lossy(&content[..preview_limit]).into_owned();
+  format!("{}\n[{} bytes omitted]", preview, omitted)
 }
 
 fn summarize_trivial_test_cases(
@@ -1379,7 +1364,7 @@ fn to_uoj_info(status: &str) -> String {
   match status {
     "accepted" => "Accepted",
     "wrong_answer" => "Wrong Answer",
-    "partially_correct" => "Partially Correct",
+    "partially_correct" => "Acceptable Answer",
     "runtime_error" => "Runtime Error",
     "time_limit_exceeded" => "Time Limit Exceeded",
     "memory_limit_exceeded" => "Memory Limit Exceeded",
@@ -1481,14 +1466,13 @@ mod tests {
 
   #[test]
   fn writes_compile_error_result() {
-    let result_path = std::env::temp_dir().join(format!(
+    let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
       "hull-uoj-custom-test-{}-{}",
       std::process::id(),
       "compile-error"
-    ));
-    if result_path.exists() {
-      fs::remove_dir_all(&result_path).expect("remove stale result dir");
-    }
+    )))
+    .expect("create workspace");
+    let result_path = workspace.root().join("result");
 
     write_compile_error_result(&result_path, "compile failed").expect("write compile result");
 
@@ -1500,58 +1484,81 @@ mod tests {
       fs::read_to_string(result_path.join("result.txt")).expect("read result"),
       "error Compile Error\ndetails\n<error>compile failed</error>\n"
     );
-
-    fs::remove_dir_all(&result_path).expect("cleanup result dir");
   }
 
   #[test]
-  fn writes_custom_test_result() {
-    let result_path = std::env::temp_dir().join(format!(
+  fn writes_custom_test() {
+    let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
       "hull-uoj-custom-test-{}-{}",
       std::process::id(),
       "custom-test"
-    ));
-    if result_path.exists() {
-      fs::remove_dir_all(&result_path).expect("remove stale result dir");
-    }
+    )))
+    .expect("create workspace");
+    let result_path = workspace.root().join("result");
     fs::create_dir_all(&result_path).expect("create result dir");
 
-    write_custom_test_result(&result_path, "Success", "", 12, 34, None)
+    write_custom_test_result(&result_path, 100.0, "Success", "", 12, 34, None)
       .expect("write custom test result");
 
     assert_eq!(
       fs::read_to_string(result_path.join("result.txt")).expect("read result"),
-      "score 0\ntime 12\nmemory 34\ndetails\n<tests><custom-test info=\"Success\" time=\"12\" memory=\"34\"></custom-test></tests>"
+      "score 0\ntime 12\nmemory 34\ndetails\n<tests><test num=\"0\" score=\"100\" info=\"Success\" time=\"12\" memory=\"34\"><res></res></test></tests>"
     );
-
-    fs::remove_dir_all(&result_path).expect("cleanup result dir");
   }
 
   #[test]
-  fn writes_custom_test_multiple_outputs() {
-    let root = std::env::temp_dir().join(format!(
+  fn writes_custom_test_outputs() {
+    let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
       "hull-uoj-custom-test-{}-{}",
       std::process::id(),
       "custom-test-outputs"
-    ));
-    let result_path = root.join("result");
-    let outputs_path = root.join("outputs");
-    if root.exists() {
-      fs::remove_dir_all(&root).expect("remove stale root dir");
-    }
+    )))
+    .expect("create workspace");
+    let result_path = workspace.root().join("result");
+    let outputs_path = workspace.root().join("outputs");
     fs::create_dir_all(outputs_path.join("nested")).expect("create outputs dir");
     fs::create_dir_all(&result_path).expect("create result dir");
     fs::write(outputs_path.join("first"), "hello").expect("write first output");
     fs::write(outputs_path.join("nested/second"), "world").expect("write second output");
 
-    write_custom_test_result(&result_path, "Success", "", 12, 34, Some(&outputs_path))
-      .expect("write custom test result");
+    write_custom_test_result(
+      &result_path,
+      100.0,
+      "Success",
+      "",
+      12,
+      34,
+      Some(&outputs_path),
+    )
+    .expect("write custom test result");
 
     assert_eq!(
       fs::read_to_string(result_path.join("result.txt")).expect("read result"),
-      "score 0\ntime 12\nmemory 34\ndetails\n<tests><custom-test info=\"Success\" time=\"12\" memory=\"34\"><h4>output: first</h4><pre>hello</pre><h4>output: nested/second</h4><pre>world</pre></custom-test></tests>"
+      "score 0\ntime 12\nmemory 34\ndetails\n<tests><test num=\"0\" score=\"100\" info=\"Success\" time=\"12\" memory=\"34\"><h4>output: first</h4><pre>hello</pre><h4>output: nested/second</h4><pre>world</pre><res></res></test></tests>"
     );
+  }
 
-    fs::remove_dir_all(&root).expect("cleanup root dir");
+  #[test]
+  fn scales_output_budget() {
+    assert_eq!(custom_test_output_preview_limit(1), 12 * 1024);
+    assert_eq!(custom_test_output_preview_limit(2), 6 * 1024);
+    assert_eq!(custom_test_output_preview_limit(3), 4 * 1024);
+  }
+
+  #[test]
+  fn truncates_output_preview() {
+    assert_eq!(
+      truncate_custom_test_output(b"abcdef", 3),
+      "abc\n[3 bytes omitted]"
+    );
+  }
+
+  #[test]
+  fn maps_custom_test_info() {
+    assert_eq!(to_uoj_custom_test_info("accepted"), "Success");
+    assert_eq!(
+      to_uoj_custom_test_info("partially_correct"),
+      "Acceptable Answer"
+    );
   }
 }
