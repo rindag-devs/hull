@@ -375,7 +375,7 @@
         trap cleanup EXIT
 
         # Create directory structure
-        mkdir -p $tmpdir/download/document
+        mkdir -p $tmpdir/download
         mkdir -p $tmpdir/require
 
         # Write problem.conf
@@ -434,14 +434,14 @@
         # Copy visible documents
         ${lib.concatMapAttrsStringSep "\n" (
           docName: doc:
-          lib.optionalString doc.participantVisibility "cp ${doc.path} $tmpdir/download/document/${docName}"
+          lib.optionalString doc.participantVisibility "cp ${doc.path} $tmpdir/download/document_${docName}"
         ) documents}
 
         # Copy visible programs
         ${hull.problemTarget.utils.participantProgramsCommand {
           inherit problem;
           dest = "$tmpdir/download";
-          flattened = false;
+          flattened = true;
         }}
 
         # Copy downloadable files

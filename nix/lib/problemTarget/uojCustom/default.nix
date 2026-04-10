@@ -252,20 +252,6 @@
           CUSTOM_JUDGE_RUNNER_RELATIVE = customJudgeRunnerRelative;
         };
       };
-
-      mkDocumentsCopyCommand =
-        pathPrefix: docs:
-        let
-          visible = builtins.any ({ participantVisibility, ... }: participantVisibility) (
-            builtins.attrValues docs
-          );
-        in
-        lib.optionalString visible ''
-          mkdir -p ${pathPrefix}
-          ${lib.concatMapAttrsStringSep "\n" (
-            name: doc: lib.optionalString doc.participantVisibility "cp ${doc.path} ${pathPrefix}/${name}"
-          ) docs}
-        '';
     in
     pkgs.runCommandLocal
       ("hull-problemTargetOutput-${problem.name}-uojCustom" + lib.optionalString zipped ".zip")
@@ -279,7 +265,7 @@
         }
         trap cleanup EXIT
 
-        mkdir -p "$tmpdir/download/document"
+        mkdir -p "$tmpdir/download_document"
         mkdir -p "$tmpdir/hull-bundle/nix/store"
 
         while IFS= read -r store_path; do
@@ -297,7 +283,10 @@
         cp ${judgerShellScript} "$tmpdir/judger.sh"
         cp ${./README.txt} "$tmpdir/README.txt"
 
-        ${mkDocumentsCopyCommand "$tmpdir/download/document" documents}
+        ${lib.concatMapAttrsStringSep "\n" (
+          docName: doc:
+          lib.optionalString doc.participantVisibility "cp ${doc.path} $tmpdir/download/document_${docName}"
+        ) documents}
 
         ${
           if zipped then

@@ -16,12 +16,11 @@
 { pkgs }:
 
 pkgs.pkgsStatic.stdenv.mkDerivation {
-  pname = "nix-user-chroot";
-  version = "1.0.0";
+  name = "nix-user-chroot";
   src = ./.;
 
   buildPhase = ''
-    $CC -O3 -static -Wall -Wextra -o nix-user-chroot main.c
+    $CC -O3 -static -Wall -Wextra -std=gnu99 -o nix-user-chroot main.c
   '';
 
   installPhase = ''
