@@ -62,11 +62,7 @@ pub struct LemonCustomJudgeOpts {
   #[arg(long)]
   pub threads: usize,
 
-  /// Output path where the raw aggregate judge report JSON is written.
-  #[arg(long)]
-  pub output_path: String,
-
-  /// Plain-text output path for watcher integrations.
+  /// Plain-text output path for watcher integrations and Lemon special judge.
   #[arg(long)]
   pub plain_output_path: String,
 }
@@ -87,12 +83,18 @@ struct LemonLanguageMap {
   lemon_to_hull_language_map: BTreeMap<String, String>,
 }
 
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LemonBundleMetadata {
+  lemon_full_score: i64,
+}
+
 /// Executes one Lemon bundled judging request and writes a single aggregate judge report.
 pub fn run(opts: &LemonCustomJudgeOpts) -> Result<()> {
   let bundle_root = PathBuf::from(&opts.bundle_root);
-  let output_path = PathBuf::from(&opts.output_path);
   let plain_output_path = PathBuf::from(&opts.plain_output_path);
   let problem = load_bundle_judge_problem_spec(&bundle_root, &opts.metadata_path)?;
+  let lemon_metadata = load_lemon_bundle_metadata(&bundle_root, &opts.metadata_path)?;
 
   let hull_language = resolve_submission_hull_language(
     &bundle_root,
@@ -143,7 +145,7 @@ pub fn run(opts: &LemonCustomJudgeOpts) -> Result<()> {
   )?;
 
   let report = aggregate_lemon_report(&problem, &test_cases, &runtime_traits, &test_case_reports);
-  write_lemon_report(&output_path, &plain_output_path, &report)
+  write_lemon_report(&lemon_metadata, &plain_output_path, &report)
 }
 
 fn load_lemon_bundle_test_cases(
@@ -279,26 +281,22 @@ fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>)
 }
 
 fn write_lemon_report(
-  output_path: &Path,
+  lemon_metadata: &LemonBundleMetadata,
   plain_output_path: &Path,
   report: &JudgeReport,
 ) -> Result<()> {
-  if let Some(parent) = output_path.parent() {
-    std::fs::create_dir_all(parent)?;
-  }
-  std::fs::write(output_path, serde_json::to_vec(report)?).with_context(|| {
-    format!(
-      "Failed to write Lemon custom judge report to {}",
-      output_path.display()
-    )
-  })?;
-
   if let Some(parent) = plain_output_path.parent() {
     std::fs::create_dir_all(parent)?;
   }
+  let final_score = (report.score * lemon_metadata.lemon_full_score as f64).round() as i64;
+  let final_message = if report.message.is_empty() {
+    report.status.clone()
+  } else {
+    format!("{}:\n{}", report.status, report.message)
+  };
   let plain_report = format!(
     "{}\n{}\n{}\n{}\n{}",
-    report.tick, report.memory, report.score, report.status, report.message
+    report.tick, report.memory, final_score, report.status, final_message
   );
   std::fs::write(plain_output_path, plain_report).with_context(|| {
     format!(
@@ -306,6 +304,20 @@ fn write_lemon_report(
       plain_output_path.display()
     )
   })
+}
+
+fn load_lemon_bundle_metadata(
+  bundle_root: &Path,
+  metadata_path: &str,
+) -> Result<LemonBundleMetadata> {
+  let metadata_file = bundle_root.join(metadata_path);
+  let content = std::fs::read_to_string(&metadata_file).with_context(|| {
+    format!(
+      "Failed to read Lemon bundle metadata {}",
+      metadata_file.display()
+    )
+  })?;
+  serde_json::from_str(&content).context("Failed to parse Lemon bundle metadata")
 }
 
 fn resolve_submission_hull_language(
@@ -353,6 +365,39 @@ mod tests {
     }
     fs::create_dir_all(&root).expect("create temp root");
 
+    fs::write(
+      root.join("problem.json"),
+      serde_json::to_vec(&serde_json::json!({
+        "name": "sample",
+        "tickLimit": 1000,
+        "memoryLimit": 268435456,
+        "fullScore": 100.0,
+        "lemonFullScore": 100,
+        "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drvPath": null } },
+        "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drvPath": null } },
+        "judger": {
+          "prepareSolutionRunner": { "path": "/prepare", "drvPath": null },
+          "generateOutputsRunner": { "path": "/generate", "drvPath": null },
+          "judgeRunner": { "path": "/judge", "drvPath": null }
+        },
+        "mainCorrectSolution": "std",
+        "subtasks": [
+          { "fullScore": 100.0, "scoringMethod": "sum", "traits": {} }
+        ],
+        "solutions": [],
+        "testCases": [
+          {
+            "name": "hand1",
+            "tickLimit": 1000,
+            "memoryLimit": 268435456,
+            "groups": [],
+            "traitHints": {}
+          }
+        ]
+      }))
+      .expect("serialize problem metadata"),
+    )
+    .expect("write problem metadata");
     let problem: BundleJudgeProblemSpec = serde_json::from_value(serde_json::json!({
       "name": "sample",
       "tickLimit": 1000,

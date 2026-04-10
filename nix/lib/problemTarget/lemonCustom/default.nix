@@ -55,7 +55,6 @@
       ...
     }@problem:
     let
-      lemonWatcherTimeLimitMs = 1000 * 60 * 60 * 24;
       targetHullPkgs = targetHullPkgsForSystem targetSystem;
       targetPkgs = targetPkgsForSystem targetSystem;
       targetHull = targetHullForSystem targetSystem;
@@ -82,6 +81,7 @@
           memoryLimit
           fullScore
           ;
+        lemonFullScore = builtins.floor (problem.fullScore * scoreScale);
         checker = {
           src = null;
           wasm = {
@@ -201,7 +201,7 @@
       lemonTestCases = [
         {
           fullScore = builtins.floor (problem.fullScore * scoreScale);
-          timeLimit = lemonWatcherTimeLimitMs;
+          timeLimit = 1000 * 60 * 60 * 24;
           memoryLimit = 16777216;
           inputFiles = [ "${problem.name}/hull.in" ];
           outputFiles = [ "${problem.name}/hull.out" ];
@@ -285,57 +285,80 @@
         '';
       };
 
-      lemonCompilerScript = pkgs.writeShellScript "hull-lemonCustom-compiler-${problem.name}" ''
-        set -eu
-        if [ "$#" -ne 1 ]; then
-          printf 'expected exactly one source file, got %s\n' "$#" >&2
-          exit 1
-        fi
-        self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
-        data_root=$(CDPATH= cd -- "$self_dir/.." && pwd)
-        src="$1"
-        base="''${src%.*}"
-        problem_name=$(basename "$base")
-        if [ ! -d "$data_root/$problem_name" ]; then
-          printf 'missing lemonCustom problem bundle: %s\n' "$data_root/$problem_name" >&2
-          exit 1
-        fi
-        tmpdir=$(mktemp -d)
-        cleanup() {
-          chmod -R u+rwX "$tmpdir" 2>/dev/null || true
-          rm -rf "$tmpdir"
-        }
-        trap cleanup EXIT
-        mkdir -p "$tmpdir/root"
-        mkdir -p "$tmpdir/root/bundle" "$tmpdir/root/runtime-nix/store"
-        cp -r "$data_root/$problem_name"/. "$tmpdir/root/bundle/"
-        printf '%s\n' "$problem_name" > "$tmpdir/root/problem-name"
-        cp -RL --no-preserve=ownership "$data_root/_hull/nix/store"/. "$tmpdir/root/runtime-nix/store/"
-        submission_name=$(basename "$src")
-        printf '%s\n' "$submission_name" > "$tmpdir/root/submission-name"
-        cp "$src" "$tmpdir/root/$submission_name"
-        tar -C "$tmpdir/root" -cf "$base.hullbundle" .
-      '';
+      lemonCompilerScript = pkgs.writeTextFile {
+        name = "hull-lemonCustom-compiler-${problem.name}";
+        executable = true;
+        text = ''
+          #!/bin/sh
+          set -eu
+          if [ "$#" -ne 1 ]; then
+            printf 'expected exactly one source file, got %s\n' "$#" >&2
+            exit 1
+          fi
+          self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+          data_root=$(CDPATH= cd -- "$self_dir/.." && pwd)
+          src="$1"
+          base="''${src%.*}"
+          problem_name=$(basename "$base")
+          if [ ! -d "$data_root/$problem_name" ]; then
+            printf 'missing lemonCustom problem bundle: %s\n' "$data_root/$problem_name" >&2
+            exit 1
+          fi
+          tmpdir=$(mktemp -d)
+          cleanup() {
+            chmod -R u+rwX "$tmpdir" 2>/dev/null || true
+            rm -rf "$tmpdir"
+          }
+          trap cleanup EXIT
+          mkdir -p "$tmpdir/root"
+          mkdir -p "$tmpdir/root/bundle" "$tmpdir/root/runtime-nix/store"
+          cp -r "$data_root/$problem_name"/. "$tmpdir/root/bundle/"
+          printf '%s\n' "$problem_name" > "$tmpdir/root/problem-name"
+          cp -a --no-preserve=ownership "$data_root/_hull/nix/store"/. "$tmpdir/root/runtime-nix/store/"
+          submission_name=$(basename "$src")
+          printf '%s\n' "$submission_name" > "$tmpdir/root/submission-name"
+          cp "$src" "$tmpdir/root/$submission_name"
+          tar -C "$tmpdir/root" -cf "$base.hullbundle" .
+        '';
+        checkPhase = ''
+          ${pkgs.stdenv.shellDryRun} "$target"
+        '';
+      };
 
-      lemonSpecialJudgeScript = pkgs.writeText "hull-lemonCustom-specialJudge-${problem.name}" ''
-        #!/bin/sh
-        set -eu
-        input_path="$1"
-        contestant_output="$2"
-        answer_path="$3"
-        full_score="$4"
-        score_path="$5"
-        message_path="$6"
-        if [ ! -f "$contestant_output" ]; then
-          printf '0\n' > "$score_path"
-          printf 'missing hull report: %s\n' "$contestant_output" > "$message_path"
-          exit 0
-        fi
-        score=$( ${lib.getExe pkgs.jq} -r --argjson fullScore "$full_score" '(.score * $fullScore) | round' "$contestant_output" )
-        message=$( ${lib.getExe pkgs.jq} -r 'if .message == "" then .status else (.status + ":\n" + .message) end' "$contestant_output" )
-        printf '%s\n' "$score" > "$score_path"
-        printf '%s\n' "$message" > "$message_path"
-      '';
+      lemonSpecialJudgeScript = pkgs.writeTextFile {
+        name = "hull-lemonCustom-specialJudge-${problem.name}";
+        executable = true;
+        text = ''
+          #!/bin/sh
+          set -eu
+          input_path="$1"
+          contestant_output="$2"
+          answer_path="$3"
+          full_score="$4"
+          score_path="$5"
+          message_path="$6"
+          if [ ! -f "$contestant_output" ]; then
+            printf '0\n' > "$score_path"
+            printf 'missing hull report: %s\n' "$contestant_output" > "$message_path"
+            exit 0
+          fi
+          {
+            IFS= read -r _tick
+            IFS= read -r _memory
+            IFS= read -r score
+            IFS= read -r _status
+            IFS= read -r first_message_line
+            printf '%s' "$first_message_line"
+            while IFS= read -r line; do
+              printf '\n%s' "$line"
+            done
+          } < "$contestant_output" > "$message_path"
+          printf '%s\n' "$score" > "$score_path"
+        '';
+        checkPhase = ''
+          ${pkgs.stdenv.shellDryRun} "$target"
+        '';
+      };
 
       mkDocumentsCopyCommand =
         pathPrefix: docs:

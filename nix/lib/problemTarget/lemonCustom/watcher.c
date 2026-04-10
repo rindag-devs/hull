@@ -213,9 +213,7 @@ int main(int argc, char **argv) {
   char submission_name_path[PATH_MAX];
   char submission_name[PATH_MAX];
   char bundled_submission_path[PATH_MAX];
-  char report_json_path[PATH_MAX];
   char report_txt_path[PATH_MAX];
-  char inner_report_json_path[PATH_MAX];
   char inner_report_txt_path[PATH_MAX];
   char fallback_output_path[PATH_MAX];
   char tick_str[64];
@@ -265,12 +263,8 @@ int main(int argc, char **argv) {
       make_path(problem_name_path, sizeof(problem_name_path), extract_root, "/problem-name") != 0 ||
       make_path(submission_name_path, sizeof(submission_name_path), extract_root,
                 "/submission-name") != 0 ||
-      make_path(report_json_path, sizeof(report_json_path), extract_root, "/watcher-report.json") !=
-          0 ||
       make_path(report_txt_path, sizeof(report_txt_path), extract_root, "/watcher-report.txt") !=
           0 ||
-      snprintf(inner_report_json_path, sizeof(inner_report_json_path), "%s",
-               "/bundle-host/watcher-report.json") >= (int)sizeof(inner_report_json_path) ||
       snprintf(inner_report_txt_path, sizeof(inner_report_txt_path), "%s",
                "/bundle-host/watcher-report.txt") >= (int)sizeof(inner_report_txt_path) ||
       make_path(nix_user_chroot_path, sizeof(nix_user_chroot_path), runtime_nix_dir,
@@ -342,11 +336,9 @@ int main(int argc, char **argv) {
   child_argv[20] = "lemonCustom";
   child_argv[21] = "--threads";
   child_argv[22] = "0";
-  child_argv[23] = "--output-path";
-  child_argv[24] = inner_report_json_path;
-  child_argv[25] = "--plain-output-path";
-  child_argv[26] = inner_report_txt_path;
-  child_argv[27] = NULL;
+  child_argv[23] = "--plain-output-path";
+  child_argv[24] = inner_report_txt_path;
+  child_argv[25] = NULL;
 
   child_pid = fork();
   if (child_pid < 0) {
@@ -387,16 +379,8 @@ int main(int argc, char **argv) {
     }
     fclose(error_fp);
   }
-  {
-    FILE *output_fp = fopen(effective_output_path, "wb");
-    if (output_fp == NULL) {
-      fprintf(stderr, "failed to open watcher output path %s\n", effective_output_path);
-      goto cleanup;
-    }
-    fclose(output_fp);
-  }
-  if (copy_file(report_json_path, effective_output_path) != 0) {
-    fprintf(stderr, "failed to copy final watcher JSON report\n");
+  if (copy_file(report_txt_path, effective_output_path) != 0) {
+    fprintf(stderr, "failed to copy final watcher plain report\n");
     goto cleanup;
   }
 
