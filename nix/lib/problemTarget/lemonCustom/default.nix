@@ -314,7 +314,10 @@
           mkdir -p "$tmpdir/root/bundle" "$tmpdir/root/runtime-nix/store"
           cp -r "$data_root/$problem_name"/. "$tmpdir/root/bundle/"
           printf '%s\n' "$problem_name" > "$tmpdir/root/problem-name"
-          cp -a --no-preserve=ownership "$data_root/_hull/nix/store"/. "$tmpdir/root/runtime-nix/store/"
+          # Preserve symlinks for the bundled /nix/store layout, but intentionally
+          # break hardlinks so the final tarball does not rely on archive hardlink
+          # extraction semantics across host platforms.
+          cp -R -P "$data_root/_hull/nix/store"/. "$tmpdir/root/runtime-nix/store/"
           submission_name=$(basename "$src")
           printf '%s\n' "$submission_name" > "$tmpdir/root/submission-name"
           cp "$src" "$tmpdir/root/$submission_name"
