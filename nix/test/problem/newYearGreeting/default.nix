@@ -125,6 +125,12 @@
 
   targets = {
     default = hull.problemTarget.common;
+    hydroCustom = hull.problemTarget.hydroCustom {
+      statements = {
+        en = "statement.en.pdf";
+        zh = "statement.zh.pdf";
+      };
+    };
     lemonCustom = hull.problemTarget.lemonCustom {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };

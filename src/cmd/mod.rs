@@ -16,6 +16,7 @@
 pub mod build;
 pub mod build_contest;
 pub mod cnoi_self_eval;
+pub mod hydro_custom_judge;
 pub mod judge;
 pub mod lemon_custom_judge;
 pub mod patch;

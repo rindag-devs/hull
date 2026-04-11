@@ -52,6 +52,7 @@ fn main() -> Result<()> {
     cli::Command::Build(opts) => cmd::build::run(opts),
     cli::Command::BuildContest(opts) => cmd::build_contest::run(opts),
     cli::Command::CnoiSelfEval(opts) => cmd::cnoi_self_eval::run(opts),
+    cli::Command::HydroCustomJudge(opts) => cmd::hydro_custom_judge::run(opts),
     cli::Command::Judge(opts) => cmd::judge::run(opts),
     cli::Command::LemonCustomJudge(opts) => cmd::lemon_custom_judge::run(opts),
     cli::Command::Patch(opts) => cmd::patch::run(opts),

@@ -17,8 +17,12 @@
   pkgs,
 }:
 
-{
+rec {
   nix-user-chroot = pkgs.callPackage ./nix-user-chroot { };
+  talloc-static = pkgs.callPackage ./talloc-static { };
+  proot-static = pkgs.callPackage ./proot-static {
+    inherit talloc-static;
+  };
 
   wasm32-wasi-wasip1 = rec {
     compiler-rt = pkgs.callPackage ./compiler-rt.nix { };

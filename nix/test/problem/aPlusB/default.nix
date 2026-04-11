@@ -227,6 +227,12 @@
         zh = "statement.zh.pdf";
       };
     };
+    hydroCustom = hull.problemTarget.hydroCustom {
+      statements = {
+        en = "statement.en.pdf";
+        zh = "statement.zh.pdf";
+      };
+    };
     lemon = hull.problemTarget.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };

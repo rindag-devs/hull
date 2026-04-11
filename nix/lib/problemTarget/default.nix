@@ -66,6 +66,18 @@
       ;
   };
 
+  hydroCustom = import ./hydroCustom {
+    inherit
+      lib
+      hull
+      pkgs
+      hullPkgs
+      targetHullPkgsForSystem
+      targetPkgsForSystem
+      targetHullForSystem
+      ;
+  };
+
   lemon = import ./lemon.nix {
     inherit
       lib
