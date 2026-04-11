@@ -52,6 +52,16 @@ Problem targets operate on a single problem's configuration.
 - *`testdata/`*: Contains test data files, checker, validator, and other files required for judging.
 - *`additional_file/`*: Contains files visible to participants, such as sample cases or grader source code.
 
+=== `hydroCustom`
+
+`hull.problemTarget.hydroCustom` packages one problem as a custom Hydro bundle.
+
+- `Custom` here is part of the target name.
+- It denotes a target that preserves Hull's full custom judging workflow instead of converting the problem into one fixed built-in judging route.
+- It includes a bundled Hull runtime, a static `proot`, custom judger runners, and problem data.
+- It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Hydro.
+- It requires judge resource limits and language settings that fit the bundled runtime.
+
 === `lemon`
 
 `hull.problemTarget.lemon` packages one problem for #link("https://github.com/Project-LemonLime/Project_LemonLime")[Project LemonLime].
@@ -59,6 +69,15 @@ Problem targets operate on a single problem's configuration.
 - *`<problem-name>.cdf`*: A JSON file containing all metadata, test case configurations, and contestant information.
 - *`data/<problem-name>/`*: Contains test data and the native checker executable.
 - *`source/<contestant-name>/<problem-name>/`*: Contains source files for solutions, organized by contestant name.
+
+=== `lemonCustom`
+
+`hull.problemTarget.lemonCustom` packages one problem as a custom Lemon bundle.
+
+- `Custom` here is part of the target name.
+- It denotes a target that preserves Hull's full custom judging workflow instead of converting the problem into one fixed built-in judging route.
+- It includes a bundled Hull runtime, custom judger runners, and problem data.
+- It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Lemon.
 
 === `uoj`
 
@@ -72,6 +91,8 @@ Problem targets operate on a single problem's configuration.
 
 `hull.problemTarget.uojCustom` packages one problem as a custom UOJ bundle.
 
+- `Custom` here is part of the target name.
+- It denotes a target that preserves Hull's full custom judging workflow instead of converting the problem into one fixed built-in judging route.
 - It includes a bundled Hull runtime, custom judger runners, and problem data.
 - It accepts `targetSystem`.
 - The default `targetSystem` is `x86_64-linux`.
@@ -114,7 +135,15 @@ result/
 - It merges all `data/` directories into one.
 - It merges all `source/` directories, preserving the contestant-based structure.
 
-This creates a complete contest package ready to be imported into LemonLime.
+This creates a complete contest package ready to be imported into Lemon.
+
+=== `lemonCustom`
+
+`hull.contestTarget.lemonCustom` merges per-problem `lemonCustom` outputs into one contest package.
+
+- It merges all per-problem custom Lemon bundles into one contest output.
+- It preserves the bundled Hull runtime and custom judging assets for each problem.
+- It preserves the contestant-based source layout required by Lemon.
 
 === `cnoiParticipant`
 
