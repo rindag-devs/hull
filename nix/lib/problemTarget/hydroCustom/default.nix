@@ -88,6 +88,16 @@
   # Number of internal testcase judging threads. 0 means auto-detect.
   judgerThreads ? 0,
 
+  # Time limit of judge.sh itsef.
+  # Hydro mandates a time limit for all problems, which applies to `judge.sh` itself.
+  # Set it large enough to ensure all test cases can be evaluated within this duration.
+  judgerTimeLimitMs ? 60000,
+
+  # Memory limit of judge.sh itsef.
+  # The outer Hydro testcase only wraps Hull's own runtime, so use a large
+  # installation-level limit rather than the problem's per-case memory cap.
+  judgerMeroryLimitMiB ? 2048,
+
   # Optional Hydro language allowlist written to config.yaml.
   allowedLanguages ? null,
 }:
@@ -281,10 +291,8 @@
 
       configYamlContent = {
         type = "default";
-        # The outer Hydro testcase only wraps Hull's own runtime, so use a large
-        # installation-level limit rather than the problem's per-case memory cap.
-        time = "60000ms";
-        memory = "2048m";
+        time = "${toString judgerTimeLimitMs}ms";
+        memory = "${toString judgerMeroryLimitMiB}m";
         subtasks = [
           {
             id = 1;
