@@ -17,13 +17,19 @@
   pkgs,
 }:
 
-rec {
-  nix-user-chroot = pkgs.callPackage ./nix-user-chroot { };
-  talloc-static = pkgs.callPackage ./talloc-static { };
-  proot-static = pkgs.callPackage ./proot-static {
-    inherit talloc-static;
+let
+  linuxOnlyPkgs = rec {
+    talloc-static = pkgs.callPackage ./talloc-static { };
+    proot-static = pkgs.callPackage ./proot-static {
+      inherit talloc-static;
+    };
   };
-
+in
+{
+  nix-user-chroot = pkgs.callPackage ./nix-user-chroot { };
+}
+// pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux linuxOnlyPkgs
+// {
   wasm32-wasi-wasip1 = rec {
     compiler-rt = pkgs.callPackage ./compiler-rt.nix { };
     libc = pkgs.callPackage ./libc {

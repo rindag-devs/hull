@@ -38,15 +38,19 @@ static.stdenv.mkDerivation {
   '';
 
   buildPhase = ''
+    runHook preBuild
     mkdir -p build
     $CC -O3 -static -include stdbool.h -include string.h -I. -Ifake-include -c talloc.c -o build/talloc.o
     $AR rcs build/libtalloc.a build/talloc.o
+    runHook postBuild
   '';
 
   installPhase = ''
+    runHook preInstall
     mkdir -p $out/lib $out/include
     cp build/libtalloc.a $out/lib/
     cp talloc.h $out/include/
+    runHook postInstall
   '';
 
   meta.platforms = pkgs.lib.platforms.linux;

@@ -17,7 +17,6 @@
   lib,
   pkgs,
   hull,
-  hullPkgs,
   targetHullPkgsForSystem,
   targetPkgsForSystem,
   targetHullForSystem,
@@ -118,7 +117,7 @@
       targetHullPkgs = targetHullPkgsForSystem targetSystem;
       targetPkgs = targetPkgsForSystem targetSystem;
       targetHull = targetHullForSystem targetSystem;
-      proot = hullPkgs.proot-static;
+      proot = targetHullPkgs.proot-static;
       retargetRunner =
         runner:
         if runner ? retarget then
@@ -300,8 +299,8 @@
             type = "sum";
             cases = [
               {
-                input = "hull.in";
-                output = "hull.ans";
+                input = "/dev/null";
+                output = "/dev/null";
               }
             ];
           }
@@ -355,7 +354,9 @@
           tar -C "$tmpdir/root" -cf foo .
         '';
         checkPhase = ''
+          runHook preCheck
           ${pkgs.stdenv.shellDryRun} "$target"
+          runHook postCheck
         '';
       };
 
@@ -397,7 +398,9 @@
           cat "$stdout_report"
         '';
         checkPhase = ''
+          runHook preCheck
           ${pkgs.stdenv.shellDryRun} "$target"
+          runHook postCheck
         '';
       };
 
@@ -430,8 +433,6 @@
         cp ${judgeBundleArchive} "$tmpdir/testdata/hull-bundle.tar.xz"
         cp ${runtimeStoreArchive} "$tmpdir/testdata/hull-runtime-store.tar.xz"
         cp ${proot}/bin/proot "$tmpdir/testdata/proot"
-        : > "$tmpdir/testdata/hull.in"
-        : > "$tmpdir/testdata/hull.ans"
         cp ${compileSh} "$tmpdir/testdata/compile.sh"
         cp ${executeSh} "$tmpdir/testdata/execute.sh"
         chmod +x "$tmpdir/testdata/compile.sh" "$tmpdir/testdata/execute.sh" "$tmpdir/testdata/proot"

@@ -56,6 +56,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   configurePhase = ''
+    runHook preConfigure
     mkdir -p build
     cd build
 
@@ -81,6 +82,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       RANLIB="llvm-ranlib" \
       LD="lld" \
       NM="llvm-nm"
+    runHook postConfigure
   '';
 
   env =

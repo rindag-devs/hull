@@ -71,7 +71,6 @@
       lib
       hull
       pkgs
-      hullPkgs
       targetHullPkgsForSystem
       targetPkgsForSystem
       targetHullForSystem

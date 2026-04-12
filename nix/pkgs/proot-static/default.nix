@@ -32,35 +32,32 @@ static.stdenv.mkDerivation {
     hash = "sha256-Z9Y7ccWp5KEVuo9xfHcgo58XqYVdFo7ck1jH7cnT2KA=";
   };
 
-  nativeBuildInputs = [
-    static.pkg-config
-  ];
-
   buildInputs = [
     static.ncurses
     talloc-static
   ];
 
+  patches = [ ./GNUmakefile.patch ];
+
   postPatch = ''
-    substituteInPlace src/GNUmakefile \
-      --replace /bin/echo ${static.coreutils}/bin/echo \
-      --replace 'HAS_SWIG := $(shell swig -version 2>/dev/null)' 'HAS_SWIG :=' \
-      --replace 'HAS_PYTHON_CONFIG := $(shell ''${PYTHON}-config --ldflags ''${PYTHON_EMBED} 2>/dev/null)' 'HAS_PYTHON_CONFIG :='
-    sed -i /CROSS_COMPILE/d src/GNUmakefile
     grep -q '<libgen.h>' src/cli/cli.c || sed -i '/#include <string.h>/a #include <libgen.h>' src/cli/cli.c
   '';
 
   buildPhase = ''
+    runHook preBuild
     make -C src \
       CC="$CC" \
       LD="$CC" \
       CFLAGS="-D_GNU_SOURCE -O3 -static" \
       LDFLAGS="-static -L${talloc-static}/lib -ltalloc"
+    runHook postBuild
   '';
 
   installPhase = ''
+    runHook preInstall
     mkdir -p "$out/bin"
     cp src/proot "$out/bin/proot"
+    runHook postInstall
   '';
 
   meta.platforms = pkgs.lib.platforms.linux;

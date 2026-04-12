@@ -20,12 +20,16 @@ pkgs.pkgsStatic.stdenv.mkDerivation {
   src = ./.;
 
   buildPhase = ''
+    runHook preBuild
     $CC -O3 -static -Wall -Wextra -std=gnu99 -o nix-user-chroot main.c
+    runHook postBuild
   '';
 
   installPhase = ''
+    runHook preInstall
     mkdir -p $out/bin
     cp nix-user-chroot $out/bin/nix-user-chroot
+    runHook postInstall
   '';
 
   meta.platforms = pkgs.lib.platforms.linux;

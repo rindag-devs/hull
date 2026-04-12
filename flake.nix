@@ -103,6 +103,7 @@
                   pkgs
                 else
                   pkgs.pkgsCross.${targetSystemToPkgsCrossName.${targetSystem}};
+              targetHullPkgsBase = import ./nix/pkgs { pkgs = targetPkgs; };
               rustTarget = targetCrossPkgs.stdenv.hostPlatform.rust.rustcTarget;
               rustTargetEnv = pkgs.lib.toUpper (pkgs.lib.replaceStrings [ "-" "." ] [ "_" "_" ] rustTarget);
               baseWasmPkgs = (import ./nix/pkgs { inherit pkgs; }).wasm32-wasi-wasip1;
@@ -115,7 +116,8 @@
                 ];
               targetCraneLib = (crane.mkLib targetCrossPkgs).overrideToolchain targetRustToolchainFor;
             in
-            {
+            targetHullPkgsBase
+            // {
               nix-user-chroot = targetCrossPkgs.callPackage ./nix/pkgs/nix-user-chroot {
                 pkgs = targetCrossPkgs;
               };

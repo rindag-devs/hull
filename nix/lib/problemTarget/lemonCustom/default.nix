@@ -275,13 +275,17 @@
           staticPkgs.libarchive
         ];
         buildPhase = ''
+          runHook preBuild
           $CC -x c -static -O3 "$src" -o lemon-custom-watcher \
             $($PKG_CONFIG --cflags libarchive) \
             $($PKG_CONFIG --libs --static libarchive)
+          runHook postBuild
         '';
         installPhase = ''
+          runHook preInstall
           mkdir -p $out/bin
           cp lemon-custom-watcher $out/bin/lemon-custom-watcher
+          runHook postInstall
         '';
       };
 
@@ -324,7 +328,9 @@
           tar -C "$tmpdir/root" -cf "$base.hullbundle" .
         '';
         checkPhase = ''
+          runHook preCheck
           ${pkgs.stdenv.shellDryRun} "$target"
+          runHook postCheck
         '';
       };
 
@@ -359,7 +365,9 @@
           printf '%s\n' "$score" > "$score_path"
         '';
         checkPhase = ''
+          runHook preCheck
           ${pkgs.stdenv.shellDryRun} "$target"
+          runHook postCheck
         '';
       };
 

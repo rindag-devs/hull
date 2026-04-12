@@ -1,0 +1,45 @@
+--- a/src/GNUmakefile
++++ b/src/GNUmakefile
+@@ -8,17 +8,13 @@
+ GIT      = git
+ RM       = rm
+ INSTALL  = install
+-CC       = $(CROSS_COMPILE)gcc
+ LD       = $(CC)
+-STRIP    = $(CROSS_COMPILE)strip
+-OBJCOPY  = $(CROSS_COMPILE)objcopy
+-OBJDUMP  = $(CROSS_COMPILE)objdump
+ PYTHON   = python3
+ 
+-HAS_SWIG := $(shell swig -version 2>/dev/null)
++HAS_SWIG :=
+ PYTHON_MAJOR_VERSION = $(shell ${PYTHON} -c "import sys; print(sys.version_info.major)" 2>/dev/null)
+ PYTHON_EMBED = $(shell ${PYTHON} -c "import sys; print('--embed' if sys.hexversion > 0x03080000 else '')" 2>/dev/null)
+-HAS_PYTHON_CONFIG := $(shell ${PYTHON}-config --ldflags ${PYTHON_EMBED} 2>/dev/null)
++HAS_PYTHON_CONFIG :=
+ 
+ CPPFLAGS += -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I. -I$(VPATH) -I$(VPATH)/../lib/uthash/include
+ CFLAGS   += -g -Wall -Wextra -O2
+@@ -119,18 +119,16 @@
+ ######################################################################
+ # Auto-configuration
+ 
+-GIT_VERSION := $(shell git describe --tags `git rev-list --tags --max-count=1`)
++GIT_VERSION := v5.4.0
+ 
+-GIT_COMMIT := $(shell git rev-list --all --max-count=1 | cut -c 1-8)
++GIT_COMMIT := unknown-rev
+ 
+ VERSION = $(GIT_VERSION)-$(GIT_COMMIT)
+ 
+-CHECK_VERSION = if [ ! -z "$(VERSION)" ]; \
+-                then /bin/echo -e "\#undef VERSION\n\#define VERSION \"$(VERSION)\""; \
+-                fi;
++CHECK_VERSION =
+ 
+ ifneq ($(and $(HAS_SWIG),$(HAS_PYTHON_CONFIG)),)
+-	CHECK_PYTHON_EXTENSION = /bin/echo -e "\#define HAVE_PYTHON_EXTENSION"
++	CHECK_PYTHON_EXTENSION = true
+ endif
+ 
+ CHECK_FEATURES = process_vm seccomp_filter
