@@ -73,7 +73,7 @@
   ligatures: false,
   features: (ss02: 1, ss06: 1),
 )
-#show math.equation: set text(font: (fonts.math, fonts.sans, fonts.cjk-sans))
+#show math.equation: set text(font: (fonts.math, fonts.serif, fonts.cjk-serif))
 #set strong(delta: 200)
 #show strong: it => {
   set text(font: (fonts.sans-bold, fonts.sans, fonts.cjk-sans))
