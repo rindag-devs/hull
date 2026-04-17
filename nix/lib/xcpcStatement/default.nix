@@ -44,6 +44,7 @@ let
     mkdir $out
     cp ${./statement/main.typ} $out/main.typ
     cp -r ${./statement/translation} $out/translation
+    chmod -R u+w $out/translation
     ${lib.concatMapAttrsStringSep "\n" (
       displayLanguage: path: "cp -f ${path} $out/translation/${displayLanguage}.typ"
     ) extraTranslations}
