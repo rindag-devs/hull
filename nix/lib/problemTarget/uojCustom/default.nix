@@ -265,7 +265,7 @@
         }
         trap cleanup EXIT
 
-        mkdir -p "$tmpdir/download_document"
+        mkdir -p "$tmpdir/download"
         mkdir -p "$tmpdir/hull-bundle/nix/store"
 
         while IFS= read -r store_path; do
