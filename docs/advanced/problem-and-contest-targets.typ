@@ -152,6 +152,8 @@ This creates a complete contest package ready to be imported into Lemon.
 - It gathers all sample cases from each problem.
 - It includes any participant-visible files (e.g., graders, skeleton code).
 - It can build one PDF booklet for all problem statements.
+- It accepts `archive = null | "tar.xz" | "zip"`.
+- The default `archive` is `null`, which outputs a directory.
 - It accepts `targetSystem`.
 - The default `targetSystem` is `x86_64-linux`.
 

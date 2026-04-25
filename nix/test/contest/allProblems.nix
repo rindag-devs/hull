@@ -36,7 +36,7 @@
       hull.contestTarget.cnoiParticipant {
         inherit displayLanguages;
         targetSystem = "x86_64-linux";
-        archive = true;
+        archive = "zip";
         statements = builtins.listToAttrs (
           map (p: {
             name = p.config.name;
@@ -60,7 +60,7 @@
       hull.contestTarget.cnoiParticipant {
         inherit displayLanguages;
         targetSystem = "aarch64-linux";
-        archive = true;
+        archive = "zip";
         statements = builtins.listToAttrs (
           map (p: {
             name = p.config.name;
@@ -84,7 +84,7 @@
       hull.contestTarget.cnoiParticipant {
         inherit displayLanguages;
         targetSystem = "x86_64-darwin";
-        archive = true;
+        archive = "zip";
         statements = builtins.listToAttrs (
           map (p: {
             name = p.config.name;

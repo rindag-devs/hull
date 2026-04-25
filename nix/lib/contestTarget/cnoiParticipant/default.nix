@@ -69,8 +69,9 @@
   # Whether to include selfeval in the participant package.
   enableSelfEval ? false,
 
-  # Whether the target output should be a .tar.xz archive instead of a directory.
-  archive ? false,
+  # Packaging mode for the target output.
+  # `null` outputs a directory, `"tar.xz"` creates a tar.xz archive, and `"zip"` creates a zip archive.
+  archive ? null,
 }:
 
 {
@@ -416,8 +417,13 @@
         in
         "cp ${statement} $out/statement.${displayLanguage}.pdf"
       ) displayLanguages;
+      archiveMode =
+        if archive == null || archive == "tar.xz" || archive == "zip" then
+          archive
+        else
+          throw "cnoiParticipant archive must be null, \"tar.xz\", or \"zip\"";
     in
-    if archive then
+    if archiveMode == "tar.xz" then
       pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.tar.xz" { } ''
         tmp_archive_dir=$(mktemp -d)
         trap 'rm -rf "$tmp_archive_dir"' EXIT
@@ -426,6 +432,17 @@
         rm -rf "$out"
         tar -C "$tmp_archive_dir" -cJf "$out" .
       ''
+    else if archiveMode == "zip" then
+      pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.zip"
+        { nativeBuildInputs = [ pkgs._7zz ]; }
+        ''
+          tmp_archive_dir=$(mktemp -d)
+          trap 'rm -rf "$tmp_archive_dir"' EXIT
+          cp -r --no-preserve=ownership ${outputDir}/. "$tmp_archive_dir/"
+          chmod -R u+rwX,go+rX "$tmp_archive_dir"
+          rm -rf "$out"
+          7zz a -tzip -mx=9 -mmt=on -snl "$out" "$tmp_archive_dir/."
+        ''
     else
       outputDir;
 }
