@@ -13,7 +13,12 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-{ hull, lib, ... }:
+{
+  hull,
+  lib,
+  pkgs,
+  ...
+}:
 
 {
   mkOverview =
@@ -34,6 +39,12 @@
           version = "1.0.0";
           hash = "sha256-edTDK5F2xFYWypGpR0dWxwM7IiBd8hKGQ0KArkbpHvI=";
         }
+      ];
+
+      fontPaths = [
+        "${pkgs.source-han-sans}/share/fonts/opentype/source-han-sans"
+        "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
+        "${pkgs.newcomputermodern}/share/fonts/opentype/public"
       ];
     };
 }

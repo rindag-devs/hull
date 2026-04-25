@@ -14,7 +14,7 @@
 */
 
 #import "@preview/oxifmt:1.0.0": strfmt
-#import "@preview/tablex:0.0.9": tablex, hlinex, cellx, colspanx
+#import "@preview/tablex:0.0.9": cellx, colspanx, hlinex, tablex
 
 // Helper to get input from command line or use a default for local testing
 #let get-input-or-default(name, default) = {
@@ -31,6 +31,29 @@
   "hull-generated.example.json", // A local example file for development
 )
 #let problem = json(hull-generated-json-path)
+
+#let fonts = (
+  mono: "New Computer Modern Mono",
+  serif: "New Computer Modern",
+  math: "New Computer Modern Math",
+  cjk-serif: "Source Han Serif SC",
+)
+
+#set text(font: (
+  fonts.serif,
+  fonts.cjk-serif,
+))
+
+#show math.equation: set text(font: (fonts.math, fonts.serif, fonts.cjk-serif))
+
+#show raw: set text(
+  font: (fonts.mono, fonts.serif, fonts.cjk-serif),
+  // Typst's default styles apply a size of 0.8em to `raw` elements;
+  // setting it to 1.25em reverts this behavior.
+  size: 1.25em,
+)
+
+#set par(justify: true, leading: 0.8em, spacing: 1.5em)
 
 // Document Configuration
 #set document(
