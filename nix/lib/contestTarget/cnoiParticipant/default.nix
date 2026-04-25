@@ -403,14 +403,7 @@
             fontPaths = [
               "${pkgs.source-han-sans}/share/fonts/opentype/source-han-sans"
               "${pkgs.source-han-serif}/share/fonts/opentype/source-han-serif"
-              (pkgs.ibm-plex.override {
-                families = [
-                  "sans"
-                  "serif"
-                  "mono"
-                  "math"
-                ];
-              })
+              "${pkgs.newcomputermodern}/share/fonts/opentype/public"
             ]
             ++ statementExtraFontPaths;
           };

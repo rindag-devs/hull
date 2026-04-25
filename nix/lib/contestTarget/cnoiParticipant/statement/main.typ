@@ -50,12 +50,10 @@
 #show "。": "．"
 
 #let fonts = (
-  mono: "IBM Plex Mono",
-  mono-bold: "IBM Plex Mono SmBld",
-  serif: "IBM Plex Serif",
-  sans: "IBM Plex Sans",
-  sans-bold: "IBM Plex Sans SmBld",
-  math: "IBM Plex Math",
+  mono: "New Computer Modern Mono",
+  serif: "New Computer Modern",
+  sans: "New Computer Modern Sans",
+  math: "New Computer Modern Math",
   cjk-serif: "Source Han Serif SC",
   cjk-sans: "Source Han Sans SC",
 )
@@ -69,22 +67,8 @@
 #show raw: set text(
   font: (fonts.mono, fonts.sans, fonts.cjk-sans),
   size: 1.25em,
-  slashed-zero: true,
-  ligatures: false,
-  features: (ss02: 1, ss06: 1),
 )
 #show math.equation: set text(font: (fonts.math, fonts.serif, fonts.cjk-serif))
-#set strong(delta: 200)
-#show strong: it => {
-  set text(font: (fonts.sans-bold, fonts.sans, fonts.cjk-sans))
-  show raw: set text(font: (fonts.mono-bold, fonts.mono, fonts.sans, fonts.cjk-sans))
-  it
-}
-#show heading: it => {
-  set text(font: (fonts.sans-bold, fonts.sans, fonts.cjk-sans), weight: 600)
-  show raw: set text(font: (fonts.mono-bold, fonts.mono, fonts.sans, fonts.cjk-sans))
-  it
-}
 #show heading.where(level: 1): it => {
   set text(size: 18pt)
   set heading(bookmarked: true)
@@ -239,12 +223,7 @@
       block(
         width: 100%,
         {
-          set text(
-            font: (fonts.mono, fonts.sans, fonts.cjk-sans),
-            slashed-zero: true,
-            ligatures: false,
-            features: (ss02: 1, ss06: 1),
-          )
+          set text(font: (fonts.mono, fonts.sans, fonts.cjk-sans))
           set par(leading: 0.8em, spacing: 0pt)
 
           grid(
