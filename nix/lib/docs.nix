@@ -21,18 +21,29 @@
 }:
 
 let
-  evalOptions = lib.evalModules {
-    modules = [
-      (_: { _module.check = false; })
-      hull.problemModule
-    ];
-    specialArgs = { inherit hull; };
-  };
+  mkOptionsDoc =
+    name: module:
+    let
+      evalOptions = lib.evalModules {
+        modules = [
+          (_: { _module.check = false; })
+          module
+        ];
+        specialArgs = { inherit hull; };
+      };
 
-  optionsDoc = pkgs.nixosOptionsDoc {
-    options = builtins.removeAttrs evalOptions.options [ "_module" ];
-  };
+      optionsDoc = pkgs.nixosOptionsDoc {
+        options = builtins.removeAttrs evalOptions.options [ "_module" ];
+        transformOptions = opt: opt // { declarations = [ ]; };
+      };
+    in
+    pkgs.runCommandLocal "hull-${name}-options-doc.md" { } ''
+      cat ${optionsDoc.optionsCommonMark} >> $out
+    '';
 in
-pkgs.runCommandLocal "options-doc.md" { } ''
-  cat ${optionsDoc.optionsCommonMark} >> $out
-''
+{
+  options = {
+    problemModule = mkOptionsDoc "problem-module" hull.problemModule;
+    contestModule = mkOptionsDoc "contest-module" hull.contestModule;
+  };
+}

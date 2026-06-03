@@ -745,56 +745,9 @@ aria-label="Show hidden lines"></button>';
 (function controllMenu() {
   const menu = document.getElementById("mdbook-menu-bar");
 
-  (function controllPosition() {
-    let scrollTop = document.scrollingElement.scrollTop;
-    let prevScrollTop = scrollTop;
-    const minMenuY = -menu.clientHeight - 50;
-    // When the script loads, the page can be at any scroll (e.g. if you refresh it).
-    menu.style.top = `${scrollTop}px`;
-    // Same as parseInt(menu.style.top.slice(0, -2), but faster
-    let topCache = menu.style.top.slice(0, -2);
-    menu.classList.remove("sticky");
-    let stickyCache = false; // Same as menu.classList.contains('sticky'), but faster
-    document.addEventListener(
-      "scroll",
-      () => {
-        scrollTop = Math.max(document.scrollingElement.scrollTop, 0);
-        // `null` means that it doesn't need to be updated
-        let nextSticky = null;
-        let nextTop = null;
-        const scrollDown = scrollTop > prevScrollTop;
-        const menuPosAbsoluteY = topCache - scrollTop;
-        if (scrollDown) {
-          nextSticky = false;
-          if (menuPosAbsoluteY > 0) {
-            nextTop = prevScrollTop;
-          }
-        } else {
-          if (menuPosAbsoluteY > 0) {
-            nextSticky = true;
-          } else if (menuPosAbsoluteY < minMenuY) {
-            nextTop = prevScrollTop + minMenuY;
-          }
-        }
-        if (nextSticky === true && stickyCache === false) {
-          menu.classList.add("sticky");
-          stickyCache = true;
-        } else if (nextSticky === false && stickyCache === true) {
-          menu.classList.remove("sticky");
-          stickyCache = false;
-        }
-        if (nextTop !== null) {
-          menu.style.top = `${nextTop}px`;
-          topCache = nextTop;
-        }
-        prevScrollTop = scrollTop;
-      },
-      { passive: true },
-    );
-  })();
   (function controllBorder() {
     function updateBorder() {
-      if (menu.offsetTop === 0) {
+      if (document.scrollingElement.scrollTop === 0) {
         menu.classList.remove("bordered");
       } else {
         menu.classList.add("bordered");

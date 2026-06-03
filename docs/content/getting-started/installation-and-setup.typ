@@ -2,8 +2,6 @@
 
 #show: page.with(
   title: "Installation & Setup",
-  section: "Getting Started",
-  order: 10,
 )
 
 = Installation & Setup

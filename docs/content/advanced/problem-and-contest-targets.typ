@@ -2,8 +2,6 @@
 
 #show: page.with(
   title: "Problem and Contest Targets",
-  section: "Advanced",
-  order: 20,
 )
 
 = Problem and Contest Targets

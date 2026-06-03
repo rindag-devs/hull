@@ -1,34 +1,31 @@
 #import "/templates/tola.typ": wrap-page
 #import "/templates/base.typ": base
+#import "/templates/navigation.typ": introduction, nav-sections
 #import "@tola/site:0.0.0": info
-#import "@tola/pages:0.0.0": pages
 #import "@tola/current:0.0.0": current-permalink
 
-#let section-pages(section) = (
-  pages()
-    .filter(p => p.at("section", default: none) == section)
-    .sorted(key: p => p.at("order", default: 999))
-)
+#let normalize-permalink(value) = {
+  let text = str(value)
+  if text.ends-with("/") and text != "/" {
+    text.slice(0, text.len() - 1)
+  } else {
+    text
+  }
+}
 
-#let chapter-link(page, number) = {
-  let active = current-permalink == page.permalink
+#let permalink-active(href) = normalize-permalink(current-permalink) == normalize-permalink(href)
+
+#let chapter-link(item, number) = {
+  let active = permalink-active(item.href)
   html.li(class: "chapter-item")[
     #html.a(
       class: if active { "chapter-link active" } else { "chapter-link" },
-      href: page.permalink,
+      href: item.href,
     )[
       #html.strong[#number]
-      #page.title
+      #item.title
     ]
   ]
-}
-
-#let numbered-links(items, start) = {
-  let number = start
-  for item in items {
-    chapter-link(item, str(number) + ".")
-    number += 1
-  }
 }
 
 #let svg-icon(path, class: none) = html.span(class: if class == none {
@@ -142,24 +139,25 @@
   class: "sidebar",
   aria-label: "Table of contents",
 )[
-  #let getting-started = section-pages("Getting Started")
-  #let advanced = section-pages("Advanced")
   #html.elem("mdbook-sidebar-scrollbox", attrs: (class: "sidebar-scrollbox"))[
     #html.ol(class: "chapter")[
       #html.li(class: "chapter-item")[
         #html.a(
-          class: if current-permalink == "/" { "chapter-link active" } else {
+          class: if permalink-active(introduction.href) { "chapter-link active" } else {
             "chapter-link"
           },
-          href: "/",
-        )[Introduction]
+          href: introduction.href,
+        )[#introduction.title]
       ]
-      #html.li(class: "spacer")[]
-      #html.li(class: "part-title")[Getting Started]
-      #numbered-links(getting-started, 1)
-      #html.li(class: "spacer")[]
-      #html.li(class: "part-title")[Advanced]
-      #numbered-links(advanced, 1 + getting-started.len())
+      #let number = 1
+      #for section in nav-sections {
+        html.li(class: "spacer")[]
+        html.li(class: "part-title")[#section.title]
+        for item in section.pages {
+          chapter-link(item, str(number) + ".")
+          number += 1
+        }
+      }
     ]
   ]
   #html.div(id: "mdbook-sidebar-resize-handle", class: "sidebar-resize-handle")[

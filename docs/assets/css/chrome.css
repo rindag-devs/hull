@@ -26,10 +26,12 @@ a:visited {
 #mdbook-menu-bar,
 #mdbook-menu-bar-hover-placeholder {
   z-index: 101;
-  margin: auto calc(0px - var(--page-padding));
 }
 #mdbook-menu-bar {
-  position: relative;
+  position: fixed;
+  top: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   display: flex;
   flex-wrap: wrap;
   background-color: var(--bg);
@@ -41,13 +43,17 @@ a:visited {
 #mdbook-menu-bar-hover-placeholder:hover + #mdbook-menu-bar,
 #mdbook-menu-bar:hover,
 html.sidebar-visible #mdbook-menu-bar {
-  position: sticky;
+  position: fixed;
   top: 0;
 }
 #mdbook-menu-bar-hover-placeholder {
-  position: sticky;
-  top: 0;
   height: var(--menu-bar-height);
+}
+
+@media only screen and (min-width: 620px) {
+  #mdbook-sidebar-toggle-anchor:checked ~ .page-wrapper #mdbook-menu-bar {
+    inset-inline-start: calc(var(--sidebar-width) + var(--sidebar-resize-indicator-width));
+  }
 }
 .icon-button {
   border: none;
@@ -233,7 +239,6 @@ a:hover > code {
 
 pre {
   position: relative;
-  overflow-x: auto;
   margin: 1em 0;
   border-radius: 4px;
   background-color: #f6f7f6;
@@ -318,6 +323,7 @@ pre > .buttons button.clip-button:hover::before {
 }
 pre > code {
   display: block;
+  overflow-x: auto;
   padding: 1rem;
 }
 

@@ -102,10 +102,6 @@ dt:target::before {
 .page {
   outline: 0;
   padding: 0 var(--page-padding);
-  margin-block-start: calc(
-    0px -
-    var(--menu-bar-height)
-  ); /* Compensate for the #mdbook-menu-bar-hover-placeholder */
 }
 .page-wrapper {
   box-sizing: border-box;

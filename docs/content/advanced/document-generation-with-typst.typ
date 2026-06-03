@@ -2,8 +2,6 @@
 
 #show: page.with(
   title: "Document Generation with Typst",
-  section: "Advanced",
-  order: 30,
 )
 
 = Document Generation with Typst

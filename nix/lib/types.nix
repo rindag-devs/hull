@@ -209,6 +209,7 @@ let
             readOnly = true;
             description = "The fully resolved input file used by this checker test.";
             default = coerceStorePath problem.runtimeData.checker.testInputs.${config.name};
+            defaultText = "Loaded from runtime analysis data.";
           };
           outputPath = lib.mkOption {
             type = lib.types.nullOr lib.types.pathInStore;
@@ -231,6 +232,7 @@ let
             description = "The result of this test.";
             readOnly = true;
             default = problem.checker.testResults.${config.name};
+            defaultText = "Loaded from runtime analysis data.";
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;
@@ -276,6 +278,7 @@ let
             readOnly = true;
             description = "The fully resolved input file used by this validator test.";
             default = coerceStorePath problem.runtimeData.validator.testInputs.${config.name};
+            defaultText = "Loaded from runtime analysis data.";
           };
           prediction = lib.mkOption {
             type = lib.types.functionTo lib.types.bool;
@@ -286,6 +289,7 @@ let
             description = "The result of this test.";
             readOnly = true;
             default = problem.validator.testResults.${config.name};
+            defaultText = "Loaded from runtime analysis data.";
           };
           predictionHolds = lib.mkOption {
             type = lib.types.bool;

@@ -2,8 +2,6 @@
 
 #show: page.with(
   title: "Understanding problem.nix",
-  section: "Getting Started",
-  order: 30,
 )
 
 = Understanding `problem.nix`

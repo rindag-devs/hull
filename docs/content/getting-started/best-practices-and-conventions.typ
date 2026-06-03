@@ -2,8 +2,6 @@
 
 #show: page.with(
   title: "Best Practices & Conventions",
-  section: "Getting Started",
-  order: 50,
 )
 
 = Best Practices & Conventions

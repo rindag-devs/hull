@@ -56,13 +56,15 @@ async function renderShiki(code, generation) {
   if (generation !== renderGeneration) return;
 
   const pre = code.closest("pre");
+  const languageClasses = [...code.classList].filter((className) =>
+    className.startsWith("language-"),
+  );
+  pre.classList.remove("shiki", "github-light", "github-dark");
   pre.classList.add(...shikiPre.classList);
-  pre.style.cssText = shikiPre.style.cssText;
-  pre.style.setProperty("--shiki-light-bg", "#f6f7f6");
-  pre.style.setProperty("--shiki-dark-bg", "#2b303b");
+  pre.removeAttribute("style");
   code.innerHTML = shikiCode.innerHTML;
-  code.className = shikiCode.className || code.className;
-  code.style.cssText = shikiCode.style.cssText;
+  code.className = [...new Set([...languageClasses, ...shikiCode.classList])].join(" ");
+  code.removeAttribute("style");
 }
 
 function renderAll() {

@@ -3,7 +3,6 @@
 #show: page.with(
   title: "Hull Documentation",
   summary: "A practical guide to using Hull for competitive programming problem authoring, analysis, and packaging.",
-  order: 0,
 )
 
 = Introduction
