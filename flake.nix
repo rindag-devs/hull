@@ -185,89 +185,14 @@
           };
 
           hullPkgs = import ./nix/pkgs { inherit pkgs; } // {
-            docs =
-              let
-                toc = import ./docs/toc.nix;
-                tocPages = [ toc.introduction ] ++ pkgs.lib.concatMap (section: section.pages) toc.sections;
-                sourcePages = builtins.filter (page: page ? source) tocPages;
-                generatedPages = builtins.filter (page: page ? generated) tocPages;
-                typstString = builtins.toJSON;
-                typstEntry = page: "(title: ${typstString page.title}, href: ${typstString page.href})";
-                typstSection = section: ''
-                  (
-                    title: ${typstString section.title},
-                    pages: (
-                      ${pkgs.lib.concatMapStringsSep ",\n      " typstEntry section.pages},
-                    ),
-                  )'';
-                navigation = pkgs.writeText "navigation.typ" ''
-                  #let introduction = ${typstEntry toc.introduction}
-
-                  #let nav-sections = (
-                    ${pkgs.lib.concatMapStringsSep ",\n  " typstSection toc.sections},
-                  )
-                '';
-                mkOptionsReferenceHeader =
-                  title: summary:
-                  pkgs.writeText "${pkgs.lib.strings.toLower (builtins.replaceStrings [ " " ] [ "-" ] title)}-header.typ" ''
-                    #import "/templates/page.typ": page
-
-                    #show: page.with(
-                      title: "${title}",
-                    )
-
-                    = ${title}
-
-                    ${summary}
-
-                  '';
-                problemOptionsHeader = mkOptionsReferenceHeader "Problem Options Reference" (
-                  "This page is generated from Hull's problem Nix module options during the documentation build."
-                );
-                contestOptionsHeader = mkOptionsReferenceHeader "Contest Options Reference" (
-                  "This page is generated from Hull's contest Nix module options during the documentation build."
-                );
-                generatedDocs = {
-                  problemModuleOptions = {
-                    header = problemOptionsHeader;
-                    source = hull.docs.options.problemModule;
-                  };
-                  contestModuleOptions = {
-                    header = contestOptionsHeader;
-                    source = hull.docs.options.contestModule;
-                  };
-                };
-                copySourcePage = page: ''
-                  mkdir -p "$(dirname "content/${page.target}")"
-                  cp ${./docs/content}/${page.source} "content/${page.target}"
-                '';
-                writeGeneratedPage =
-                  page:
-                  let
-                    generated = generatedDocs.${page.generated};
-                  in
-                  ''
-                    mkdir -p "$(dirname "content/${page.target}")"
-                    cat ${generated.header} > "content/${page.target}"
-                    ${pkgs.pandoc}/bin/pandoc -f commonmark -t typst ${generated.source} >> "content/${page.target}"
-                  '';
-                writeContentPages = pkgs.lib.concatStringsSep "\n" (
-                  (map copySourcePage sourcePages) ++ (map writeGeneratedPage generatedPages)
-                );
-              in
-              pkgs.runCommandLocal "hull-docs" { } ''
-                export HOME="$TMPDIR/home"
-                mkdir -p "$HOME"
-                cp -R ${./docs}/. .
-                chmod -R u+w .
-                rm -rf content
-                mkdir -p content
-                cp ${navigation} templates/navigation.typ
-                ${writeContentPages}
-                ${tola.packages.${system}.default}/bin/tola build
-                ${pkgs.pagefind}/bin/pagefind --site public
-                cp -R ./public "$out"
-              '';
+            docs = import ./docs/package.nix {
+              inherit
+                pkgs
+                system
+                tola
+                ;
+              optionsDocs = hull.docs.options;
+            };
             optionsDocs = hull.docs.options;
             default = craneLib.buildPackage {
               src = craneLib.cleanCargoSource self;

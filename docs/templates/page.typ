@@ -182,6 +182,12 @@
       href: "/pagefind/pagefind-ui.css",
     ))
     #html.elem("link", attrs: (
+      rel: "alternate",
+      type: "text/plain",
+      title: "LLM Documentation Index",
+      href: "/llms.txt",
+    ))
+    #html.elem("link", attrs: (
       rel: "preconnect",
       href: "https://fonts.googleapis.com",
     ))
