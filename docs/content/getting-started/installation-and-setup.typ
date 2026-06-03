@@ -1,6 +1,10 @@
-#import "../book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Installation & Setup")
+#show: page.with(
+  title: "Installation & Setup",
+  section: "Getting Started",
+  order: 10,
+)
 
 = Installation & Setup
 

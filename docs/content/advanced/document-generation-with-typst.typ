@@ -1,6 +1,10 @@
-#import "../book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Document Generation with Typst")
+#show: page.with(
+  title: "Document Generation with Typst",
+  section: "Advanced",
+  order: 30,
+)
 
 = Document Generation with Typst
 
@@ -45,7 +49,7 @@ The PDF uses the same generated data as the build.
 
 Use `hull.xcpcStatement` to render a standard statement.
 
-```plain
+```text
 document/
 └── statement/
     └── en.typ

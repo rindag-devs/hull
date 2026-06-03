@@ -145,8 +145,9 @@
       (none, none)
     }
 
-
-    let tag = if case-id != none and case-id != last-case-id { str(case-id) } else { none }
+    let tag = if case-id != none and case-id != last-case-id {
+      str(case-id)
+    } else { none }
 
     // Store the text and its calculated color for later use in the grid.
     styled-lines.push((
@@ -175,7 +176,12 @@
         ..styled-lines
           .map(sl => (
             grid.cell(
-              move(text(size: 0.8em, fill: gray, if sl.tag != none { str(sl.tag) }), dx: -0.4em),
+              move(
+                text(size: 0.8em, fill: gray, if sl.tag != none {
+                  str(sl.tag)
+                }),
+                dx: -0.4em,
+              ),
             ),
             grid.cell(sl.text),
           ))
@@ -254,7 +260,9 @@
         for edge in graph.edges {
           let u = escape-dot-string(edge.u)
           let v = escape-dot-string(edge.v)
-          let dir = if "directed" in edge and edge.directed { "forward" } else { "none" }
+          let dir = if "directed" in edge and edge.directed { "forward" } else {
+            "none"
+          }
           let label = if "w" in edge and edge.w != "" {
             ", label=\"" + escape-dot-string(edge.w) + "\""
           } else {
@@ -287,8 +295,11 @@
   #grid(
     columns: (auto, auto),
     inset: 0% + 3pt,
-    [#titlecase(translation.tick-limit):], translation.ticks(problem.tick-limit),
-    [#titlecase(translation.memory-limit):], translation.bytes(problem.memory-limit),
+    [#titlecase(translation.tick-limit):],
+    translation.ticks(problem.tick-limit),
+
+    [#titlecase(translation.memory-limit):],
+    translation.bytes(problem.memory-limit),
   )
 
   #line(length: 100%)
@@ -323,7 +334,11 @@
         ..sample.outputs.keys().map(x => align(center, raw(breakable-text(x)))),
         table.cell(
           inset: 1pt,
-          render-case-vis(idx, sample.input, sample.input-validation.reader-trace-tree),
+          render-case-vis(
+            idx,
+            sample.input,
+            sample.input-validation.reader-trace-tree,
+          ),
         ),
         ..sample
           .outputs
@@ -357,7 +372,11 @@
 
     #tablex(
       columns: (0.5fr, 1fr) + (1fr,) * problem.traits.len(),
-      align: (left + bottom, center + bottom, ..problem.traits.keys().map(_ => center + bottom)),
+      align: (
+        left + bottom,
+        center + bottom,
+        ..problem.traits.keys().map(_ => center + bottom),
+      ),
       auto-lines: false,
       header-rows: 1,
       [*\#*],

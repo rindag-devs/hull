@@ -27,6 +27,9 @@
       url = "github:loqusion/typix/0.3.2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    tola = {
+      url = "github:tola-rs/tola-ssg/v0.7.1";
+    };
     cplib = {
       url = "github:rindag-devs/cplib/single-header-snapshot";
       flake = false;
@@ -48,6 +51,7 @@
       fenix,
       crane,
       typix,
+      tola,
       cplib,
       cplibInitializers,
       x86_64-linux-gnu217-cross,
@@ -152,6 +156,7 @@
               pkgs.cargo-deny
               pkgs.cargo-edit
               pkgs.cargo-watch
+              pkgs.biome
               pkgs.pkg-config
               pkgs.nix-output-monitor
               hullPkgs.wasm32-wasi-wasip1.clang
@@ -180,6 +185,15 @@
           };
 
           hullPkgs = import ./nix/pkgs { inherit pkgs; } // {
+            docs = pkgs.runCommandLocal "hull-docs" { } ''
+              export HOME="$TMPDIR/home"
+              mkdir -p "$HOME"
+              cp -R ${./docs}/. .
+              ${tola.packages.${system}.default}/bin/tola build
+              ${pkgs.pagefind}/bin/pagefind --site public
+              cp -R ./public "$out"
+            '';
+            optionsDocs = hull.docs;
             default = craneLib.buildPackage {
               src = craneLib.cleanCargoSource self;
               nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
@@ -192,7 +206,6 @@
                 mainProgram = "hull";
               };
             };
-            docs = hull.docs;
           };
 
           targetHullPkgsForSystem =

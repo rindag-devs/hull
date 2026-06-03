@@ -1,6 +1,10 @@
-#import "../book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Best Practices & Conventions")
+#show: page.with(
+  title: "Best Practices & Conventions",
+  section: "Getting Started",
+  order: 50,
+)
 
 = Best Practices & Conventions
 
@@ -23,7 +27,7 @@ Recommended layout:
 
 A typical problem directory looks like this:
 
-```plain
+```text
 .
 ├── data/
 │   └── 1.in

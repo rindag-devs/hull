@@ -200,8 +200,9 @@
       (none, none)
     }
 
-
-    let tag = if case-id != none and case-id != last-case-id { str(case-id) } else { none }
+    let tag = if case-id != none and case-id != last-case-id {
+      str(case-id)
+    } else { none }
 
     // Store the text and its calculated color for later use in the grid.
     styled-lines.push((
@@ -300,7 +301,9 @@
 
   // Only render the section if there are graphs to display.
   if graphs.len() > 0 {
-    heading(level: 2, titlecase(translation.sample-0-graph-visualization(sample-idx)))
+    heading(level: 2, titlecase(
+      translation.sample-0-graph-visualization(sample-idx),
+    ))
 
     for graph in graphs {
       // Start building the DOT language string.
@@ -322,7 +325,9 @@
         for edge in graph.edges {
           let u = escape-dot-string(edge.u)
           let v = escape-dot-string(edge.v)
-          let dir = if "directed" in edge and edge.directed { "forward" } else { "none" }
+          let dir = if "directed" in edge and edge.directed { "forward" } else {
+            "none"
+          }
           let label = if "w" in edge and edge.w != "" {
             ", label=\"" + escape-dot-string(edge.w) + "\""
           } else {
@@ -378,7 +383,10 @@
 
   #align(
     center,
-    heading(level: 1, [#titlecase(problem.display-name.at(language)) (#raw(problem.name))]),
+    heading(
+      level: 1,
+      [#titlecase(problem.display-name.at(language)) (#raw(problem.name))],
+    ),
   )
 
   #if statement.description != none [
@@ -401,14 +409,21 @@
     #for (i, sample) in problem.samples.enumerate() {
       heading(level: 2, titlecase(translation.sample-0-input(i)))
 
-      render-case-vis(i, sample.input, sample.input-validation.reader-trace-tree)
+      render-case-vis(
+        i,
+        sample.input,
+        sample.input-validation.reader-trace-tree,
+      )
 
       if sample.outputs.len() == 1 {
         heading(level: 2, titlecase(translation.sample-0-output(i)))
         render-case-vis(i, sample.outputs.values().at(0), none)
       } else {
         for (output-name, output) in sample.outputs.pairs() {
-          heading(level: 2, titlecase(translation.sample-0-output-1(i, output-name)))
+          heading(level: 2, titlecase(translation.sample-0-output-1(
+            i,
+            output-name,
+          )))
           render-case-vis(i, output, none)
         }
       }
@@ -436,10 +451,17 @@
 
     #table(
       columns: (0.5fr, 1fr) + (1fr,) * problem.traits.len(),
-      align: (left + bottom, center + bottom, ..problem.traits.keys().map(_ => center + bottom)),
+      align: (
+        left + bottom,
+        center + bottom,
+        ..problem.traits.keys().map(_ => center + bottom),
+      ),
       [*\#*],
       [*#titlecase(translation.score)*],
-      ..problem.traits.keys().map(x => text(size: 0.8em, x.clusters().join(sym.zws))),
+      ..problem
+        .traits
+        .keys()
+        .map(x => text(size: 0.8em, x.clusters().join(sym.zws))),
       ..problem
         .subtasks
         .enumerate()
@@ -483,7 +505,9 @@
   } else {
     (
       [*#titlecase(translation.time-limit)*],
-      ..problems.map(p => translation.milliseconds(p.tick-limit / render.ticks-per-ms)),
+      ..problems.map(p => translation.milliseconds(
+        p.tick-limit / render.ticks-per-ms,
+      )),
     )
   }
 
@@ -492,11 +516,15 @@
     [*#titlecase(translation.problem-name)*], ..problems.map(p => titlecase(
       p.display-name.at(language),
     )),
-    [*#titlecase(translation.directory)*], ..problems.map(p => raw(breakable-text(p.name))),
-    ..tick-or-time-limit,
-    [*#titlecase(translation.memory-limit)*], ..problems.map(p => translation.bytes(
-      p.memory-limit,
+    [*#titlecase(translation.directory)*], ..problems.map(p => raw(
+      breakable-text(p.name),
     )),
+    ..tick-or-time-limit,
+    [*#titlecase(translation.memory-limit)*], ..problems.map(
+      p => translation.bytes(
+        p.memory-limit,
+      ),
+    ),
     [*#titlecase(translation.full-score)*], ..problems.map(
       p => [$#(calc.round(p.full-score * 100, digits: 4))$],
     ),
@@ -510,7 +538,9 @@
       .languages
       .map(lang => (
         ([*#titlecase(translation.for-0-language(lang.display-name))*],)
-          + problems.map(p => raw(breakable-text(p.name + lang.file-name-suffix)))
+          + problems.map(p => raw(breakable-text(
+            p.name + lang.file-name-suffix,
+          )))
       ))
       .flatten(),
   )
@@ -531,7 +561,9 @@
   )
 }
 
-#align(center, heading(level: 1, text(size: 1.2em, titlecase(hull.display-name.at(language)))))
+#align(center, heading(level: 1, text(size: 1.2em, titlecase(
+  hull.display-name.at(language),
+))))
 
 #problem-table(hull.problems)
 
@@ -541,7 +573,10 @@
 
 #for (problem-id, problem) in hull.problems.enumerate() {
   current-problem-title.update(
-    titlecase(problem.display-name.at(language)) + " (" + raw(problem.name) + ")",
+    titlecase(problem.display-name.at(language))
+      + " ("
+      + raw(problem.name)
+      + ")",
   )
 
   if problem-id == 0 {

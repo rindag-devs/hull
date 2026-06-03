@@ -1,0 +1,43 @@
+[site.info]
+title = "Hull Documentation"
+author = "rindag-devs"
+email = ""
+description = "Documentation for Hull, a Nix-based competitive programming framework."
+language = "en"
+url = "https://hull.aberter0x3f.top"
+
+[site.header]
+elements = ['<meta name="darkreader-lock">']
+
+[site.nav]
+spa = false
+
+[site.seo]
+auto_og = true
+
+[site.seo.feed]
+enable = false
+
+[site.seo.sitemap]
+enable = true
+path = "sitemap.xml"
+
+[build]
+content = "content"
+output = "public"
+minify = true
+deps = ["templates"]
+
+[build.assets]
+nested = ["assets/css", "assets/scripts", "assets/images", "assets/styles"]
+
+[build.slug]
+path = "safe"
+fragment = "safe"
+separator = "dash"
+case = "lower"
+
+[serve]
+interface = "127.0.0.1"
+port = 5277
+watch = true

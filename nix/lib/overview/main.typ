@@ -193,11 +193,17 @@
     .pairs()
     .map(((name, tc)) => (
       raw(name, lang: "txt"),
-      if tc.generator != none { raw(tc.generator, lang: "txt") } else { text(gray)[(manual)] },
-      if tc.arguments != none { raw(tc.arguments.join(" "), lang: "txt") } else {
+      if tc.generator != none { raw(tc.generator, lang: "txt") } else {
+        text(gray)[(manual)]
+      },
+      if tc.arguments != none {
+        raw(tc.arguments.join(" "), lang: "txt")
+      } else {
         text(gray)[(none)]
       },
-      if tc.groups.len() > 0 { tc.groups.join(", ") } else { text(gray)[(none)] },
+      if tc.groups.len() > 0 { tc.groups.join(", ") } else {
+        text(gray)[(none)]
+      },
     ))
     .flatten(),
 )
@@ -206,7 +212,9 @@
 == Test Case Trait Matrix
 
 #let all_trait_names = problem.traits.keys().sorted()
-#let test_case_pairs = problem.at("test-cases").pairs().sorted(key: p => p.at(0))
+#let test_case_pairs = (
+  problem.at("test-cases").pairs().sorted(key: p => p.at(0))
+)
 
 #tablex(
   columns: (auto, ..all_trait_names.map(_ => 1fr)),
@@ -304,7 +312,9 @@
     text(
       size: 0.8em,
       weight: "bold",
-      if is_main { [*#emoji.star #breakable-text(name)*] } else { [#breakable-text(name)] },
+      if is_main { [*#emoji.star #breakable-text(name)*] } else {
+        [#breakable-text(name)]
+      },
     )
   }),
 
@@ -319,7 +329,11 @@
         raw(tc_name, lang: "txt"),
         // Subsequent cells: The status badge for each solution on this test case.
         ..solution-names.map(sol_name => {
-          let result = problem.solutions.at(sol_name).at("test-case-results").at(tc_name)
+          let result = problem
+            .solutions
+            .at(sol_name)
+            .at("test-case-results")
+            .at(tc_name)
           status-badge(result.status)
         }),
       )
@@ -355,7 +369,10 @@
   ..solution-names
     .map(sol_name => {
       let sol = problem.solutions.at(sol_name)
-      let total_score = sol.at("subtask-results").map(st => st.at("scaled-score")).sum(default: 0)
+      let total_score = sol
+        .at("subtask-results")
+        .map(st => st.at("scaled-score"))
+        .sum(default: 0)
       text(weight: "bold", strfmt("{:.3}", total_score))
     })
     .flatten(),

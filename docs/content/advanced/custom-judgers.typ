@@ -1,6 +1,6 @@
-#import "../book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Custom Judgers")
+#show: page.with(title: "Custom Judgers", section: "Advanced", order: 10)
 
 = Custom Judgers
 

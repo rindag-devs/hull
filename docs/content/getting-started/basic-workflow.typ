@@ -1,6 +1,6 @@
-#import "../book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Basic Workflow")
+#show: page.with(title: "Basic Workflow", section: "Getting Started", order: 20)
 
 = Basic Workflow
 

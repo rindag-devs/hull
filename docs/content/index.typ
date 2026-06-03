@@ -1,6 +1,10 @@
-#import "book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Introduction")
+#show: page.with(
+  title: "Hull Documentation",
+  summary: "A practical guide to using Hull for competitive programming problem authoring, analysis, and packaging.",
+  order: 0,
+)
 
 = Introduction
 

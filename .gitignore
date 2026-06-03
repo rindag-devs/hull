@@ -2,5 +2,4 @@
 **/result
 **/result-*
 .vscode
-docs/shiroa
-docs/dist
+docs/public

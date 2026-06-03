@@ -1,6 +1,10 @@
-#import "../book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Understanding contest.nix")
+#show: page.with(
+  title: "Understanding contest.nix",
+  section: "Getting Started",
+  order: 40,
+)
 
 = Understanding `contest.nix`
 

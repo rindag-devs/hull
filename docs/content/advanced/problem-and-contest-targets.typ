@@ -1,6 +1,10 @@
-#import "../book.typ": book-page
+#import "/templates/page.typ": page
 
-#show: book-page.with(title: "Problem and Contest Targets")
+#show: page.with(
+  title: "Problem and Contest Targets",
+  section: "Advanced",
+  order: 20,
+)
 
 = Problem and Contest Targets
 
@@ -121,7 +125,7 @@ Contest targets package multiple problems into one contest output.
 
 When built, this target produces a directory like this:
 
-```plain
+```text
 result/
 ├── aPlusB/         # <-- Output of the 'default' target for aPlusB
 └── anotherProblem/ # <-- Output of the 'default' target for anotherProblem
