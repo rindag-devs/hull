@@ -11,7 +11,7 @@ struct Input {
     auto s = in.read(cplib::var::String("s", cplib::var::String::Mode::LINE));
     constexpr int N_DIGITS = 100000;
     if (s.size() != N_DIGITS + 2) {
-      in.fail(cplib::format("Excepted {} digits after point, found {}", N_DIGITS, s.size() - 2));
+      in.fail(std::format("Excepted {} digits after point, found {}", N_DIGITS, s.size() - 2));
     }
     return {s};
   }
@@ -43,7 +43,7 @@ struct Output {
       std::size_t max_digit = jans.s.size() - 2;
       res &= cplib::evaluate::Result::pc(
           static_cast<double>(n_correct_digit) / static_cast<double>(max_digit),
-          cplib::format("Correct digit {} / {}", n_correct_digit, max_digit));
+          std::format("Correct digit {} / {}", n_correct_digit, max_digit));
     }
     return res;
   }

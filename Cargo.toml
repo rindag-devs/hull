@@ -11,7 +11,7 @@ cap-std = "3"
 clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
 console = "0.16"
-rand = "0.8"
+rand = "0.10"
 rayon = "1"
 regex = "1"
 serde = "1"
@@ -22,10 +22,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.26"
 tree-sitter-cpp = "0.23"
-wasi-common = "44"
+wasi-common = "45"
 
 [dependencies.wasmtime]
-version = "44"
+version = "45"
 default-features = false
 features = ["anyhow", "cranelift", "runtime", "std", "wat"]
 

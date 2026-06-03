@@ -49,6 +49,7 @@
     let
       ac = { score, ... }: score == 1;
       unac = { score, ... }: score == 0;
+      wa = { statuses, ... }: builtins.length statuses == 1 && builtins.elem "wrong_answer" statuses;
     in
     {
       std = {
@@ -61,7 +62,7 @@
       tooManyOp = {
         src = ./solution/too-many-op.17.c;
         subtaskPredictions = {
-          "0" = unac;
+          "0" = wa;
         };
       };
       infinityRead = {

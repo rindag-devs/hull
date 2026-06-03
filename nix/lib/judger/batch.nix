@@ -53,15 +53,6 @@ let
       inherit (problem) languages includes;
     }
   ) extraObjects;
-
-  compileExecutableScript = hull.compile.executableMatchScript {
-    inherit languages;
-    srcExpr = ''"$HULL_SOLUTION_SRC"'';
-    outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
-    includes = problem.includes;
-    extraObjects = compiledObjects;
-  };
-
 in
 {
   _type = "hullJudger";

@@ -19,7 +19,7 @@ pub mod limited_buffer;
 use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::Result;
-use rand::SeedableRng;
+use rand::{SeedableRng, rngs::Xoshiro256PlusPlus};
 use serde::{Deserialize, Serialize};
 use wasi_common::{
   I32Exit, Table, WasiClocks, WasiCtx, WasiDir, WasiFile, WasiSystemClock, sync::sched::SyncSched,
@@ -219,7 +219,7 @@ fn create_engine(memory_limit: u64) -> Result<Engine> {
       .strategy(wasmtime::Strategy::Cranelift)
       .profiler(wasmtime::ProfilingStrategy::None)
       .cranelift_opt_level(wasmtime::OptLevel::Speed)
-      .compiler_inlining(true),
+      .compiler_inlining(wasmtime::Inlining::Yes),
   )?)
 }
 
@@ -239,7 +239,7 @@ fn create_store(
   fd_files: [Box<dyn WasiFile>; 3],
   preopened_dir: Option<Box<dyn WasiDir>>,
 ) -> Result<Store<ApplicationState>> {
-  let random = Box::new(rand::rngs::StdRng::seed_from_u64(0));
+  let random = Box::new(Xoshiro256PlusPlus::seed_from_u64(0));
   let clocks = WasiClocks::new().with_system(&NULL_SYSTEM_CLOCK);
   let mut wasi_ctx = WasiCtx::new(random, clocks, Box::new(SyncSched::new()), Table::new());
 

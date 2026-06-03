@@ -60,7 +60,7 @@ struct TestCaseInput {
       using jM = cplib::json::Map;
       in.attach_tag(
           "hull/graph",
-          jV(jM{{"name", jV(cplib::format("graph_{}", tc_idx))},
+          jV(jM{{"name", jV(std::format("graph_{}", tc_idx))},
                 {"nodes", jV(std::views::iota(1, n + 1) | std::views::transform([](std::int32_t x) {
                                return jV(std::to_string(x));
                              }) |
@@ -114,7 +114,7 @@ struct TestCaseOutput {
     }
     for (std::int32_t i : std::views::iota(1, inp.n)) {
       if (uf.F(0) != uf.F(i)) {
-        in.fail(cplib::format("Node 1 and {} are not connected", i + 1));
+        in.fail(std::format("Node 1 and {} are not connected", i + 1));
       }
     }
     if (sum != ans) {
@@ -128,9 +128,9 @@ struct TestCaseOutput {
     auto res = cplib::evaluate::Result::ac();
     if (pans.ans < jans.ans) {
       ev.fail(
-          cplib::format("Participant's answer ({}) is less than jury's answer ({})! This indicates "
-                        "a judge error.",
-                        pans.ans, jans.ans));
+          std::format("Participant's answer ({}) is less than jury's answer ({})! This indicates "
+                      "a judge error.",
+                      pans.ans, jans.ans));
     }
     res &= ev.eq("sum", pans.ans, jans.ans);
     return res;
@@ -151,7 +151,7 @@ struct Output {
     auto res = cplib::evaluate::Result::ac();
 
     for (const auto &[p_case, j_case] : std::views::zip(pans.test_cases, jans.test_cases)) {
-      res &= ev(cplib::format("test_case_{}", p_case.idx), p_case, j_case);
+      res &= ev(std::format("test_case_{}", p_case.idx), p_case, j_case);
     }
     return res;
   }

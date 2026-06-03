@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use rand::Rng;
+use rand::RngExt;
 use rayon::{ThreadPoolBuilder, prelude::*};
 use tracing::info;
 
@@ -154,12 +154,12 @@ pub fn run(opts: &StressOpts) -> Result<()> {
     }
 
     let mut all_generator_args = Vec::new();
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     for _ in 0..jobs {
       let salt: String = (0..32)
         .map(|_| {
-          let idx = rng.gen_range(0..CHARSET.len());
+          let idx = rng.random_range(0..CHARSET.len());
           CHARSET[idx] as char
         })
         .collect();

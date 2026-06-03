@@ -41,15 +41,6 @@ let
         )
         && (builtins.elem n solutionSpecificLanguages)
       ) problem.languages;
-
-  compileExecutableScript = hull.compile.executableMatchScript {
-    inherit languages;
-    srcExpr = ''"$HULL_SOLUTION_SRC"'';
-    outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
-    includes = problem.includes;
-    extraObjects = [ ];
-  };
-
 in
 {
   _type = "hullJudger";
@@ -96,7 +87,16 @@ in
       ];
     text = ''
       workdir=$(mktemp -d)
+      intr_to_sol_guard_pid=
+      sol_to_intr_guard_pid=
+
       cleanup() {
+        if [ -n "$intr_to_sol_guard_pid" ]; then
+          kill "$intr_to_sol_guard_pid" 2>/dev/null || true
+        fi
+        if [ -n "$sol_to_intr_guard_pid" ]; then
+          kill "$sol_to_intr_guard_pid" 2>/dev/null || true
+        fi
         rm -rf "$workdir"
       }
       trap cleanup EXIT
@@ -111,6 +111,12 @@ in
       input_path=input
 
       mkfifo "$sol_to_intr" "$intr_to_sol"
+
+      (exec <"$intr_to_sol"; sleep 2147483647) &
+      intr_to_sol_guard_pid=$!
+      (exec <"$sol_to_intr"; sleep 2147483647) &
+      sol_to_intr_guard_pid=$!
+
       cp "$HULL_SOLUTION_EXECUTABLE" "$sol_wasm"
       cp ${problem.checker.wasm} "$interactor_wasm"
       cp "$HULL_INPUT_PATH" "$input_path"

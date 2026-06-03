@@ -15,7 +15,7 @@ struct Input {
         in(cplib::var::String("s", cplib::Pattern("3\\.[0-9]+")), cplib::var::eoln);
     constexpr int N_DIGITS = 100000;
     if (s.size() != N_DIGITS + 2) {
-      in.fail(cplib::format("Excepted {} digits after point, found {}", N_DIGITS, s.size() - 2));
+      in.fail(std ::format("Excepted {} digits after point, found {}", N_DIGITS, s.size() - 2));
     }
     return {s};
   }

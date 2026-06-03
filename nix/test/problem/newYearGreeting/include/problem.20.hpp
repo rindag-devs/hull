@@ -114,7 +114,7 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
   static auto evaluate(cplib::evaluate::Evaluator &ev, const Output &pans, const Output &jans,
                        const Input &) -> cplib::evaluate::Result {
     if (pans.index() != jans.index()) {
-      ev.fail(cplib::format("Index mismatch: pans = {}, jans = {}", pans.index(), jans.index()));
+      ev.fail(std::format("Index mismatch: pans = {}, jans = {}", pans.index(), jans.index()));
     }
 
     if (pans.index() == 0) {
@@ -129,15 +129,15 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
       }
       if (n_satisfied == 0) {
         return cplib::evaluate::Result::wa(
-            cplib::format("Encoded string too big, length = {}", encoded.size()));
+            std::format("Encoded string too big, length = {}", encoded.size()));
       }
       if (n_satisfied == requirements.size()) {
         return cplib::evaluate::Result::ac();
       }
       return cplib::evaluate::Result::pc(
           static_cast<double>(n_satisfied) / static_cast<double>(requirements.size()),
-          cplib::format("length = {}, {} of {} requirements satisfied", encoded.size(), n_satisfied,
-                        requirements.size()));
+          std::format("length = {}, {} of {} requirements satisfied", encoded.size(), n_satisfied,
+                      requirements.size()));
     } else {
       auto positions_p = std::get<1>(pans).positions;
       auto positions_j = std::get<1>(jans).positions;

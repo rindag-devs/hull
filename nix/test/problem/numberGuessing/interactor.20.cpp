@@ -3,8 +3,8 @@
 #include "cplib.hpp"
 
 namespace var = cplib::var;
-using cplib::format;
 using cplib::Pattern;
+using std::format;
 
 CPLIB_REGISTER_INTERACTOR(intr);
 
