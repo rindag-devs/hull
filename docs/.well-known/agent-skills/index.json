@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agentskills.io/schemas/agent-skills-index-v0.2.json",
+  "skills": [
+    {
+      "name": "Hull Documentation Discovery",
+      "type": "documentation",
+      "description": "Discover and consume the Hull documentation, including the canonical llms.txt index, sitemap, and generated Nix option references.",
+      "url": "https://hull.aberter0x3f.top/.well-known/agent-skills/documentation/SKILL.md",
+      "sha256": "d7e7a88b6f8cf9bfd1a99b0650ad2022b70e2ba3a695440b203c8df9a1af6fb0"
+    }
+  ]
+}

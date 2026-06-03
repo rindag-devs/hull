@@ -1,0 +1,7 @@
+/
+  Link: </llms.txt>; rel="alternate"; type="text/plain"; title="LLM Documentation Index", </sitemap.xml>; rel="sitemap"; type="application/xml", </llms.txt>; rel="service-doc"; type="text/plain"; title="LLM Documentation Index", </.well-known/agent-typst/index.typ>; rel="alternate"; type="text/x-typst"; title="Typst Agent Source", </.well-known/agent-skills/index.json>; rel="index"; type="application/json"; title="Agent Skills Index"
+  Content-Signal: ai-train=yes, search=yes, ai-input=yes
+
+/*
+  Link: </llms.txt>; rel="alternate"; type="text/plain"; title="LLM Documentation Index", </sitemap.xml>; rel="sitemap"; type="application/xml", </llms.txt>; rel="service-doc"; type="text/plain"; title="LLM Documentation Index", </.well-known/agent-typst/index.typ>; rel="alternate"; type="text/x-typst"; title="Typst Agent Source", </.well-known/agent-skills/index.json>; rel="index"; type="application/json"; title="Agent Skills Index"
+  Content-Signal: ai-train=yes, search=yes, ai-input=yes
