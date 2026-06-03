@@ -3,11 +3,11 @@
     "cplib": {
       "flake": false,
       "locked": {
-        "lastModified": 1780454132,
-        "narHash": "sha256-FDwbQEqIs6IH9Uf3k/DaTXVBpu+o1Ws5AcBscQZiiEY=",
+        "lastModified": 1780459370,
+        "narHash": "sha256-h3qG2zBeBgTwBZgN7tbE9jLNgjLBdcki1a6Gn2A/SBI=",
         "owner": "rindag-devs",
         "repo": "cplib",
-        "rev": "9e8d23c15a23300f17594c8227edb89dc62cb495",
+        "rev": "b28fb25644e1f9d9578c07ab8244ef6186f1f2f5",
         "type": "github"
       },
       "original": {

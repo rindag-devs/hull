@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install dependencies (shiroa & fonts)
         run: |
@@ -52,10 +52,10 @@ jobs:
           shiroa build --font-path $HOME/merged-font-path
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: "hull"
-          directory: ./docs/dist
+          command: pages deploy dist --project-name=hull
+          workingDirectory: ./docs
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
