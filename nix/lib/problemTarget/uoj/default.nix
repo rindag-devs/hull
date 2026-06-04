@@ -197,7 +197,7 @@
       patchedSrc = {
         checker =
           if type == "stdioInteraction" then
-            hull.patchCplibProgram {
+            hull.patch {
               problemName = problem.name;
               src = "${cplibInitializers}/include/testlib/checker_two_step.cpp";
               includeReplacements = [
@@ -214,7 +214,7 @@
           else if !patchCplibProgram then
             checker.src
           else
-            hull.patchCplibProgram {
+            hull.patch {
               problemName = problem.name;
               src = checker.src;
               checker = "::cplib_initializers::testlib::checker::Initializer(false)";
@@ -231,7 +231,7 @@
           if !patchCplibProgram then
             checker.src
           else if twoStepInteraction then
-            hull.patchCplibProgram {
+            hull.patch {
               problemName = problem.name;
               src = checker.src;
               interactor = "::cplib_initializers::testlib::interactor_two_step::Initializer()";
@@ -244,7 +244,7 @@
               ];
             }
           else
-            hull.patchCplibProgram {
+            hull.patch {
               problemName = problem.name;
               src = checker.src;
               interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
@@ -261,7 +261,7 @@
           if !patchCplibProgram then
             validator.src
           else
-            hull.patchCplibProgram {
+            hull.patch {
               problemName = problem.name;
               src = validator.src;
               validator = "::cplib_initializers::testlib::validator::Initializer()";

@@ -210,14 +210,14 @@
         if !patchCplibProgram then
           checker.src
         else if type == "stdioInteraction" then
-          hull.patchCplibProgram {
+          hull.patch {
             problemName = problem.name;
             src = checker.src;
             interactor = "::cplib_initializers::testlib::interactor::Initializer(true)";
             extraIncludes = [ "\"testlib_interactor.hpp\"" ];
           }
         else
-          hull.patchCplibProgram {
+          hull.patch {
             problemName = problem.name;
             src = checker.src;
             checker = "::cplib_initializers::syzoj::checker::Initializer()";
@@ -228,7 +228,7 @@
         if !patchCplibProgram then
           validator.src
         else
-          hull.patchCplibProgram {
+          hull.patch {
             problemName = problem.name;
             src = validator.src;
             validator = "::cplib_initializers::testlib::validator::Initializer()";

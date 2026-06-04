@@ -25,7 +25,7 @@ let
     mv new_src old_src
   '') includeReplacements;
 in
-pkgs.runCommandLocal "hull-patchCplibProgram-${problemName}-${baseNameOf src}"
+pkgs.runCommandLocal "hull-patchedProgram-${problemName}-${baseNameOf src}"
   { nativeBuildInputs = [ hullPkgs.default ]; }
   ''
     ${lib.optionalString (

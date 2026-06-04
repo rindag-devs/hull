@@ -55,7 +55,7 @@ let
     judger = callSubLib ./judger;
     language = callSubLib ./language.nix;
     overview = callSubLib ./overview;
-    patchCplibProgram = callSubLib ./patchCplibProgram.nix;
+    patch = callSubLib ./patch.nix;
     problemTarget = callSubLib ./problemTarget;
     runWasm = callSubLib ./runWasm.nix;
     runtime = callSubLib ./runtime.nix;

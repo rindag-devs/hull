@@ -125,7 +125,7 @@
       extraSolFiles."add.h" = ./include/add.h;
     };
     luogu = hull.problemTarget.luogu {
-      graderSrc = hull.patchCplibProgram {
+      graderSrc = hull.patch {
         problemName = config.name;
         src = ./grader.17.cpp;
         extraEmbeds = [ ./include/add.h ];

@@ -91,7 +91,7 @@
         if !patchCplibProgram then
           checker.src
         else
-          hull.patchCplibProgram (
+          hull.patch (
             {
               problemName = problem.name;
               src = checker.src;

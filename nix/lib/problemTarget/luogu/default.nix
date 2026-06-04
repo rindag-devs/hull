@@ -155,7 +155,7 @@
             if !patchCplibProgram then
               programSrc
             else
-              hull.patchCplibProgram (
+              hull.patch (
                 {
                   problemName = problem.name;
                   src = programSrc;
