@@ -1,10 +1,12 @@
 # Hull
 
-[![license][badge.license]][license] [![docs][badge.docs]][docs]
+[![license][badge.license]][license] [![ci][badge.ci]][ci] [![docs][badge.docs]][docs]
 
 [badge.license]: https://img.shields.io/github/license/rindag-devs/hull
+[badge.ci]: https://img.shields.io/github/actions/workflow/status/rindag-devs/hull/ci.yml?label=ci
 [badge.docs]: https://img.shields.io/github/deployments/rindag-devs/hull/hull%20%28Production%29?label=docs
 [license]: https://github.com/rindag-devs/hull/blob/main/COPYING.LESSER
+[ci]: https://github.com/rindag-devs/hull/blob/main/.github/workflows/ci.yml
 [docs]: https://hull.aberter0x3f.top/
 
 **A Nix-based framework for competitive programming problem authoring, analysis, and packaging.**

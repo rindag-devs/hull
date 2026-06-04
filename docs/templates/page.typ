@@ -15,6 +15,16 @@
 
 #let permalink-active(href) = normalize-permalink(current-permalink) == normalize-permalink(href)
 
+#let canonical-url = info.url + if current-permalink == "/" { "/" } else {
+  normalize-permalink(current-permalink) + "/"
+}
+
+#let page-title(m) = if m.title != none and m.title != info.title {
+  m.title + " | " + info.title
+} else {
+  info.title
+}
+
 #let chapter-link(item, number) = {
   let active = permalink-active(item.href)
   html.li(class: "chapter-item")[
@@ -174,6 +184,21 @@
       content: "width=device-width, initial-scale=1",
     ))
     #html.elem("meta", attrs: (name: "theme-color", content: "#ffffff"))
+    #html.elem("meta", attrs: (name: "robots", content: "index,follow"))
+    #html.elem("link", attrs: (
+      rel: "canonical",
+      href: canonical-url,
+    ))
+    #html.elem("link", attrs: (rel: "alternate", hreflang: "en", href: canonical-url))
+    #html.elem("meta", attrs: (property: "og:type", content: "website"))
+    #html.elem("meta", attrs: (property: "og:site_name", content: info.title))
+    #html.elem("meta", attrs: (property: "og:locale", content: "en"))
+    #html.elem("meta", attrs: (property: "og:url", content: canonical-url))
+    #html.elem("meta", attrs: (property: "og:title", content: page-title(m)))
+    #html.elem("meta", attrs: (property: "og:description", content: info.description))
+    #html.elem("meta", attrs: (name: "twitter:card", content: "summary"))
+    #html.elem("meta", attrs: (name: "twitter:title", content: page-title(m)))
+    #html.elem("meta", attrs: (name: "twitter:description", content: info.description))
     #html.elem("link", attrs: (rel: "stylesheet", href: "/css/variables.css"))
     #html.elem("link", attrs: (rel: "stylesheet", href: "/css/general.css"))
     #html.elem("link", attrs: (rel: "stylesheet", href: "/css/chrome.css"))
@@ -188,6 +213,23 @@
       href: "/llms.txt",
     ))
     #html.elem("link", attrs: (
+      rel: "sitemap",
+      type: "application/xml",
+      href: "/sitemap.xml",
+    ))
+    #html.elem("link", attrs: (
+      rel: "service-doc",
+      type: "text/plain",
+      title: "LLM Documentation Index",
+      href: "/llms.txt",
+    ))
+    #html.elem("link", attrs: (
+      rel: "index",
+      type: "application/json",
+      title: "Agent Skills Index",
+      href: "/.well-known/agent-skills/index.json",
+    ))
+    #html.elem("link", attrs: (
       rel: "preconnect",
       href: "https://fonts.googleapis.com",
     ))
@@ -200,11 +242,7 @@
       rel: "stylesheet",
       href: "https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700;800&family=Source+Code+Pro:wght@500&display=swap",
     ))
-    #if m.title != none {
-      html.title(m.title + " | " + info.title)
-    } else {
-      html.title(info.title)
-    }
+    #html.title(page-title(m))
   ],
   view: (body, m) => {
     show heading.where(level: 1): it => html.h1(class: "header")[#it.body]

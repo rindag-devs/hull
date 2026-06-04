@@ -52,6 +52,9 @@ let
     Canonical site: ${siteUrl}/
     Sitemap: ${siteUrl}/sitemap.xml
     Robots policy: ${siteUrl}/robots.txt
+    LLM index: ${siteUrl}/llms.txt
+    Agent skills index: ${siteUrl}/.well-known/agent-skills/index.json
+    Documentation discovery skill: ${siteUrl}/.well-known/agent-skills/documentation/SKILL.md
     Source repository: https://github.com/rindag-devs/hull
 
     ## Use This Documentation For
@@ -83,6 +86,14 @@ let
     - `Accept: text/x-typst` returns the corresponding Typst source with `Content-Type: text/plain; charset=utf-8`.
     - Source-oriented responses include `x-agent-source-format: typst`.
     - The source mirror is also available under `/.well-known/agent-typst/`; for example, the homepage source is `/.well-known/agent-typst/index.typ`.
+
+    ## Agent Discovery
+
+    Agents may start from `llms.txt`, the sitemap, or the agent skills index. The documentation discovery skill describes the canonical crawl surfaces, source-oriented representations, and reference pages. These files are stable public discovery entry points:
+
+    - ${siteUrl}/llms.txt
+    - ${siteUrl}/.well-known/agent-skills/index.json
+    - ${siteUrl}/.well-known/agent-skills/documentation/SKILL.md
 
     ## Crawl Policy
 
@@ -146,15 +157,10 @@ let
     mkdir -p "$(dirname "public/.well-known/agent-typst/${agentMirrorPath page}")"
     cp ${./content}/${page.source} "public/.well-known/agent-typst/${agentMirrorPath page}"
   '';
-  writeGeneratedAgentMirror =
-    page:
-    let
-      generated = generatedDocs.${page.generated};
-    in
-    ''
-      mkdir -p "$(dirname "public/.well-known/agent-typst/${agentMirrorPath page}")"
-      cp "content/${page.target}" "public/.well-known/agent-typst/${agentMirrorPath page}"
-    '';
+  writeGeneratedAgentMirror = page: ''
+    mkdir -p "$(dirname "public/.well-known/agent-typst/${agentMirrorPath page}")"
+    cp "content/${page.target}" "public/.well-known/agent-typst/${agentMirrorPath page}"
+  '';
   writeContentPages = pkgs.lib.concatStringsSep "\n" (
     (map copySourcePage (sourcePages ++ extraPages)) ++ (map writeGeneratedPage generatedPages)
   );
@@ -172,7 +178,7 @@ pkgs.runCommandLocal "hull-docs" { } ''
   cp ${navigation} templates/navigation.typ
   ${writeContentPages}
   ${tola.packages.${system}.default}/bin/tola build
-  cp public/404/index.html public/404.html
+  cp public/404/index.html "$TMPDIR/404.html"
   rm -rf public/404
   substituteInPlace public/sitemap.xml \
     --replace-fail '<url><loc>${siteUrl}/404/</loc></url>' ""
@@ -186,5 +192,6 @@ pkgs.runCommandLocal "hull-docs" { } ''
   ${writeAgentMirrors}
   cp ${./content/404.typ} public/.well-known/agent-typst/404.typ
   ${pkgs.pagefind}/bin/pagefind --site public
+  cp "$TMPDIR/404.html" public/404.html
   cp -R ./public "$out"
 ''
