@@ -1,7 +1,7 @@
-diff -Naur a/libc-top-half/CMakeLists.txt b/libc-top-half/CMakeLists.txt
---- a/libc-top-half/CMakeLists.txt	2026-03-02 14:43:51.075671734 +0800
-+++ b/libc-top-half/CMakeLists.txt	2026-03-04 14:51:50.697402116 +0800
-@@ -527,7 +527,6 @@
+diff --git a/libc-top-half/CMakeLists.txt b/libc-top-half/CMakeLists.txt
+--- a/libc-top-half/CMakeLists.txt
++++ b/libc-top-half/CMakeLists.txt
+@@ -538,7 +538,6 @@ add_internal_object_library(bulk-memory ${MUSL_BULK_MEMORY_SOURCES})
  
  foreach(obj bulk-memory-shared bulk-memory-static)
    target_compile_definitions(${obj} PRIVATE -DBULK_MEMORY_THRESHOLD=${BULK_MEMORY_THRESHOLD})
