@@ -96,6 +96,25 @@ static int copy_archive_data(struct archive *reader, struct archive *writer) {
   }
 }
 
+static int is_safe_archive_path(const char *path) {
+  const char *segment = path;
+
+  if (path == NULL || path[0] == '\0' || path[0] == '/') {
+    return 0;
+  }
+
+  for (;;) {
+    size_t len = strcspn(segment, "/");
+    if ((len == 1 && segment[0] == '.') || (len == 2 && segment[0] == '.' && segment[1] == '.')) {
+      return 0;
+    }
+    if (segment[len] == '\0') {
+      return 1;
+    }
+    segment += len + 1;
+  }
+}
+
 static int remove_path_entry(const char *path, const struct stat *st, int flag, struct FTW *ftw) {
   (void)st;
   (void)flag;
@@ -134,6 +153,8 @@ static int extract_tar_archive(const char *archive_path, const char *dest_dir) {
 
   for (;;) {
     char path[PATH_MAX];
+    const char *entry_path;
+    mode_t filetype;
     result = archive_read_next_header(reader, &entry);
     if (result == ARCHIVE_EOF) {
       break;
@@ -144,8 +165,15 @@ static int extract_tar_archive(const char *archive_path, const char *dest_dir) {
       archive_read_free(reader);
       return -1;
     }
-    if (snprintf(path, sizeof(path), "%s/%s", dest_dir, archive_entry_pathname(entry)) >=
-        (int)sizeof(path)) {
+    entry_path = archive_entry_pathname(entry);
+    filetype = archive_entry_filetype(entry);
+    if (!is_safe_archive_path(entry_path) || (filetype != AE_IFREG && filetype != AE_IFDIR)) {
+      fprintf(stderr, "unsafe archive entry: %s\n", entry_path == NULL ? "<null>" : entry_path);
+      archive_write_free(writer);
+      archive_read_free(reader);
+      return -1;
+    }
+    if (snprintf(path, sizeof(path), "%s/%s", dest_dir, entry_path) >= (int)sizeof(path)) {
       archive_write_free(writer);
       archive_read_free(reader);
       return -1;

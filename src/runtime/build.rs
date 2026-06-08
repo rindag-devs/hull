@@ -51,23 +51,23 @@ pub fn build_problem_target(
 ) -> Result<()> {
   let flake_ref = get_flake_url()?;
   let runtime_json = render_runtime_json(runtime)?;
-  let runtime_json_literal = format!("''{runtime_json}''");
   let expr = format!(
     r#"
+      {{ runtimeJson }}:
       let
         flake = builtins.getFlake {flake_ref};
         lib = flake.inputs.hull.lib or flake.outputs.lib;
         problemConfig = flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem}.config;
       in
-      lib.${{builtins.currentSystem}}.runtime.buildProblemTarget problemConfig (builtins.fromJSON {runtime_json}) {target}
+      lib.${{builtins.currentSystem}}.runtime.buildProblemTarget problemConfig (builtins.fromJSON runtimeJson) {target}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
-    runtime_json = runtime_json_literal,
     target = serde_json::to_string(target)?,
   );
   crate::nix::BuildCommand::new()
     .impure(true)
     .expr_stdin(&expr)
+    .argstr("runtimeJson", &runtime_json)
     .out_link(out_link)
     .extra_args(nix_args)
     .run()
@@ -83,23 +83,23 @@ pub fn build_contest_target(
   let flake_ref = get_flake_url()?;
   let runtime_json = serde_json::to_string(runtime_by_problem)
     .context("Failed to serialize contest runtime analysis JSON")?;
-  let runtime_json_literal = format!("''{runtime_json}''");
   let expr = format!(
     r#"
+      {{ runtimeJson }}:
       let
         flake = builtins.getFlake {flake_ref};
         lib = flake.inputs.hull.lib or flake.outputs.lib;
         contestConfig = flake.outputs.hullContests.${{builtins.currentSystem}}.{contest}.config;
       in
-      lib.${{builtins.currentSystem}}.runtime.buildContestTarget contestConfig (builtins.fromJSON {runtime_json}) {target}
+      lib.${{builtins.currentSystem}}.runtime.buildContestTarget contestConfig (builtins.fromJSON runtimeJson) {target}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
-    runtime_json = runtime_json_literal,
     target = serde_json::to_string(target)?,
   );
   crate::nix::BuildCommand::new()
     .impure(true)
     .expr_stdin(&expr)
+    .argstr("runtimeJson", &runtime_json)
     .out_link(out_link)
     .extra_args(nix_args)
     .run()

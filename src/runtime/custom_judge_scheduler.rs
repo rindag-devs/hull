@@ -15,7 +15,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, bail};
 use rayon::prelude::*;
 
 use super::analysis::install_with_pool;
@@ -98,9 +98,7 @@ where
       if scheduler.is_finished() {
         break;
       }
-      return Err(anyhow!(
-        "custom judge scheduler reached a dead end with unfinished active subtasks"
-      ));
+      bail!("custom judge scheduler reached a dead end with unfinished active subtasks");
     }
 
     scheduler.mark_running(&ready_test_case_names);

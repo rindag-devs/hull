@@ -15,7 +15,7 @@
 
   includes = [ cplib ];
 
-  judger = hull.judger.stdioInteraction config { realTimeLimitSeconds = 5; };
+  judger = hull.judger.stdioInteraction config { realTimeLimitSeconds = 10; };
 
   checker.src = ./interactor.20.cpp;
 

@@ -25,6 +25,7 @@ use crate::{
   format::{format_size, format_tick},
   interactive,
   platform::default_parallelism,
+  runner::RunStatus,
   runtime::{
     analysis::{TOOL_MEMORY_LIMIT, TOOL_OUTPUT_LIMIT, TOOL_TICK_LIMIT, analyze_problem},
     artifact::realize_artifact,
@@ -338,6 +339,15 @@ fn generate_input(
     TOOL_OUTPUT_LIMIT,
     &[],
   )?;
+  if result.status != RunStatus::Accepted {
+    anyhow::bail!(
+      "Generator failed while preparing stress input `{}` with status {:?}: {}\nStderr:\n{}",
+      test_case_name,
+      result.status,
+      result.error_message,
+      String::from_utf8_lossy(&result.stderr).trim()
+    );
+  }
   let path = workspace_root.join(format!("generated-input-{test_case_name}.txt"));
   std::fs::write(&path, result.stdout)
     .with_context(|| format!("Failed to write generated stress input {}", path.display()))?;

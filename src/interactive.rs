@@ -787,7 +787,7 @@ fn hidden_pending_count(node: &TreeNode, visible_count: usize) -> usize {
     .values()
     .filter(|child| child.state == ExecutionState::Pending && child.children.is_empty())
     .count();
-  pending.saturating_sub(0.max(visible_count.saturating_sub(visible_leaf_count(node))))
+  pending.saturating_sub(visible_count.saturating_sub(visible_leaf_count(node)))
 }
 
 fn visible_leaf_count(node: &TreeNode) -> usize {

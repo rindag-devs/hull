@@ -19,7 +19,7 @@ use std::fs;
 use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tar::{Archive, Builder, EntryType, Header};
@@ -357,16 +357,16 @@ pub fn load_official_data(
         continue;
       }
       let Some(safe_relative) = safe_tar_output_path(relative) else {
-        return Err(anyhow!(
+        bail!(
           "official data tar contains unsafe output path {}",
           path.display()
-        ));
+        );
       };
       if entry.header().entry_type() != EntryType::Regular {
-        return Err(anyhow!(
+        bail!(
           "official data tar output {} is not a regular file",
           path.display()
-        ));
+        );
       }
       let target_path = official_outputs_dir.join(safe_relative);
       if let Some(parent) = target_path.parent() {

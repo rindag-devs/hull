@@ -470,7 +470,7 @@ pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()
   if errors.is_empty() {
     Ok(())
   } else {
-    Err(anyhow!("{label} command failed: {}", errors.join(", ")))
+    bail!("{label} command failed: {}", errors.join(", "))
   }
 }
 
@@ -505,12 +505,12 @@ fn run_nix_command(
       .take()
       .with_context(|| format!("Failed to capture stderr from {label} process"))?;
 
-    let nom_status = Command::new("nom")
+    let mut nom_child = Command::new("nom")
       .arg("--json")
       .stdin(stderr)
       .stdout(Stdio::inherit())
       .stderr(Stdio::inherit())
-      .status()
+      .spawn()
       .context("Failed to execute `nom` log process")?;
 
     let output = if capture_stdout {
@@ -528,6 +528,10 @@ fn run_nix_command(
       }
       None
     };
+
+    let nom_status = nom_child
+      .wait()
+      .context("Failed to wait for `nom` log process")?;
 
     if !nom_status.success() {
       bail!("Log process `nom` failed with exit code: {:?}", nom_status);
