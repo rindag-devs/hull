@@ -44,14 +44,64 @@ export default {
 };
 
 function agentSourceResponseType(request) {
-  const accept = request.headers.get("accept")?.toLowerCase() ?? "";
-  if (accept.includes("text/markdown")) {
+  const accept = parseAccept(request.headers.get("accept") ?? "");
+  const htmlQuality = Math.max(
+    acceptedQuality(accept, "text/html"),
+    acceptedQuality(accept, "application/xhtml+xml"),
+  );
+  const markdownQuality = explicitAcceptedQuality(accept, "text/markdown");
+  const typstQuality = explicitAcceptedQuality(accept, "text/x-typst");
+
+  if (markdownQuality <= htmlQuality && typstQuality <= htmlQuality) {
+    return null;
+  }
+  if (markdownQuality >= typstQuality) {
     return "text/markdown; charset=utf-8";
   }
-  if (accept.includes("text/x-typst")) {
-    return "text/plain; charset=utf-8";
-  }
-  return null;
+  return "text/plain; charset=utf-8";
+}
+
+function parseAccept(value) {
+  return value
+    .split(",")
+    .map((entry) => {
+      const [mediaRange, ...parameters] = entry.trim().toLowerCase().split(";");
+      const quality = parameters.reduce((currentQuality, parameter) => {
+        const [name, rawValue] = parameter.trim().split("=");
+        if (name !== "q") {
+          return currentQuality;
+        }
+        const parsedQuality = Number.parseFloat(rawValue);
+        if (!Number.isFinite(parsedQuality)) {
+          return 0;
+        }
+        return Math.min(Math.max(parsedQuality, 0), 1);
+      }, 1);
+      return { mediaRange, quality };
+    })
+    .filter((entry) => entry.mediaRange.includes("/"));
+}
+
+function explicitAcceptedQuality(accept, mediaType) {
+  return Math.max(
+    0,
+    ...accept.filter((entry) => entry.mediaRange === mediaType).map((entry) => entry.quality),
+  );
+}
+
+function acceptedQuality(accept, mediaType) {
+  const [type] = mediaType.split("/");
+  return Math.max(
+    0,
+    ...accept
+      .filter(
+        (entry) =>
+          entry.mediaRange === mediaType ||
+          entry.mediaRange === `${type}/*` ||
+          entry.mediaRange === "*/*",
+      )
+      .map((entry) => entry.quality),
+  );
 }
 
 function sourcePathFor(pathname) {
