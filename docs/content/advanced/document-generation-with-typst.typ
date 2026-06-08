@@ -2,6 +2,7 @@
 
 #show: page.with(
   title: "Document Generation with Typst",
+  summary: "Generate Hull problem and contest PDFs with Typst templates driven by serialized build data.",
 )
 
 = Document Generation with Typst

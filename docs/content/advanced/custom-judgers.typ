@@ -1,6 +1,9 @@
 #import "/templates/page.typ": page
 
-#show: page.with(title: "Custom Judgers")
+#show: page.with(
+  title: "Custom Judgers",
+  summary: "Define custom Hull judgers for multi-stage, interactive, complex scoring, or custom workflow problems.",
+)
 
 = Custom Judgers
 

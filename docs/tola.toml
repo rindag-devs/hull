@@ -13,7 +13,7 @@ elements = ['<meta name="darkreader-lock">']
 spa = false
 
 [site.seo]
-auto_og = true
+auto_og = false
 
 [site.seo.feed]
 enable = false

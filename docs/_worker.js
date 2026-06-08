@@ -11,13 +11,13 @@ export default {
   async fetch(request, env) {
     const responseType = agentSourceResponseType(request);
     if (responseType === null) {
-      return withDiscoveryHeaders(await env.ASSETS.fetch(request));
+      return withDiscoveryHeaders(await env.ASSETS.fetch(request), request);
     }
 
     const url = new URL(request.url);
     const sourcePath = sourcePathFor(url.pathname);
     if (sourcePath === null) {
-      return withDiscoveryHeaders(await env.ASSETS.fetch(request));
+      return withDiscoveryHeaders(await env.ASSETS.fetch(request), request);
     }
 
     const sourceResponse = await env.ASSETS.fetch(assetRequest(request, sourcePath));
@@ -39,7 +39,7 @@ export default {
       }
     }
 
-    return withDiscoveryHeaders(htmlResponse);
+    return withDiscoveryHeaders(htmlResponse, request);
   },
 };
 
@@ -87,13 +87,20 @@ function sourceTextResponseFor(source, status, contentType) {
   });
 }
 
-function withDiscoveryHeaders(response) {
+function withDiscoveryHeaders(response, request) {
   const headers = discoveryHeaders(response.headers);
+  if (isAgentTypstMirror(new URL(request.url).pathname)) {
+    headers.set("content-type", "text/x-typst; charset=utf-8");
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
+}
+
+function isAgentTypstMirror(pathname) {
+  return pathname.startsWith("/.well-known/agent-typst/") && pathname.endsWith(".typ");
 }
 
 function discoveryHeaders(headersInit) {

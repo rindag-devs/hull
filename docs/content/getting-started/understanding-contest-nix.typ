@@ -2,6 +2,7 @@
 
 #show: page.with(
   title: "Understanding contest.nix",
+  summary: "Understand how contest.nix defines contest metadata, included problems, packaging targets, and contest builds.",
 )
 
 = Understanding `contest.nix`

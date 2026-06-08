@@ -2,6 +2,7 @@
 
 #show: page.with(
   title: "Installation & Setup",
+  summary: "Set up Nix with Flakes, create a Hull problem project, and enter the development environment.",
 )
 
 = Installation & Setup

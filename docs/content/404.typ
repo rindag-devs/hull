@@ -1,6 +1,9 @@
 #import "/templates/page.typ": page
 
-#show: page.with(title: "Page Not Found")
+#show: page.with(
+  title: "Page Not Found",
+  summary: "The requested Hull documentation page could not be found.",
+)
 
 = Page Not Found
 

@@ -2,6 +2,7 @@
 
 #show: page.with(
   title: "Best Practices & Conventions",
+  summary: "Follow recommended Hull naming conventions, project layout, component tests, and reproducible data practices.",
 )
 
 = Best Practices & Conventions

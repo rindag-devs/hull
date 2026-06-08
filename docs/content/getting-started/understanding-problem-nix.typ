@@ -2,6 +2,7 @@
 
 #show: page.with(
   title: "Understanding problem.nix",
+  summary: "Understand how problem.nix defines metadata, programs, test data, scoring, solutions, and targets for one Hull problem.",
 )
 
 = Understanding `problem.nix`

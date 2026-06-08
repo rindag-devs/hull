@@ -1,6 +1,9 @@
 #import "/templates/page.typ": page
 
-#show: page.with(title: "Basic Workflow")
+#show: page.with(
+  title: "Basic Workflow",
+  summary: "Learn the main Hull CLI commands for building packages, judging solutions, and running stress tests.",
+)
 
 = Basic Workflow
 

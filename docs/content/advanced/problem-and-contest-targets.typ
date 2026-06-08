@@ -2,6 +2,7 @@
 
 #show: page.with(
   title: "Problem and Contest Targets",
+  summary: "Learn how Hull problem and contest targets package evaluated artifacts for local inspection and judge systems.",
 )
 
 = Problem and Contest Targets

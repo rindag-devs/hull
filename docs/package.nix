@@ -20,7 +20,7 @@ let
 
   typstString = builtins.toJSON;
   typstEntry = page: "(title: ${typstString page.title}, href: ${typstString page.href})";
-  normalizedHref = href: if href == "/" then "/" else "${href}/";
+  normalizedHref = href: if href == "/" || pkgs.lib.hasSuffix "/" href then href else "${href}/";
   absoluteUrl = href: "${siteUrl}${normalizedHref href}";
   markdownPageLink = page: "- [${page.title}](${absoluteUrl page.href})";
   agentMirrorPath =
@@ -115,6 +115,7 @@ let
 
       #show: page.with(
         title: "${title}",
+        summary: "${summary}",
       )
 
       = ${title}

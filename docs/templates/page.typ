@@ -13,11 +13,27 @@
   }
 }
 
-#let permalink-active(href) = normalize-permalink(current-permalink) == normalize-permalink(href)
+#let permalink-active(href) = (
+  normalize-permalink(current-permalink) == normalize-permalink(href)
+)
 
-#let canonical-url = info.url + if current-permalink == "/" { "/" } else {
-  normalize-permalink(current-permalink) + "/"
+#let canonical-path(value) = {
+  let text = str(value)
+  if text == "/" or text.ends-with("/") {
+    text
+  } else {
+    text + "/"
+  }
 }
+
+#let canonical-link(value) = info.url + canonical-path(value)
+
+#let canonical-url = (
+  info.url
+    + if current-permalink == "/" { "/" } else {
+      normalize-permalink(current-permalink) + "/"
+    }
+)
 
 #let page-title(m) = if m.title != none and m.title != info.title {
   m.title + " | " + info.title
@@ -25,12 +41,20 @@
   info.title
 }
 
+#let page-description(m) = {
+  assert(
+    m.summary != none and m.summary != "",
+    message: "Every documentation page must define a non-empty summary.",
+  )
+  m.summary
+}
+
 #let chapter-link(item, number) = {
   let active = permalink-active(item.href)
   html.li(class: "chapter-item")[
     #html.a(
       class: if active { "chapter-link active" } else { "chapter-link" },
-      href: item.href,
+      href: canonical-link(item.href),
     )[
       #html.strong[#number]
       #item.title
@@ -153,10 +177,12 @@
     #html.ol(class: "chapter")[
       #html.li(class: "chapter-item")[
         #html.a(
-          class: if permalink-active(introduction.href) { "chapter-link active" } else {
+          class: if permalink-active(introduction.href) {
+            "chapter-link active"
+          } else {
             "chapter-link"
           },
-          href: introduction.href,
+          href: canonical-link(introduction.href),
         )[#introduction.title]
       ]
       #let number = 1
@@ -178,27 +204,39 @@
 #let page = wrap-page(
   base: base,
   head: m => [
+    #let description = page-description(m)
     #html.elem("meta", attrs: (charset: "UTF-8"))
     #html.elem("meta", attrs: (
       name: "viewport",
       content: "width=device-width, initial-scale=1",
     ))
+    #html.elem("meta", attrs: (name: "description", content: description))
     #html.elem("meta", attrs: (name: "theme-color", content: "#ffffff"))
     #html.elem("meta", attrs: (name: "robots", content: "index,follow"))
     #html.elem("link", attrs: (
       rel: "canonical",
       href: canonical-url,
     ))
-    #html.elem("link", attrs: (rel: "alternate", hreflang: "en", href: canonical-url))
+    #html.elem("link", attrs: (
+      rel: "alternate",
+      hreflang: "en",
+      href: canonical-url,
+    ))
     #html.elem("meta", attrs: (property: "og:type", content: "website"))
     #html.elem("meta", attrs: (property: "og:site_name", content: info.title))
     #html.elem("meta", attrs: (property: "og:locale", content: "en"))
     #html.elem("meta", attrs: (property: "og:url", content: canonical-url))
     #html.elem("meta", attrs: (property: "og:title", content: page-title(m)))
-    #html.elem("meta", attrs: (property: "og:description", content: info.description))
+    #html.elem("meta", attrs: (
+      property: "og:description",
+      content: description,
+    ))
     #html.elem("meta", attrs: (name: "twitter:card", content: "summary"))
     #html.elem("meta", attrs: (name: "twitter:title", content: page-title(m)))
-    #html.elem("meta", attrs: (name: "twitter:description", content: info.description))
+    #html.elem("meta", attrs: (
+      name: "twitter:description",
+      content: description,
+    ))
     #html.elem("link", attrs: (rel: "stylesheet", href: "/css/variables.css"))
     #html.elem("link", attrs: (rel: "stylesheet", href: "/css/general.css"))
     #html.elem("link", attrs: (rel: "stylesheet", href: "/css/chrome.css"))
