@@ -5,6 +5,9 @@
 #import "@tola/current:0.0.0": current-permalink
 
 #let normalize-permalink(value) = {
+  if value == none {
+    return "/"
+  }
   let text = str(value)
   if text.ends-with("/") and text != "/" {
     text.slice(0, text.len() - 1)
@@ -47,6 +50,12 @@
     message: "Every documentation page must define a non-empty summary.",
   )
   m.summary
+}
+
+#let page-robots(m) = if "robots" in m and m.robots != none {
+  m.robots
+} else {
+  "index,follow"
 }
 
 #let chapter-link(item, number) = {
@@ -212,7 +221,7 @@
     ))
     #html.elem("meta", attrs: (name: "description", content: description))
     #html.elem("meta", attrs: (name: "theme-color", content: "#ffffff"))
-    #html.elem("meta", attrs: (name: "robots", content: "index,follow"))
+    #html.elem("meta", attrs: (name: "robots", content: page-robots(m)))
     #html.elem("link", attrs: (
       rel: "canonical",
       href: canonical-url,

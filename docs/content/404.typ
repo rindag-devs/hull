@@ -3,6 +3,7 @@
 #show: page.with(
   title: "Page Not Found",
   summary: "The requested Hull documentation page could not be found.",
+  robots: "noindex,follow",
 )
 
 = Page Not Found

@@ -80,6 +80,7 @@ function sourceTextResponseFor(source, status, contentType) {
     headers: discoveryHeaders({
       "cache-control": "public, max-age=0, must-revalidate",
       "content-type": contentType,
+      "x-robots-tag": robotsTagForStatus(status),
       vary: "Accept",
       "x-agent-source-format": "typst",
       "x-agent-source-tokens": approximateTokenCount(source).toString(),
@@ -89,6 +90,7 @@ function sourceTextResponseFor(source, status, contentType) {
 
 function withDiscoveryHeaders(response, request) {
   const headers = discoveryHeaders(response.headers);
+  headers.set("x-robots-tag", robotsTagForStatus(response.status));
   if (isAgentTypstMirror(new URL(request.url).pathname)) {
     headers.set("content-type", "text/x-typst; charset=utf-8");
   }
@@ -101,6 +103,10 @@ function withDiscoveryHeaders(response, request) {
 
 function isAgentTypstMirror(pathname) {
   return pathname.startsWith("/.well-known/agent-typst/") && pathname.endsWith(".typ");
+}
+
+function robotsTagForStatus(status) {
+  return status === 404 ? "noindex, follow" : "index, follow";
 }
 
 function discoveryHeaders(headersInit) {
