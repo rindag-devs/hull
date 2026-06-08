@@ -249,7 +249,7 @@
           if outputName == null then
             "touch ${outputPath}"
           else
-            "cp ${tc.hullTestCase.data.outputs}/output ${outputPath}"
+            "cp ${tc.hullTestCase.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
         }
       '') cmsTestCases}
 

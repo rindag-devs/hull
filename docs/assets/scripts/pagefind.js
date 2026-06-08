@@ -4,6 +4,9 @@
   const button = document.getElementById("pagefind-search-toggle");
   const panel = document.getElementById("pagefind-search-panel");
   const root = document.getElementById("pagefind-search");
+  if (!button || !panel || !root || typeof PagefindUI === "undefined") {
+    return;
+  }
   let initialized = false;
 
   function initialize() {
@@ -45,8 +48,16 @@
 
   button.addEventListener("click", toggle);
 
+  function editableElementHasFocus() {
+    const active = document.activeElement;
+    return active?.matches?.("input, select, textarea, [contenteditable]");
+  }
+
   document.addEventListener("keydown", (event) => {
     if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+    if (editableElementHasFocus()) {
       return;
     }
     if (event.key === "/" || event.key === "s") {

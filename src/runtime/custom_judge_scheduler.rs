@@ -19,7 +19,7 @@ use anyhow::{Result, anyhow};
 use rayon::prelude::*;
 
 use super::analysis::install_with_pool;
-use super::types::{JudgeReport, SubtaskSpec};
+use super::types::{JudgeReport, ScoringMethod, SubtaskSpec};
 use crate::platform::default_parallelism;
 
 type TestCaseTraitsMap = BTreeMap<String, BTreeMap<String, bool>>;
@@ -34,7 +34,7 @@ enum TestCaseState {
 #[derive(Clone, Debug)]
 struct SubtaskSchedule {
   test_case_names: Vec<String>,
-  scoring_method: String,
+  scoring_method: ScoringMethod,
   next_index: usize,
   skipped: bool,
 }
@@ -200,7 +200,7 @@ impl SchedulerState {
           })
           .map(|test_case| test_case.name.clone())
           .collect(),
-        scoring_method: subtask.scoring_method.clone(),
+        scoring_method: subtask.scoring_method,
         next_index: 0,
         skipped: false,
       })
@@ -308,7 +308,7 @@ impl SchedulerState {
           break;
         }
         schedule.next_index += 1;
-        if schedule.scoring_method == "min"
+        if schedule.scoring_method == ScoringMethod::Min
           && executions
             .get(&test_case_name)
             .is_some_and(|report| report.score <= 0.0)

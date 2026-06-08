@@ -113,8 +113,18 @@ pub struct TestCaseSpec {
 /// One subtask in the runtime problem model.
 pub struct SubtaskSpec {
   pub full_score: f64,
-  pub scoring_method: String,
+  pub scoring_method: ScoringMethod,
   pub traits: BTreeMap<String, bool>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+/// Supported subtask score aggregation methods.
+pub enum ScoringMethod {
+  /// The subtask score is the minimum score among matching test cases.
+  Min,
+  /// The subtask score is the average score among matching test cases.
+  Sum,
 }
 
 #[derive(Clone, Debug, Deserialize)]

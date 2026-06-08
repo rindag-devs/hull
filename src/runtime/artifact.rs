@@ -75,7 +75,7 @@ fn dedup_builds(builds: Vec<crate::nix::BuildCommand>) -> Vec<crate::nix::BuildC
   let mut seen = std::collections::BTreeSet::new();
   let mut unique = Vec::new();
   for build in builds {
-    let command = build.build_command_for_debug();
+    let command = build.build_command_key();
     if seen.insert(command.clone()) {
       unique.push(build);
     }
@@ -134,12 +134,19 @@ pub fn realize_artifact(artifact: &ArtifactSpec) -> Result<String> {
 pub fn cache_native_module(module_path: &str) -> Result<String> {
   let module_bytes = fs::read(module_path)
     .with_context(|| format!("Failed to read module artifact {}", module_path))?;
+  let cache_dir = native_module_cache_dir()?;
 
   if runner::is_precompiled(&module_bytes) {
-    return Ok(module_path.to_string());
+    let module_path = Path::new(module_path);
+    if module_path.starts_with(&cache_dir) {
+      return Ok(module_path.to_string_lossy().into_owned());
+    }
+    bail!(
+      "Refusing to load external precompiled module {}",
+      module_path.display()
+    );
   }
 
-  let cache_dir = native_module_cache_dir()?;
   fs::create_dir_all(&cache_dir).with_context(|| {
     format!(
       "Failed to create native module cache {}",
@@ -149,6 +156,7 @@ pub fn cache_native_module(module_path: &str) -> Result<String> {
 
   let mut hasher = Sha256::new();
   hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
+  hasher.update(wasmtime_cache_version().as_bytes());
   hasher.update(std::env::consts::ARCH.as_bytes());
   hasher.update(std::env::consts::OS.as_bytes());
   hasher.update(&module_bytes);
@@ -196,6 +204,22 @@ pub fn cache_native_module(module_path: &str) -> Result<String> {
   }
 
   Ok(cached_path.to_string_lossy().into_owned())
+}
+
+fn wasmtime_cache_version() -> &'static str {
+  let lockfile = include_str!("../../Cargo.lock");
+  let mut in_wasmtime_package = false;
+  for line in lockfile.lines() {
+    match line {
+      "[[package]]" => in_wasmtime_package = false,
+      "name = \"wasmtime\"" => in_wasmtime_package = true,
+      _ if in_wasmtime_package && line.starts_with("version = ") => {
+        return line.trim_start_matches("version = ").trim_matches('"');
+      }
+      _ => {}
+    }
+  }
+  "unknown"
 }
 
 fn unique_temp_component() -> u128 {
@@ -395,8 +419,8 @@ mod tests {
   use std::thread;
 
   use crate::runtime::types::{
-    CheckerTestSpec, JudgerSpec, ProblemSpec, ProgramSpec, SolutionSpec, SubtaskSpec, TestCaseSpec,
-    ValidatorTestSpec,
+    CheckerTestSpec, JudgerSpec, ProblemSpec, ProgramSpec, ScoringMethod, SolutionSpec,
+    SubtaskSpec, TestCaseSpec, ValidatorTestSpec,
   };
 
   fn artifact(path: &str, drv_path: Option<&str>) -> ArtifactSpec {
@@ -479,7 +503,7 @@ mod tests {
       }],
       subtasks: vec![SubtaskSpec {
         full_score: 1.0,
-        scoring_method: "min".to_string(),
+        scoring_method: ScoringMethod::Min,
         traits: BTreeMap::new(),
       }],
       solutions: vec![
@@ -519,33 +543,39 @@ mod tests {
     let problem = problem_with_artifacts();
     let commands = collect_problem_realize_builds(&problem)
       .into_iter()
-      .map(|command| command.build_command_for_debug())
+      .map(|command| command.build_command_key())
+      .map(|command| {
+        command
+          .into_iter()
+          .map(|arg| arg.to_string_lossy().into_owned())
+          .collect::<Vec<_>>()
+      })
       .collect::<Vec<_>>();
 
     assert!(
       commands
         .iter()
-        .any(|command| command.contains("/nix/store/checker.drv^*"))
+        .any(|command| command.iter().any(|arg| arg == "/nix/store/checker.drv^*"))
+    );
+    assert!(commands.iter().any(|command| {
+      command
+        .iter()
+        .any(|arg| arg == "/nix/store/validator.drv^*")
+    }));
+    assert!(commands.iter().any(|command| {
+      command
+        .iter()
+        .any(|arg| arg == "/nix/store/generator.drv^*")
+    }));
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.iter().any(|arg| arg == "/nix/store/genout.drv^*"))
     );
     assert!(
       commands
         .iter()
-        .any(|command| command.contains("/nix/store/validator.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/generator.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/genout.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.contains("/nix/store/judge.drv^*"))
+        .any(|command| command.iter().any(|arg| arg == "/nix/store/judge.drv^*"))
     );
   }
 
@@ -554,12 +584,18 @@ mod tests {
     let problem = problem_with_artifacts();
     let commands = collect_problem_realize_builds(&problem)
       .into_iter()
-      .map(|command| command.build_command_for_debug())
+      .map(|command| command.build_command_key())
+      .map(|command| {
+        command
+          .into_iter()
+          .map(|arg| arg.to_string_lossy().into_owned())
+          .collect::<Vec<_>>()
+      })
       .collect::<Vec<_>>();
 
     let judge_matches = commands
       .iter()
-      .filter(|command| command.contains("/nix/store/judge.drv^*"))
+      .filter(|command| command.iter().any(|arg| arg == "/nix/store/judge.drv^*"))
       .count();
     assert_eq!(judge_matches, 1);
   }
@@ -570,13 +606,19 @@ mod tests {
     problem.validator.wasm = Some(artifact("/tmp/hull/validator/output.wasm", None));
     let commands = collect_problem_realize_builds(&problem)
       .into_iter()
-      .map(|command| command.build_command_for_debug())
+      .map(|command| command.build_command_key())
+      .map(|command| {
+        command
+          .into_iter()
+          .map(|arg| arg.to_string_lossy().into_owned())
+          .collect::<Vec<_>>()
+      })
       .collect::<Vec<_>>();
 
     assert!(
       commands
         .iter()
-        .any(|command| command.contains("/tmp/hull/validator"))
+        .any(|command| command.iter().any(|arg| arg == "/tmp/hull/validator"))
     );
   }
 }

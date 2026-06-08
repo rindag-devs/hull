@@ -194,7 +194,17 @@
           flattened = true;
         }}
 
-        ${lib.concatMapAttrsStringSep "\n" (destPath: src: "cp ${src} $out/att/${destPath}") attachments}
+        ${lib.concatMapAttrsStringSep "\n" (
+          destPath: src:
+          let
+            escapedDestPath = lib.escapeShellArg destPath;
+          in
+          ''
+            destPath=${escapedDestPath}
+            mkdir -p "$tmpdir/attachments/$(dirname "$destPath")"
+            cp ${lib.escapeShellArg (toString src)} "$tmpdir/attachments/$destPath"
+          ''
+        ) attachments}
 
         # Zip the final package
         ${

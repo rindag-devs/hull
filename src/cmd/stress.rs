@@ -25,12 +25,14 @@ use crate::{
   format::{format_size, format_tick},
   interactive,
   platform::default_parallelism,
-  runtime::analysis::analyze_problem,
-  runtime::artifact::realize_artifact,
-  runtime::metadata::load_problem_spec,
-  runtime::sandbox::run_wasm_for_stdio,
-  runtime::types::{ProblemSpec, RuntimeOptions, SubtaskSpec, TestCaseSpec},
-  runtime::workspace::RuntimeWorkspace,
+  runtime::{
+    analysis::{TOOL_MEMORY_LIMIT, TOOL_OUTPUT_LIMIT, TOOL_TICK_LIMIT, analyze_problem},
+    artifact::realize_artifact,
+    metadata::load_problem_spec,
+    sandbox::run_wasm_for_stdio,
+    types::{ProblemSpec, RuntimeOptions, ScoringMethod, SubtaskSpec, TestCaseSpec},
+    workspace::RuntimeWorkspace,
+  },
 };
 
 #[derive(Parser)]
@@ -241,9 +243,7 @@ fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTe
         .enumerate()
         .map(|(case_index, generator_args)| {
           let test_case_name = format!("stress-round-{}-case-{case_index}", context.round);
-          let workspace = RuntimeWorkspace::new(
-            std::env::temp_dir().join(format!("hull-stress-{}-{case_index}", context.round)),
-          )?;
+          let workspace = RuntimeWorkspace::new()?;
           let generated_input = generate_input(
             context.generator_wasm,
             generator_args,
@@ -269,7 +269,7 @@ fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTe
           dynamic_problem.checker_tests = Vec::new();
           dynamic_problem.subtasks = vec![SubtaskSpec {
             full_score: 1.0,
-            scoring_method: "min".to_string(),
+            scoring_method: ScoringMethod::Min,
             traits: BTreeMap::new(),
           }];
 
@@ -333,8 +333,9 @@ fn generate_input(
     generator_wasm,
     None,
     arguments,
-    u64::MAX,
-    u32::MAX as u64,
+    TOOL_TICK_LIMIT,
+    TOOL_MEMORY_LIMIT,
+    TOOL_OUTPUT_LIMIT,
     &[],
   )?;
   let path = workspace_root.join(format!("generated-input-{test_case_name}.txt"));

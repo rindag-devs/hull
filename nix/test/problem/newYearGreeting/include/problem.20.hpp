@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -106,6 +107,9 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
       auto res = in.read(cplib::var::ExtVar<OutputFirst>("first"));
       return {res};
     } else {
+      if (inp.index() != 1) {
+        in.fail("Decode output is only valid for decode input");
+      }
       auto res = in.read(cplib::var::ExtVar<OutputSecond>("second", std::get<1>(inp)));
       return {res};
     }
@@ -151,9 +155,10 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
 inline auto traits(const Input &input) -> std::vector<cplib::validator::Trait> {
   return {
       {"k_lt_1024",
-       [&]() {
-         return input.index() == 0 && std::ranges::all_of(std::get<0>(input).pairs,
-                                                          [](const Pair &p) { return p.k < 1024; });
+       [&]() -> bool {
+         return input.index() == 0 &&
+                std::ranges::all_of(std::get<0>(input).pairs,
+                                    [](const Pair &p) -> bool { return p.k < 1024; });
        }},
   };
 }

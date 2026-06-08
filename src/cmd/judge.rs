@@ -51,7 +51,7 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   let problem = load_ad_hoc_problem_spec(&judge_opts.problem, &src_path_abs)?;
   let ad_hoc_name = "__hullAdHoc".to_string();
 
-  let workspace = RuntimeWorkspace::new(std::env::temp_dir().join("hull-judge-runtime"))?;
+  let workspace = RuntimeWorkspace::new()?;
   let progress = interactive::create_problem_progress(&problem.name);
   let runtime = analyze_problem(
     &problem,

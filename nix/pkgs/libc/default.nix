@@ -60,7 +60,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     "-DSIMD=OFF"
     "-DBUILD_TESTS=OFF"
     "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld"
-    "-USE_WASM_COMPONENT_LD=OFF"
   ];
 
   enableParallelBuilding = true;

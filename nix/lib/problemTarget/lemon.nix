@@ -95,6 +95,8 @@
         if type == "batch" then
           if graderSrc != null then taskTypeEnum.graderInteraction else taskTypeEnum.batch
         else if type == "answerOnly" then
+          # Lemon has no answer-only task type that matches Hull's packaged answer files;
+          # export it as a batch task so Lemon can still evaluate the generated cases.
           taskTypeEnum.batch
         else
           throw "Invalid problem type ${type}";

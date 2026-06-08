@@ -13,36 +13,31 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use tempfile::TempDir;
 
 #[derive(Debug)]
 /// Owns a temporary directory tree used by runtime analysis and judger runs.
 pub struct RuntimeWorkspace {
-  root: PathBuf,
-}
-
-impl Drop for RuntimeWorkspace {
-  fn drop(&mut self) {
-    let _ = fs::remove_dir_all(&self.root);
-  }
+  root: TempDir,
 }
 
 impl RuntimeWorkspace {
-  /// Creates or reuses the workspace root directory.
-  pub fn new(root: impl Into<PathBuf>) -> Result<Self> {
-    let root = root.into();
-    fs::create_dir_all(&root)
-      .with_context(|| format!("Failed to create runtime workspace {}", root.display()))?;
+  /// Creates a new unique workspace root directory.
+  pub fn new() -> Result<Self> {
+    let root = tempfile::Builder::new()
+      .prefix("hull-runtime-")
+      .tempdir()
+      .context("Failed to create runtime workspace")?;
     Ok(Self { root })
   }
 
   /// Returns the workspace root directory.
   pub fn root(&self) -> &Path {
-    &self.root
+    self.root.path()
   }
 
   /// Returns a stable per-case directory for a logical `(group, name)` pair.
@@ -59,9 +54,10 @@ impl RuntimeWorkspace {
       .collect();
     let path = self
       .root
+      .path()
       .join(group)
       .join(format!("{safe_name}-{digest:x}"));
-    fs::create_dir_all(&path)
+    std::fs::create_dir_all(&path)
       .with_context(|| format!("Failed to create workspace directory {}", path.display()))?;
     Ok(path)
   }
@@ -71,10 +67,10 @@ impl RuntimeWorkspace {
     let path = self.case_dir(group, name)?;
     let run_dir = path.join("work");
     if run_dir.exists() {
-      fs::remove_dir_all(&run_dir)
+      std::fs::remove_dir_all(&run_dir)
         .with_context(|| format!("Failed to reset run directory {}", run_dir.display()))?;
     }
-    fs::create_dir_all(&run_dir)
+    std::fs::create_dir_all(&run_dir)
       .with_context(|| format!("Failed to create run directory {}", run_dir.display()))?;
     Ok(run_dir)
   }

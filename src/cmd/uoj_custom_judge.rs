@@ -35,8 +35,8 @@ use crate::runtime::custom_judge_scheduler::{
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
 use crate::runtime::types::{
-  BundleJudgeProblemSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec, SolutionSpec,
-  TestCaseSpec,
+  BundleJudgeProblemSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec, ScoringMethod,
+  SolutionSpec, TestCaseSpec,
 };
 use crate::runtime::workspace::RuntimeWorkspace;
 
@@ -151,11 +151,7 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
     }
   };
 
-  let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
-    "hull-uoj-custom-judge-{}-{}",
-    problem.name,
-    std::process::id()
-  )))?;
+  let workspace = RuntimeWorkspace::new()?;
   let mut progress = JudgeProgressTracker::new(result_path.clone(), 0);
 
   let participant_source = copy_submission_source(
@@ -466,7 +462,8 @@ fn write_result(
       subtask_status(&subtask_reports[index].statuses, raw_subtask_score)
     ));
 
-    let should_skip_remaining = subtask.scoring_method == "min" && raw_subtask_score <= 0.0;
+    let should_skip_remaining =
+      subtask.scoring_method == ScoringMethod::Min && raw_subtask_score <= 0.0;
     let mut skip_rest = false;
     let trivial_summary = summarize_trivial_test_cases(subtask, &matching, test_case_reports);
 
@@ -499,7 +496,7 @@ fn write_result(
       };
       max_memory = max_memory.max(report.memory);
 
-      let point_score = if subtask.scoring_method == "sum" {
+      let point_score = if subtask.scoring_method == ScoringMethod::Sum {
         if matching.is_empty() {
           0.0
         } else {
@@ -993,13 +990,13 @@ fn summarize_trivial_test_cases(
       continue;
     }
     summary.count += 1;
-    if subtask.scoring_method == "sum" {
+    if subtask.scoring_method == ScoringMethod::Sum {
       summary.score += report.score * subtask.full_score;
     };
     summary.max_tick = summary.max_tick.max(report.tick);
     summary.max_memory = summary.max_memory.max(report.memory);
   }
-  if subtask.scoring_method == "sum" {
+  if subtask.scoring_method == ScoringMethod::Sum {
     summary.score = summary.score * 100.0 / matching_test_case_names.len() as f64;
   } else {
     summary.score = 1.0;
@@ -1132,12 +1129,7 @@ mod tests {
 
   #[test]
   fn writes_compile_error_result() {
-    let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
-      "hull-uoj-custom-test-{}-{}",
-      std::process::id(),
-      "compile-error"
-    )))
-    .expect("create workspace");
+    let workspace = RuntimeWorkspace::new().expect("create workspace");
     let result_path = workspace.root().join("result");
 
     write_compile_error_result(&result_path, "compile failed").expect("write compile result");
@@ -1154,12 +1146,7 @@ mod tests {
 
   #[test]
   fn writes_custom_test() {
-    let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
-      "hull-uoj-custom-test-{}-{}",
-      std::process::id(),
-      "custom-test"
-    )))
-    .expect("create workspace");
+    let workspace = RuntimeWorkspace::new().expect("create workspace");
     let result_path = workspace.root().join("result");
     fs::create_dir_all(&result_path).expect("create result dir");
 
@@ -1174,12 +1161,7 @@ mod tests {
 
   #[test]
   fn writes_custom_test_outputs() {
-    let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
-      "hull-uoj-custom-test-{}-{}",
-      std::process::id(),
-      "custom-test-outputs"
-    )))
-    .expect("create workspace");
+    let workspace = RuntimeWorkspace::new().expect("create workspace");
     let result_path = workspace.root().join("result");
     let outputs_path = workspace.root().join("outputs");
     fs::create_dir_all(outputs_path.join("nested")).expect("create outputs dir");

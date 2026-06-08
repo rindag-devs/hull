@@ -131,8 +131,7 @@ pub fn build_problem(
     )?;
   }
 
-  let workspace =
-    RuntimeWorkspace::new(std::env::temp_dir().join(format!("hull-build-{problem}")))?;
+  let workspace = RuntimeWorkspace::new()?;
   let mut runtime = {
     let _phase = options.progress.phase(
       PhaseKind::Runtime,
@@ -209,9 +208,7 @@ pub fn build_contest(
           let guard = contest_handle
             .as_ref()
             .map(|handle| handle.item(spec.name.clone()));
-          let workspace = RuntimeWorkspace::new(
-            std::env::temp_dir().join(format!("hull-build-contest-{contest}-{}", spec.name)),
-          )?;
+          let workspace = RuntimeWorkspace::new()?;
           let runtime = analyze_problem(
             spec,
             &workspace,

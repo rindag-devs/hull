@@ -17,12 +17,12 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Cursor;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
-use tar::{Archive, Builder, Header};
+use tar::{Archive, Builder, EntryType, Header};
 
 use super::analysis::{run_judge, run_prepare_solution, run_validator};
 use super::types::{
@@ -90,11 +90,7 @@ pub fn prepare_bundle_judge_context(
   submission_hull_language: &str,
   participant_solution_name: &str,
 ) -> Result<BundlePreparedJudgeContext> {
-  let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
-    "hull-bundle-judge-{}-{}",
-    problem.name,
-    std::process::id()
-  )))?;
+  let workspace = RuntimeWorkspace::new()?;
   let participant_source = copy_submission_source(
     &workspace,
     &problem.name,
@@ -360,7 +356,19 @@ pub fn load_official_data(
       if relative.as_os_str().is_empty() {
         continue;
       }
-      let target_path = official_outputs_dir.join(relative);
+      let Some(safe_relative) = safe_tar_output_path(relative) else {
+        return Err(anyhow!(
+          "official data tar contains unsafe output path {}",
+          path.display()
+        ));
+      };
+      if entry.header().entry_type() != EntryType::Regular {
+        return Err(anyhow!(
+          "official data tar output {} is not a regular file",
+          path.display()
+        ));
+      }
+      let target_path = official_outputs_dir.join(safe_relative);
       if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent)?;
       }
@@ -380,6 +388,21 @@ pub fn load_official_data(
       .unwrap_or_default(),
     validation: validation.context("official data tar is missing validation.json")?,
   })
+}
+
+fn safe_tar_output_path(path: &Path) -> Option<PathBuf> {
+  let mut safe = PathBuf::new();
+  for component in path.components() {
+    match component {
+      Component::Normal(part) => safe.push(part),
+      _ => return None,
+    }
+  }
+  if safe.as_os_str().is_empty() {
+    None
+  } else {
+    Some(safe)
+  }
 }
 
 /// Packs validator output and generated official outputs into one archive.

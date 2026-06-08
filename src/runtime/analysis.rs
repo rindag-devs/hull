@@ -28,14 +28,19 @@ use super::sandbox::run_wasm_for_stdio;
 use super::types::{
   ArtifactSpec, CheckerReport, CheckerRuntimeData, JudgeReport, PreparedSolutionSpec, ProblemSpec,
   RuntimeData, RuntimeOptions, RuntimeSolutionData, RuntimeTestCaseData, RuntimeTestCaseFiles,
-  SolutionSpec, SubtaskRuntimeReport, TestCaseSpec, ValidationReport, ValidatorRuntimeData,
+  ScoringMethod, SolutionSpec, SubtaskRuntimeReport, TestCaseSpec, ValidationReport,
+  ValidatorRuntimeData,
 };
 use super::workspace::RuntimeWorkspace;
 use crate::interactive::{ProblemProgressHandle, TaskHandle, TaskItemReport, TaskKind};
 use crate::runner::RunStatus;
 
-const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
-const TOOL_MEMORY_LIMIT: u64 = u32::MAX as u64;
+/// Default tick limit for tools.
+pub const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
+/// Default linear memory limit for tools.
+pub const TOOL_MEMORY_LIMIT: u64 = u32::MAX as u64;
+/// Maximum stdout and stderr bytes captured from tools.
+pub const TOOL_OUTPUT_LIMIT: usize = usize::MAX;
 
 type TestCaseRunMap = BTreeMap<String, (RuntimeTestCaseData, BTreeMap<String, JudgeReport>)>;
 type TestCaseTraitsMap = BTreeMap<String, BTreeMap<String, bool>>;
@@ -669,6 +674,7 @@ pub fn run_validator(
     &[format!("--reader-trace-level={reader_trace_level}")],
     TOOL_TICK_LIMIT,
     TOOL_MEMORY_LIMIT,
+    TOOL_OUTPUT_LIMIT,
     &[],
   )?;
 
@@ -713,6 +719,7 @@ fn run_checker(
     ],
     TOOL_TICK_LIMIT,
     TOOL_MEMORY_LIMIT,
+    TOOL_OUTPUT_LIMIT,
     &mount,
   )?;
 
@@ -1013,15 +1020,15 @@ pub fn aggregate_subtask_results(
       .into_iter()
       .collect();
 
-      let raw_score = if test_cases.is_empty() {
-        0.0
-      } else if subtask.scoring_method == "sum" {
-        test_cases.values().map(|report| report.score).sum::<f64>() / test_cases.len() as f64
-      } else {
-        test_cases
+      let raw_score = match (subtask.scoring_method, test_cases.is_empty()) {
+        (_, true) => 0.0,
+        (ScoringMethod::Sum, false) => {
+          test_cases.values().map(|report| report.score).sum::<f64>() / test_cases.len() as f64
+        }
+        (ScoringMethod::Min, false) => test_cases
           .values()
           .map(|report| report.score)
-          .fold(1.0, f64::min)
+          .fold(1.0, f64::min),
       };
 
       SubtaskRuntimeReport {
@@ -1066,6 +1073,7 @@ fn resolve_test_input(
     arguments.unwrap_or(&[]),
     TOOL_TICK_LIMIT,
     TOOL_MEMORY_LIMIT,
+    TOOL_OUTPUT_LIMIT,
     &[],
   )?;
   ensure_generator_succeeded(generator_name, temp_name, &result)?;
@@ -1080,7 +1088,7 @@ fn resolve_test_input(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::runtime::types::{ArtifactSpec, JudgerSpec, ProgramSpec, SubtaskSpec};
+  use crate::runtime::types::{ArtifactSpec, JudgerSpec, ProgramSpec, ScoringMethod, SubtaskSpec};
 
   fn judge_report(status: &str, score: f64) -> JudgeReport {
     JudgeReport {
@@ -1093,7 +1101,7 @@ mod tests {
     }
   }
 
-  fn problem_with_subtasks(scoring_method: &str) -> ProblemSpec {
+  fn problem_with_subtasks(scoring_method: ScoringMethod) -> ProblemSpec {
     ProblemSpec {
       name: "p".to_string(),
       tick_limit: 1,
@@ -1147,7 +1155,7 @@ mod tests {
       ],
       subtasks: vec![SubtaskSpec {
         full_score: 0.5,
-        scoring_method: scoring_method.to_string(),
+        scoring_method,
         traits: BTreeMap::new(),
       }],
       solutions: Vec::new(),
@@ -1214,7 +1222,7 @@ mod tests {
 
   #[test]
   fn subtask_results_min() {
-    let problem = problem_with_subtasks("min");
+    let problem = problem_with_subtasks(ScoringMethod::Min);
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report("accepted", 1.0)),
       ("b".to_string(), judge_report("wrong_answer", 0.25)),
@@ -1233,7 +1241,7 @@ mod tests {
 
   #[test]
   fn subtask_results_sum_average() {
-    let problem = problem_with_subtasks("sum");
+    let problem = problem_with_subtasks(ScoringMethod::Sum);
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report("accepted", 1.0)),
       ("b".to_string(), judge_report("partially_correct", 0.5)),
@@ -1251,7 +1259,7 @@ mod tests {
 
   #[test]
   fn subtask_results_ignore_missing() {
-    let problem = problem_with_subtasks("min");
+    let problem = problem_with_subtasks(ScoringMethod::Min);
     let reports = BTreeMap::from([("a".to_string(), judge_report("accepted", 1.0))]);
     let traits = BTreeMap::from([
       ("a".to_string(), BTreeMap::new()),
@@ -1266,10 +1274,10 @@ mod tests {
 
   #[test]
   fn subtasks_match_trait_subset() {
-    let mut problem = problem_with_subtasks("min");
+    let mut problem = problem_with_subtasks(ScoringMethod::Min);
     problem.subtasks = vec![SubtaskSpec {
       full_score: 1.0,
-      scoring_method: "min".to_string(),
+      scoring_method: ScoringMethod::Min,
       traits: BTreeMap::from([("x".to_string(), true)]),
     }];
     problem.test_cases[0].trait_hints =

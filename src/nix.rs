@@ -14,11 +14,13 @@
 */
 
 use std::collections::HashMap;
-use std::io::Write;
+use std::ffi::OsString;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 
 use crate::interactive;
@@ -322,8 +324,12 @@ impl BuildCommand {
     cmd
   }
 
-  pub fn build_command_for_debug(&self) -> String {
-    shell_escape_command(&self.build_command())
+  /// Returns the executable and arguments that identify this build command.
+  pub fn build_command_key(&self) -> Vec<OsString> {
+    let command = self.build_command();
+    std::iter::once(command.get_program().to_os_string())
+      .chain(command.get_args().map(|arg| arg.to_os_string()))
+      .collect()
   }
 
   /// Executes the configured `nix build` command.
@@ -372,39 +378,99 @@ pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()
   }
 
   let with_nom = commands.iter().any(|command| command.with_nom);
-  let mut shell = Command::new("sh");
-  let script = commands
-    .into_iter()
-    .map(|command| shell_escape_command(&command.build_command()))
-    .collect::<Vec<_>>()
-    .join(" & ");
-  shell.arg("-c").arg(format!("{script} && wait"));
-  run_nix_command(shell, with_nom, label, false, None).map(|_| ())
-}
-
-fn shell_escape_command(command: &Command) -> String {
-  let program = shell_escape_arg(&command.get_program().to_string_lossy());
-  let args = command
-    .get_args()
-    .map(|arg| shell_escape_arg(&arg.to_string_lossy()))
-    .collect::<Vec<_>>();
-  if args.is_empty() {
-    program
+  let _suspend = with_nom.then(interactive::suspend_live_render);
+  let mut nom_child = if with_nom {
+    Some(
+      Command::new("nom")
+        .arg("--json")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context("Failed to execute `nom` log process")?,
+    )
   } else {
-    format!("{} {}", program, args.join(" "))
+    None
+  };
+  let nom_stdin = nom_child
+    .as_mut()
+    .and_then(|child| child.stdin.take())
+    .map(|stdin| Arc::new(Mutex::new(stdin)));
+  let mut children = Vec::new();
+  let mut log_threads = Vec::new();
+  for command in commands {
+    let mut command = command.build_command();
+    match command
+      .stdin(Stdio::null())
+      .stdout(Stdio::inherit())
+      .stderr(if with_nom {
+        Stdio::piped()
+      } else {
+        Stdio::inherit()
+      })
+      .spawn()
+    {
+      Ok(mut child) => {
+        if let Some(nom_stdin) = nom_stdin.clone() {
+          let mut stderr = child
+            .stderr
+            .take()
+            .with_context(|| format!("Failed to capture stderr from `{label}` process"))?;
+          log_threads.push(std::thread::spawn(move || -> std::io::Result<()> {
+            let mut buffer = [0; 8192];
+            loop {
+              let read = stderr.read(&mut buffer)?;
+              if read == 0 {
+                break;
+              }
+              let mut nom_stdin = nom_stdin
+                .lock()
+                .map_err(|_| std::io::Error::other("nom stdin lock poisoned"))?;
+              nom_stdin.write_all(&buffer[..read])?;
+            }
+            Ok(())
+          }));
+        }
+        children.push(child);
+      }
+      Err(err) => {
+        for child in &mut children {
+          let _ = child.kill();
+          let _ = child.wait();
+        }
+        return Err(err).with_context(|| format!("Failed to spawn `{label}` process"));
+      }
+    }
   }
-}
 
-fn shell_escape_arg(arg: &str) -> String {
-  if arg.is_empty() {
-    "''".to_string()
-  } else if arg
-    .chars()
-    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-' | ':' | '+' | '='))
-  {
-    arg.to_string()
+  let mut errors = Vec::new();
+  for child in &mut children {
+    let status = child
+      .wait()
+      .with_context(|| format!("Failed to wait for `{label}` process"))?;
+    if !status.success() {
+      errors.push(status.to_string());
+    }
+  }
+  for thread in log_threads {
+    thread
+      .join()
+      .map_err(|_| anyhow!("{label} log forwarding thread panicked"))?
+      .with_context(|| format!("Failed to forward `{label}` logs to nom"))?;
+  }
+  drop(nom_stdin);
+  if let Some(mut nom_child) = nom_child {
+    let nom_status = nom_child
+      .wait()
+      .context("Failed to wait for `nom` log process")?;
+    if !nom_status.success() {
+      errors.push(format!("nom failed with {nom_status}"));
+    }
+  }
+  if errors.is_empty() {
+    Ok(())
   } else {
-    format!("'{}'", arg.replace('\'', "'\\''"))
+    Err(anyhow!("{label} command failed: {}", errors.join(", ")))
   }
 }
 

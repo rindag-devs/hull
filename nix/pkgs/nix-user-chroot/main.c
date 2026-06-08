@@ -104,6 +104,19 @@ static void ensure_dir_recursive(const char *path, mode_t mode) {
   if (mkdir(buffer, mode) < 0 && errno != EEXIST) die_errno("mkdir");
 }
 
+static int safe_relative_path(const char *path) {
+  const char *start = path;
+  if (path[0] == '/' || path[0] == '\0') return 0;
+  while (*start) {
+    const char *end = strchr(start, '/');
+    size_t len = end ? (size_t)(end - start) : strlen(start);
+    if (len == 2 && start[0] == '.' && start[1] == '.') return 0;
+    if (!end) break;
+    start = end + 1;
+  }
+  return 1;
+}
+
 static void remove_tree(const char *path) {
   DIR *dir = opendir(path);
   struct dirent *entry;
@@ -133,11 +146,14 @@ static void remove_tree(const char *path) {
 static void add_path(const char *src, const char *dest, const char *rootdir) {
   struct stat st;
   char target[PATH_MAX];
+  int written;
+  if (!safe_relative_path(dest)) die_message("mount destination must be a safe relative path");
   if (stat(src, &st) < 0) {
     fprintf(stderr, "Cannot stat %s: %s\n", src, strerror(errno));
     return;
   }
-  snprintf(target, sizeof(target), "%s/%s", rootdir, dest);
+  written = snprintf(target, sizeof(target), "%s/%s", rootdir, dest);
+  if (written < 0 || (size_t)written >= sizeof(target)) die_message("mount destination too long");
   if (S_ISDIR(st.st_mode)) {
     ensure_dir_recursive(target, st.st_mode & 0777);
     if (mount(src, target, "none", MS_BIND | MS_REC, NULL) < 0) {

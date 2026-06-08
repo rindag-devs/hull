@@ -121,7 +121,7 @@ in
       cp ${problem.checker.wasm} "$interactor_wasm"
       cp "$HULL_INPUT_PATH" "$input_path"
 
-      hull run-wasm "$interactor_wasm" \
+      timeout ${toString (realTimeLimitSeconds * 2)}s hull run-wasm "$interactor_wasm" \
         --stdin-path="$sol_to_intr" \
         --stdout-path="$intr_to_sol" \
         --stderr-path="$interactor_json" \
@@ -158,9 +158,10 @@ in
 
       if [ "$sol_exit_code" -eq 124 ] || [ "$sol_exit_code" -eq 137 ]; then
         printf '%s\n' "$TLE_RUN_JSON" > "$run_json"
+        kill -9 $intr_pid || true
+      else
+        wait $intr_pid || true
       fi
-
-      wait $intr_pid || true
 
       run_status=$(jq -r .status "$run_json")
 

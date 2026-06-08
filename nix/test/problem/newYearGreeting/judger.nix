@@ -1,7 +1,6 @@
 {
   hull,
   config,
-  pkgs,
   ...
 }:
 
@@ -14,13 +13,6 @@
         inherit (config) languages includes;
         src = transformSrc;
         name = "${config.name}-transform";
-        extraObjects = [ ];
-      };
-      compileExecutableScript = hull.compile.executableMatchScript {
-        languages = config.languages;
-        srcExpr = ''"$HULL_SOLUTION_SRC"'';
-        outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
-        includes = config.includes;
         extraObjects = [ ];
       };
     in

@@ -13,8 +13,9 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use anyhow::{Ok, Result, bail};
+use anyhow::{Context, Ok, Result, bail};
 use clap::Parser;
+use std::path::{Path, PathBuf};
 use wasi_common::{
   WasiFile,
   pipe::{ReadPipe, WritePipe},
@@ -89,6 +90,13 @@ pub struct RunWasmOpts {
 }
 
 pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
+  reject_stdio_output_conflicts(run_wasm_opts)?;
+
+  let executable_path = cache_native_module(&run_wasm_opts.wasm_path)?;
+  let wasm_bytes = std::fs::read(&executable_path)?;
+
+  // Stdio paths may refer to FIFOs or other special files; opening one side
+  // sequentially can block forever before the matching side is opened.
   let (stdin_res, stdout_res, stderr_res) = std::thread::scope(|s| {
     let stdin_handle = s.spawn(|| {
       if let Some(path) = &run_wasm_opts.stdin_path {
@@ -154,9 +162,6 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
     Box::new(WritePipe::new(std::io::sink()))
   };
 
-  let executable_path = cache_native_module(&run_wasm_opts.wasm_path)?;
-  let wasm_bytes = std::fs::read(&executable_path)?;
-
   let judge_dir = JudgeDir::new(&run_wasm_opts.read_files, &run_wasm_opts.write_files)?;
 
   let result = runner::run(
@@ -181,4 +186,63 @@ pub fn run(run_wasm_opts: &RunWasmOpts) -> Result<()> {
   }
 
   Ok(())
+}
+
+fn reject_stdio_output_conflicts(opts: &RunWasmOpts) -> Result<()> {
+  let wasm_path = comparable_regular_file_path(&opts.wasm_path)?
+    .with_context(|| format!("WASM path {} is not a regular file", opts.wasm_path))?;
+  let stdin_path = opts
+    .stdin_path
+    .as_deref()
+    .map(comparable_regular_file_path)
+    .transpose()?
+    .flatten();
+
+  for output_path in [&opts.stdout_path, &opts.stderr_path].into_iter().flatten() {
+    let Some(output_path) = comparable_regular_file_path(output_path)? else {
+      continue;
+    };
+    if output_path == wasm_path || stdin_path.as_ref() == Some(&output_path) {
+      panic!("stdio output path must not equal the wasm path or stdin path");
+    }
+  }
+  Ok(())
+}
+
+fn comparable_regular_file_path(path: &str) -> Result<Option<PathBuf>> {
+  let path = Path::new(path);
+  if path.exists() {
+    if !path.is_file() {
+      return Ok(None);
+    }
+    return path
+      .canonicalize()
+      .map(Some)
+      .with_context(|| format!("Failed to canonicalize {}", path.display()));
+  }
+  let absolute_path = if path.is_absolute() {
+    path.to_path_buf()
+  } else {
+    std::env::current_dir()
+      .context("Failed to determine current directory")?
+      .join(path)
+  };
+  let parent = absolute_path
+    .parent()
+    .with_context(|| format!("Path {} has no parent", absolute_path.display()))?;
+  Ok(Some(
+    parent
+      .canonicalize()
+      .with_context(|| {
+        format!(
+          "Failed to canonicalize parent of {}",
+          absolute_path.display()
+        )
+      })?
+      .join(
+        absolute_path
+          .file_name()
+          .with_context(|| format!("Path {} has no file name", absolute_path.display()))?,
+      ),
+  ))
 }

@@ -9,8 +9,10 @@ int getbit() {
 }
 unsigned a, b;
 void qaq() {
-  a = ((rand() & 32767) << 30) + ((rand() & 32767) << 15) + (rand() & 32767);
-  b = ((rand() & 32767) << 30) + ((rand() & 32767) << 15) + (rand() & 32767);
+  a = ((static_cast<unsigned>(rand() & 32767)) << 30) +
+      ((static_cast<unsigned>(rand() & 32767)) << 15) + (rand() & 32767);
+  b = ((static_cast<unsigned>(rand() & 32767)) << 30) +
+      ((static_cast<unsigned>(rand() & 32767)) << 15) + (rand() & 32767);
 }
 unsigned qwq(unsigned x) { return (static_cast<__int128>(a) * x + b) % 4294967311LL; }
 void print(int x, int len) {

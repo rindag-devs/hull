@@ -190,13 +190,11 @@
 
     tickLimit = lib.mkOption {
       type = lib.types.ints.unsigned;
-      default = null;
       description = "The default execution time limit in ticks for solutions. Can be overridden per test case.";
     };
 
     memoryLimit = lib.mkOption {
       type = lib.types.ints.unsigned;
-      default = null;
       description = "The default memory limit in bytes for solutions. Can be overridden per test case.";
     };
 

@@ -174,11 +174,7 @@ fn evaluate_problem(
   source_path: &Path,
   hull_language: &str,
 ) -> Result<JudgeCliReport> {
-  let workspace = RuntimeWorkspace::new(std::env::temp_dir().join(format!(
-    "hull-cnoi-self-eval-{}-{}",
-    problem.name,
-    std::process::id()
-  )))?;
+  let workspace = RuntimeWorkspace::new()?;
 
   let local_source_path = workspace.root().join("participant-src").join(format!(
     "{}.{}",

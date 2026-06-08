@@ -15,6 +15,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 use anyhow::{Context, Result};
 use wasi_common::{
@@ -23,7 +24,7 @@ use wasi_common::{
 };
 
 use crate::{
-  runner::{self, RunStatus},
+  runner::{self, LimitedBuffer, RunStatus},
   runtime::artifact::cache_native_module,
 };
 
@@ -44,6 +45,7 @@ pub fn run_wasm_for_stdio(
   arguments: &[String],
   tick_limit: u64,
   memory_limit: u64,
+  output_limit: usize,
   read_files: &[(PathBuf, String)],
 ) -> Result<WasmRunResult> {
   let executable_path = cache_native_module(wasm_path)?;
@@ -59,10 +61,10 @@ pub fn run_wasm_for_stdio(
     None => Box::new(ReadPipe::new(std::io::empty())),
   };
 
-  let stdout_pipe = WritePipe::new_in_memory();
-  let stderr_pipe = WritePipe::new_in_memory();
-  let stdout_capture = stdout_pipe.clone();
-  let stderr_capture = stderr_pipe.clone();
+  let stdout_capture = Arc::new(RwLock::new(LimitedBuffer::new(output_limit)));
+  let stderr_capture = Arc::new(RwLock::new(LimitedBuffer::new(output_limit)));
+  let stdout_pipe = WritePipe::from_shared(stdout_capture.clone());
+  let stderr_pipe = WritePipe::from_shared(stderr_capture.clone());
 
   let preopened_dir = if read_files.is_empty() {
     None
@@ -85,13 +87,15 @@ pub fn run_wasm_for_stdio(
   );
 
   let stdout = stdout_capture
-    .try_into_inner()
+    .read()
     .map_err(|_| anyhow::anyhow!("Failed to capture stdout buffer"))?
-    .into_inner();
+    .as_ref()
+    .to_vec();
   let stderr = stderr_capture
-    .try_into_inner()
+    .read()
     .map_err(|_| anyhow::anyhow!("Failed to capture stderr buffer"))?
-    .into_inner();
+    .as_ref()
+    .to_vec();
 
   Ok(WasmRunResult {
     status: result.status,
