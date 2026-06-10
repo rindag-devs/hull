@@ -209,10 +209,14 @@ pub fn build_contest(
             .as_ref()
             .map(|handle| handle.item(spec.name.clone()));
           let workspace = RuntimeWorkspace::new()?;
+          let problem_progress = options
+            .progress
+            .child_scope(contest)
+            .child_scope(&spec.name);
           let runtime = analyze_problem(
             spec,
             &workspace,
-            RuntimeOptions::new(Some(1)).with_progress(options.progress.child_scope(&spec.name)),
+            RuntimeOptions::new(Some(1)).with_progress(problem_progress),
           )
           .with_context(|| {
             format!(

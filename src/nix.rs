@@ -378,7 +378,7 @@ pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()
   }
 
   let with_nom = commands.iter().any(|command| command.with_nom);
-  let _suspend = with_nom.then(interactive::suspend_live_render);
+  let _suspend = interactive::suspend_live_render();
   let mut nom_child = if with_nom {
     Some(
       Command::new("nom")
@@ -549,6 +549,7 @@ fn run_nix_command(
     }
   } else {
     interactive::log_line(&format!("Running {label}..."));
+    let _suspend = interactive::suspend_live_render();
     let mut child = command
       .stdin(if stdin_input.is_some() {
         Stdio::piped()

@@ -16,12 +16,22 @@
 use std::collections::BTreeMap;
 use std::io::{IsTerminal, Write, stderr};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
-use std::thread;
 use std::time::{Duration, Instant};
 
-use console::Style;
+use ratatui::backend::{Backend, CrosstermBackend};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Cell, LineGauge, Paragraph, Row, Table, Widget};
+use ratatui::{Terminal, TerminalOptions, Viewport};
 
 use crate::format::{format_duration_ms, format_size, format_tick, to_title_case};
+
+const MIN_VIEWPORT_HEIGHT: u16 = 12;
+const MAX_VIEWPORT_HEIGHT: u16 = 28;
+const MAX_PANEL_ITEMS: usize = 8;
+
+type InlineTerminal = Terminal<CrosstermBackend<std::io::Stderr>>;
 
 pub struct LogWriter;
 
@@ -132,14 +142,16 @@ pub struct TaskHandle {
   task_id: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct InteractiveState {
   enabled: bool,
+  suspended: bool,
   title_label: String,
   title_name: Option<String>,
   phase: Option<PhaseState>,
   roots: BTreeMap<String, TreeNode>,
-  last_rendered_lines: usize,
+  terminal: Option<InlineTerminal>,
+  viewport_height: u16,
 }
 
 #[derive(Clone, Debug)]
@@ -168,9 +180,62 @@ enum NodeKind {
   Item,
 }
 
+#[derive(Clone)]
+struct Dashboard {
+  title: String,
+  summary: String,
+  total: SummaryCounts,
+  viewport_height: u16,
+  headers: [&'static str; 6],
+  rows: Vec<DashboardRow>,
+  active: Vec<DashboardItem>,
+  failures: Vec<DashboardItem>,
+}
+
+#[derive(Clone)]
+struct DashboardRow {
+  cells: [String; 6],
+  style: RowStyle,
+}
+
+#[derive(Clone)]
+struct DashboardItem {
+  label: String,
+  detail: String,
+}
+
+#[derive(Clone, Copy)]
+enum RowStyle {
+  Passed,
+  Running,
+  Failed,
+  Pending,
+}
+
+#[derive(Clone, Copy, Default)]
+struct SummaryCounts {
+  done: usize,
+  running: usize,
+  pending: usize,
+  failed: usize,
+}
+
+impl std::ops::Add for SummaryCounts {
+  type Output = Self;
+
+  fn add(self, rhs: Self) -> Self::Output {
+    Self {
+      done: self.done + rhs.done,
+      running: self.running + rhs.running,
+      pending: self.pending + rhs.pending,
+      failed: self.failed + rhs.failed,
+    }
+  }
+}
+
 type OutputLock = Arc<Mutex<()>>;
 type ActiveProgress = Arc<Mutex<Option<Weak<Mutex<InteractiveState>>>>>;
-type SuspendState = Arc<Mutex<bool>>;
+type SuspendState = Arc<Mutex<usize>>;
 
 static SETTINGS: OnceLock<InteractiveSettings> = OnceLock::new();
 static OUTPUT_LOCK: OnceLock<OutputLock> = OnceLock::new();
@@ -181,7 +246,7 @@ pub fn init(settings: InteractiveSettings) {
   let _ = SETTINGS.set(settings);
   let _ = OUTPUT_LOCK.set(Arc::new(Mutex::new(())));
   let _ = ACTIVE_PROGRESS.set(Arc::new(Mutex::new(None)));
-  let _ = LIVE_RENDER_SUSPENDED.set(Arc::new(Mutex::new(false)));
+  let _ = LIVE_RENDER_SUSPENDED.set(Arc::new(Mutex::new(0)));
 }
 
 pub fn current_settings() -> InteractiveSettings {
@@ -190,33 +255,58 @@ pub fn current_settings() -> InteractiveSettings {
 
 pub fn log_line(message: &str) {
   with_output_lock(|| {
-    clear_active_render();
+    if let Some(inner) = active_progress() {
+      let mut state = inner.lock().unwrap();
+      if state.enabled && !state.suspended {
+        insert_log_line(&mut state, message);
+        draw_locked(&mut state);
+        return;
+      }
+    }
     eprintln!("{message}");
-    redraw_active_render_locked();
   });
 }
 
 pub fn suspend_live_render() -> LiveRenderSuspendGuard {
   let suspended = LIVE_RENDER_SUSPENDED
-    .get_or_init(|| Arc::new(Mutex::new(false)))
+    .get_or_init(|| Arc::new(Mutex::new(0)))
     .clone();
-  {
+  let first_suspend = {
     let mut guard = suspended.lock().unwrap();
-    assert!(!*guard, "live render is already suspended");
-    *guard = true;
+    let first_suspend = *guard == 0;
+    *guard += 1;
+    first_suspend
+  };
+  if first_suspend {
+    with_output_lock(|| {
+      if let Some(inner) = active_progress() {
+        let mut state = inner.lock().unwrap();
+        clear_dashboard(&mut state);
+        state.suspended = true;
+      }
+    });
   }
-  with_output_lock(detach_active_render);
   LiveRenderSuspendGuard { active: true }
 }
 
 pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
+  let enabled = current_settings().enabled();
+  let (terminal, viewport_height) = if enabled {
+    create_terminal()
+      .map(|(terminal, height)| (Some(terminal), height))
+      .unwrap_or((None, MIN_VIEWPORT_HEIGHT))
+  } else {
+    (None, MIN_VIEWPORT_HEIGHT)
+  };
   let inner = Arc::new(Mutex::new(InteractiveState {
-    enabled: current_settings().enabled(),
+    enabled,
+    suspended: false,
     title_label: "Problem".to_string(),
     title_name: Some(name.to_string()),
     phase: None,
     roots: BTreeMap::new(),
-    last_rendered_lines: 0,
+    terminal,
+    viewport_height,
   }));
 
   ACTIVE_PROGRESS
@@ -225,10 +315,7 @@ pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
     .unwrap()
     .replace(Arc::downgrade(&inner));
 
-  if current_settings().enabled() {
-    spawn_refresh_thread(&inner);
-  }
-
+  render(&inner);
   ProblemProgressHandle { inner, scope: None }
 }
 
@@ -237,11 +324,13 @@ impl ProblemProgressHandle {
     Self {
       inner: Arc::new(Mutex::new(InteractiveState {
         enabled: false,
+        suspended: false,
         title_label: "Dummy".to_string(),
         title_name: None,
         phase: None,
         roots: BTreeMap::new(),
-        last_rendered_lines: 0,
+        terminal: None,
+        viewport_height: MIN_VIEWPORT_HEIGHT,
       })),
       scope: None,
     }
@@ -258,7 +347,6 @@ impl ProblemProgressHandle {
       state.title_name = Some(name.into());
       state.phase = None;
       state.roots.clear();
-      state.last_rendered_lines = 0;
     }
     render(&self.inner);
   }
@@ -266,7 +354,7 @@ impl ProblemProgressHandle {
   pub fn child_scope(&self, name: impl Into<String>) -> Self {
     Self {
       inner: self.inner.clone(),
-      scope: Some(name.into()),
+      scope: Some(scoped_id(self.scope.as_deref(), &name.into())),
     }
   }
 
@@ -280,12 +368,6 @@ impl ProblemProgressHandle {
       });
     }
     render(&self.inner);
-    if self.enabled() {
-      with_output_lock(|| {
-        redraw_active_render_locked();
-        detach_active_render();
-      });
-    }
     PhaseGuard {
       inner: self.inner.clone(),
       active: true,
@@ -345,6 +427,17 @@ impl ProblemProgressHandle {
   }
 }
 
+impl Drop for ProblemProgressHandle {
+  fn drop(&mut self) {
+    if self.scope.is_some() || Arc::strong_count(&self.inner) != 1 {
+      return;
+    }
+    with_output_lock(|| {
+      clear_dashboard(&mut self.inner.lock().unwrap());
+    });
+  }
+}
+
 impl Drop for PhaseGuard {
   fn drop(&mut self) {
     if !self.active {
@@ -365,11 +458,28 @@ impl Drop for LiveRenderSuspendGuard {
     if !self.active {
       return;
     }
-    *LIVE_RENDER_SUSPENDED
-      .get_or_init(|| Arc::new(Mutex::new(false)))
-      .lock()
-      .unwrap() = false;
-    with_output_lock(redraw_active_render_locked);
+    let should_resume = {
+      let mut guard = LIVE_RENDER_SUSPENDED
+        .get_or_init(|| Arc::new(Mutex::new(0)))
+        .lock()
+        .unwrap();
+      *guard = guard.saturating_sub(1);
+      *guard == 0
+    };
+    if !should_resume {
+      self.active = false;
+      return;
+    }
+    with_output_lock(|| {
+      if let Some(inner) = active_progress() {
+        {
+          let mut state = inner.lock().unwrap();
+          clear_dashboard(&mut state);
+          state.suspended = false;
+        }
+        render_locked(&inner);
+      }
+    });
     self.active = false;
   }
 }
@@ -444,9 +554,40 @@ impl Drop for ItemGuard {
   }
 }
 
+fn create_terminal() -> Option<(InlineTerminal, u16)> {
+  let backend = CrosstermBackend::new(stderr());
+  let height = backend
+    .size()
+    .map(|size| viewport_height_for_terminal_rows(size.height))
+    .unwrap_or(MIN_VIEWPORT_HEIGHT);
+  Terminal::with_options(
+    backend,
+    TerminalOptions {
+      viewport: Viewport::Inline(height),
+    },
+  )
+  .map(|terminal| (terminal, height))
+  .ok()
+}
+
+fn viewport_height_for_terminal_rows(rows: u16) -> u16 {
+  ((rows as u32 * 35).div_ceil(100) as u16).clamp(MIN_VIEWPORT_HEIGHT, MAX_VIEWPORT_HEIGHT)
+}
+
+fn insert_log_line(state: &mut InteractiveState, message: &str) {
+  let Some(terminal) = state.terminal.as_mut() else {
+    eprintln!("{message}");
+    return;
+  };
+  let text = message.to_string();
+  let _ = terminal.insert_before(1, |buf| {
+    Paragraph::new(Line::raw(text)).render(buf.area, buf);
+  });
+}
+
 fn insert_group(state: &mut InteractiveState, scope: Option<&str>, node: TreeNode) {
   if let Some(scope) = scope
-    && let Some(parent_item) = find_item_mut_by_label(&mut state.roots, scope)
+    && let Some(parent_item) = find_node_mut_by_id(&mut state.roots, scope)
   {
     parent_item.children.insert(node.id.clone(), node);
     return;
@@ -486,21 +627,6 @@ fn find_node_mut_by_id<'a>(
   None
 }
 
-fn find_item_mut_by_label<'a>(
-  roots: &'a mut BTreeMap<String, TreeNode>,
-  label: &str,
-) -> Option<&'a mut TreeNode> {
-  for node in roots.values_mut() {
-    if node.kind == NodeKind::Item && node.label == label {
-      return Some(node);
-    }
-    if let Some(found) = find_item_mut_by_label(&mut node.children, label) {
-      return Some(found);
-    }
-  }
-  None
-}
-
 fn scoped_id(scope: Option<&str>, name: &str) -> String {
   match scope {
     Some(scope) => format!("{scope}/{name}"),
@@ -514,150 +640,538 @@ fn render(inner: &Arc<Mutex<InteractiveState>>) {
 
 fn render_locked(inner: &Arc<Mutex<InteractiveState>>) {
   let mut state = inner.lock().unwrap();
-  if !state.enabled {
+  draw_locked(&mut state);
+}
+
+fn draw_locked(state: &mut InteractiveState) {
+  if !state.enabled || state.suspended {
     return;
   }
-
-  let lines = render_lines(&state);
-  let mut out = stderr();
-  clear_previous_lines(&mut out, state.last_rendered_lines);
-  for (index, line) in lines.iter().enumerate() {
-    if index > 0 {
-      let _ = writeln!(out);
-    }
-    let _ = write!(out, "{line}");
-  }
-  if !lines.is_empty() {
-    let _ = writeln!(out);
-  }
-  let _ = out.flush();
-  state.last_rendered_lines = if lines.is_empty() { 0 } else { lines.len() + 1 };
+  let dashboard = project_dashboard(state);
+  update_terminal_for_resize(state);
+  let Some(terminal) = state.terminal.as_mut() else {
+    return;
+  };
+  let _ = terminal.draw(|frame| {
+    render_dashboard(frame.area(), frame.buffer_mut(), &dashboard);
+  });
 }
 
-fn render_lines(state: &InteractiveState) -> Vec<String> {
-  let mut lines = Vec::new();
+fn update_terminal_for_resize(state: &mut InteractiveState) {
+  let Some(terminal) = state.terminal.as_mut() else {
+    return;
+  };
+  let Ok(size) = terminal.size() else {
+    return;
+  };
+  let height = viewport_height_for_terminal_rows(size.height);
+  if height == state.viewport_height {
+    return;
+  }
+  clear_dashboard(state);
+  if let Some((terminal, height)) = create_terminal() {
+    state.terminal = Some(terminal);
+    state.viewport_height = height;
+  }
+}
 
-  if let Some(name) = &state.title_name {
-    lines.push(format!(
-      "{} {}",
-      Style::new().bold().apply_to(&state.title_label),
-      Style::new().yellow().bold().apply_to(name)
+fn render_dashboard(area: Rect, buf: &mut ratatui::buffer::Buffer, dashboard: &Dashboard) {
+  let chunks = Layout::default()
+    .direction(Direction::Vertical)
+    .constraints([
+      Constraint::Length(header_height(dashboard.viewport_height)),
+      Constraint::Min(0),
+      Constraint::Length(panel_height(dashboard.viewport_height)),
+    ])
+    .split(area);
+
+  render_header(chunks[0], buf, dashboard);
+  render_rows(chunks[1], buf, dashboard);
+  render_panels(chunks[2], buf, dashboard);
+}
+
+fn render_header(area: Rect, buf: &mut ratatui::buffer::Buffer, dashboard: &Dashboard) {
+  let block = Block::default()
+    .borders(Borders::ALL)
+    .border_style(Style::default().fg(Color::DarkGray))
+    .title(Line::styled(
+      dashboard.title.clone(),
+      Style::default()
+        .fg(Color::Cyan)
+        .add_modifier(Modifier::BOLD),
+    ));
+  let inner = block.inner(area);
+  block.render(area, buf);
+
+  let chunks = Layout::default()
+    .direction(Direction::Vertical)
+    .constraints([Constraint::Length(1), Constraint::Length(1)])
+    .split(inner);
+  let progress = progress_ratio(dashboard.total);
+  Paragraph::new(Line::from(dashboard.summary.clone())).render(chunks[0], buf);
+  LineGauge::default()
+    .filled_style(gauge_style(dashboard.total))
+    .unfilled_style(Style::default().fg(Color::DarkGray))
+    .label(format!("{:.0}%", progress * 100.0))
+    .ratio(progress)
+    .render(chunks[1], buf);
+}
+
+fn render_rows(area: Rect, buf: &mut ratatui::buffer::Buffer, dashboard: &Dashboard) {
+  let row_capacity = area.height.saturating_sub(3) as usize;
+  let visible_rows = dashboard
+    .rows
+    .iter()
+    .take(row_capacity)
+    .map(|row| Row::new(styled_row_cells(row)).height(1));
+
+  let title = if dashboard.rows.len() > row_capacity {
+    format!(
+      " Progress - showing {row_capacity}/{} ",
+      dashboard.rows.len()
+    )
+  } else {
+    " Progress ".to_string()
+  };
+  Table::new(
+    visible_rows,
+    [
+      Constraint::Percentage(22),
+      Constraint::Percentage(14),
+      Constraint::Percentage(20),
+      Constraint::Percentage(12),
+      Constraint::Percentage(14),
+      Constraint::Percentage(18),
+    ],
+  )
+  .header(
+    Row::new(dashboard.headers)
+      .style(Style::default().add_modifier(Modifier::BOLD))
+      .height(1),
+  )
+  .block(
+    Block::default()
+      .borders(Borders::ALL)
+      .border_style(Style::default().fg(Color::DarkGray))
+      .title(Line::styled(
+        title,
+        Style::default()
+          .fg(Color::Cyan)
+          .add_modifier(Modifier::BOLD),
+      )),
+  )
+  .render(area, buf);
+}
+
+fn render_panels(area: Rect, buf: &mut ratatui::buffer::Buffer, dashboard: &Dashboard) {
+  let chunks = Layout::default()
+    .direction(Direction::Horizontal)
+    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+    .split(area);
+  render_item_panel(chunks[0], buf, " Active ", &dashboard.active, Color::Yellow);
+  render_item_panel(
+    chunks[1],
+    buf,
+    " Failures ",
+    &dashboard.failures,
+    Color::Red,
+  );
+}
+
+fn render_item_panel(
+  area: Rect,
+  buf: &mut ratatui::buffer::Buffer,
+  title: &str,
+  items: &[DashboardItem],
+  accent: Color,
+) {
+  let capacity = (area.height.saturating_sub(2) as usize).min(MAX_PANEL_ITEMS);
+  let mut lines = if items.is_empty() {
+    vec![Line::styled("none", Style::default().fg(Color::DarkGray))]
+  } else {
+    items
+      .iter()
+      .take(capacity)
+      .map(|item| {
+        Line::from(vec![
+          Span::raw(item.label.clone()),
+          Span::raw("  "),
+          Span::styled(item.detail.clone(), Style::default().fg(Color::Gray)),
+        ])
+      })
+      .collect::<Vec<_>>()
+  };
+  if items.len() > capacity && capacity > 0 {
+    let hidden = items.len() - capacity + 1;
+    if lines.len() == capacity {
+      lines.pop();
+    }
+    lines.push(Line::styled(
+      format!("+{hidden} more"),
+      Style::default().fg(Color::DarkGray),
     ));
   }
+  Paragraph::new(lines)
+    .block(
+      Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(Line::styled(
+          title,
+          Style::default().fg(accent).add_modifier(Modifier::BOLD),
+        )),
+    )
+    .render(area, buf);
+}
 
-  if let Some(phase) = &state.phase {
-    lines.push(format!(
-      "{} {} {}",
-      Style::new().cyan().apply_to("├─"),
-      Style::new().bold().apply_to(phase_label(phase.kind)),
-      Style::new().dim().apply_to(format!(
-        "{} ({})",
+fn panel_height(total_height: u16) -> u16 {
+  if total_height >= 22 {
+    8
+  } else if total_height >= 16 {
+    6
+  } else {
+    4
+  }
+}
+
+fn header_height(total_height: u16) -> u16 {
+  let _ = total_height;
+  4
+}
+
+fn clear_dashboard(state: &mut InteractiveState) {
+  if let Some(terminal) = state.terminal.as_mut() {
+    let _ = terminal.clear();
+  }
+}
+
+fn row_style(style: RowStyle) -> Style {
+  match style {
+    RowStyle::Passed => Style::default().fg(Color::Green),
+    RowStyle::Running => Style::default().fg(Color::Yellow),
+    RowStyle::Failed => Style::default().fg(Color::Red),
+    RowStyle::Pending => Style::default().fg(Color::Gray),
+  }
+}
+
+fn styled_row_cells(row: &DashboardRow) -> Vec<Cell<'static>> {
+  row
+    .cells
+    .iter()
+    .enumerate()
+    .map(|(index, cell)| {
+      let style = match index {
+        0 | 1 | 2 | 3 => Style::default(),
+        4 | 5 => row_style(row.style),
+        _ => Style::default(),
+      };
+      Cell::from(cell.clone()).style(style)
+    })
+    .collect()
+}
+
+fn gauge_style(total: SummaryCounts) -> Style {
+  if total.failed > 0 {
+    Style::default().fg(Color::Red)
+  } else if total.running > 0 {
+    Style::default().fg(Color::Yellow)
+  } else {
+    Style::default().fg(Color::Green)
+  }
+}
+
+fn progress_ratio(summary: SummaryCounts) -> f64 {
+  let total = summary.done + summary.running + summary.pending;
+  if total == 0 {
+    1.0
+  } else {
+    summary.done as f64 / total as f64
+  }
+}
+
+fn project_dashboard(state: &InteractiveState) -> Dashboard {
+  if state.title_label == "Contest" {
+    project_contest_dashboard(state)
+  } else {
+    project_problem_dashboard(state)
+  }
+}
+
+fn project_contest_dashboard(state: &InteractiveState) -> Dashboard {
+  let nodes = state.roots.values().collect::<Vec<_>>();
+  let problems = nodes
+    .iter()
+    .find(|node| matches!(node.kind, NodeKind::Group(TaskKind::Problem)))
+    .map(|node| node.children.values().collect::<Vec<_>>())
+    .unwrap_or_default();
+  let problem_counts = problems
+    .iter()
+    .fold(SummaryCounts::default(), |mut acc, problem| {
+      match row_style_for_counts(summary_counts(problem)) {
+        RowStyle::Failed => acc.failed += 1,
+        RowStyle::Running => acc.running += 1,
+        RowStyle::Pending => acc.pending += 1,
+        RowStyle::Passed => acc.done += 1,
+      }
+      acc
+    });
+  let total = problems
+    .iter()
+    .fold(SummaryCounts::default(), |acc, problem| {
+      acc + summary_counts(problem)
+    });
+  let rows = problems
+    .iter()
+    .map(|problem| {
+      let summary = summary_counts(problem);
+      DashboardRow {
+        cells: [
+          problem.label.clone(),
+          problem_phase(summary),
+          progress_text(summary),
+          solution_cell(problem),
+          active_cell(problem),
+          status_cell(summary),
+        ],
+        style: row_style_for_counts(summary),
+      }
+    })
+    .collect::<Vec<_>>();
+  Dashboard {
+    title: title_line(state),
+    summary: format!(
+      "problems: {}/{} | running: {} | failed: {} | pending: {}",
+      problem_counts.done,
+      problems.len(),
+      problem_counts.running,
+      problem_counts.failed,
+      problem_counts.pending
+    ),
+    total,
+    viewport_height: state.viewport_height,
+    headers: [
+      "Problem",
+      "Phase",
+      "Progress",
+      "Solutions",
+      "Active",
+      "Status",
+    ],
+    active: collect_dashboard_items(&nodes, ExecutionState::Running),
+    failures: collect_dashboard_items(&nodes, ExecutionState::Failed),
+    rows,
+  }
+}
+
+fn project_problem_dashboard(state: &InteractiveState) -> Dashboard {
+  let nodes = state.roots.values().collect::<Vec<_>>();
+  let solution_nodes = nodes
+    .iter()
+    .filter(|node| matches!(node.kind, NodeKind::Group(TaskKind::Solution)))
+    .copied()
+    .collect::<Vec<_>>();
+  let table_nodes = if solution_nodes.is_empty() {
+    nodes.clone()
+  } else {
+    solution_nodes
+  };
+  let total = nodes.iter().fold(SummaryCounts::default(), |acc, node| {
+    acc + summary_counts(node)
+  });
+  let rows = table_nodes
+    .iter()
+    .map(|node| {
+      let summary = summary_counts(node);
+      DashboardRow {
+        cells: [
+          node.label.clone(),
+          task_name(node),
+          progress_text(summary),
+          score_cell(node),
+          active_cell(node),
+          status_cell(summary),
+        ],
+        style: row_style_for_counts(summary),
+      }
+    })
+    .collect::<Vec<_>>();
+  Dashboard {
+    title: title_line(state),
+    summary: format!(
+      "cases: {}/{} done | running: {} | failed: {} | pending: {}",
+      total.done,
+      total.done + total.running + total.pending,
+      total.running,
+      total.failed,
+      total.pending
+    ),
+    total,
+    viewport_height: state.viewport_height,
+    headers: ["Task", "Kind", "Progress", "Score", "Active", "Status"],
+    active: collect_dashboard_items(&nodes, ExecutionState::Running),
+    failures: collect_dashboard_items(&nodes, ExecutionState::Failed),
+    rows,
+  }
+}
+
+fn title_line(state: &InteractiveState) -> String {
+  let name = state.title_name.as_deref().unwrap_or("-");
+  let phase = state
+    .phase
+    .as_ref()
+    .map(|phase| {
+      format!(
+        "{} | {} | {}",
+        phase_label(phase.kind),
         phase.label,
         format_duration_ms(phase.started_at.elapsed())
-      ))
-    ));
-  }
-
-  let roots = state.roots.values().collect::<Vec<_>>();
-  for (index, node) in roots.iter().enumerate() {
-    let is_last = index + 1 == roots.len();
-    lines.extend(render_node_tree(node, is_last, ""));
-  }
-
-  lines
-}
-
-fn render_node_tree(node: &TreeNode, is_last: bool, prefix: &str) -> Vec<String> {
-  let branch = if is_last { "└─" } else { "├─" };
-  let mut lines = vec![format!(
-    "{}{} {}",
-    prefix,
-    Style::new().cyan().apply_to(branch),
-    render_node_summary(node)
-  )];
-
-  let child_prefix = format!("{}{}", prefix, if is_last { "  " } else { "│ " });
-  let visible_children = visible_children(node);
-  for (index, child) in visible_children.iter().enumerate() {
-    let child_is_last = index + 1 == visible_children.len();
-    lines.extend(render_node_tree(child, child_is_last, &child_prefix));
-  }
-
-  if should_show_pending_suffix(node, visible_children.len()) {
-    lines.push(format!(
-      "{}{} {}",
-      child_prefix,
-      Style::new().cyan().apply_to("└─"),
-      Style::new().dim().apply_to(format!(
-        "{} more pending",
-        hidden_pending_count(node, visible_children.len())
-      ))
-    ));
-  }
-
-  lines
-}
-
-fn render_node_summary(node: &TreeNode) -> String {
-  match node.kind {
-    NodeKind::Group(kind) => {
-      let summary = summary_counts(node);
-      let mut text = format!(
-        "{} {} {}",
-        Style::new().bold().apply_to(task_label(kind)),
-        Style::new().yellow().bold().apply_to(&node.label),
-        render_counter(
-          summary.done,
-          summary.running,
-          summary.pending,
-          summary.failed
-        )
-      );
-      if let Some(score) = node.score {
-        text.push(' ');
-        text.push_str(
-          &Style::new()
-            .green()
-            .apply_to(format!("{score:.3} / 1.000 pts"))
-            .to_string(),
-        );
-      }
-      text
-    }
-    NodeKind::Item => render_item_summary(node),
-  }
-}
-
-fn render_item_summary(node: &TreeNode) -> String {
-  if node.children.is_empty() {
-    let marker = match node.state {
-      ExecutionState::Pending => Style::new().dim().apply_to("P").to_string(),
-      ExecutionState::Running => Style::new().blue().bold().apply_to("R").to_string(),
-      ExecutionState::Passed => Style::new().green().bold().apply_to("D").to_string(),
-      ExecutionState::Failed => Style::new().red().bold().apply_to("D").to_string(),
-    };
-    let name = Style::new().yellow().apply_to(&node.label).to_string();
-    let status = status_text(node);
-    let details = detail_parts(node);
-    if details.is_empty() {
-      format!("[{marker}] {name} {status}")
-    } else {
-      format!("[{marker}] {name} {status} - {}", details.join(" - "))
-    }
-  } else {
-    let summary = summary_counts(node);
-    format!(
-      "{} {} {}",
-      Style::new().bold().apply_to("Problem"),
-      Style::new().yellow().bold().apply_to(&node.label),
-      render_counter(
-        summary.done,
-        summary.running,
-        summary.pending,
-        summary.failed
       )
-    )
+    })
+    .unwrap_or_else(|| "Idle".to_string());
+  format!(" Hull | {} {} | {} ", state.title_label, name, phase)
+}
+
+fn problem_phase(summary: SummaryCounts) -> String {
+  if summary.failed > 0 {
+    "failed".to_string()
+  } else if summary.running > 0 {
+    "running".to_string()
+  } else if summary.pending > 0 {
+    "pending".to_string()
+  } else {
+    "done".to_string()
   }
+}
+
+fn progress_text(summary: SummaryCounts) -> String {
+  let total = summary.done + summary.running + summary.pending;
+  if total == 0 {
+    return "0/0".to_string();
+  }
+  let percent = summary.done * 100 / total;
+  format!("{}/{} | {}%", summary.done, total, percent)
+}
+
+fn solution_cell(node: &TreeNode) -> String {
+  let mut done = 0;
+  let mut total = 0;
+  for child in node.children.values() {
+    if matches!(child.kind, NodeKind::Group(TaskKind::Solution)) {
+      let summary = summary_counts(child);
+      total += 1;
+      if summary.pending == 0 && summary.running == 0 && summary.failed == 0 {
+        done += 1;
+      }
+    }
+  }
+  if total == 0 {
+    "-".to_string()
+  } else {
+    format!("{done}/{total}")
+  }
+}
+
+fn status_cell(summary: SummaryCounts) -> String {
+  if summary.failed > 0 {
+    format!("failed {}", summary.failed)
+  } else if summary.running > 0 {
+    format!("running {}", summary.running)
+  } else if summary.pending > 0 {
+    format!("pending {}", summary.pending)
+  } else {
+    "ok".to_string()
+  }
+}
+
+fn active_cell(node: &TreeNode) -> String {
+  let summary = summary_counts(node);
+  if summary.failed > 0 {
+    format!("{} failed", summary.failed)
+  } else if summary.running > 0 {
+    format!("{} active", summary.running)
+  } else {
+    "-".to_string()
+  }
+}
+
+fn row_style_for_counts(summary: SummaryCounts) -> RowStyle {
+  if summary.failed > 0 {
+    RowStyle::Failed
+  } else if summary.running > 0 {
+    RowStyle::Running
+  } else if summary.pending > 0 {
+    RowStyle::Pending
+  } else {
+    RowStyle::Passed
+  }
+}
+
+fn score_cell(node: &TreeNode) -> String {
+  node
+    .score
+    .map(|score| format!("{score:.3}"))
+    .unwrap_or_else(|| "-".to_string())
+}
+
+fn task_name(node: &TreeNode) -> String {
+  match node.kind {
+    NodeKind::Group(kind) => task_label(kind).to_string(),
+    NodeKind::Item => "item".to_string(),
+  }
+}
+
+fn collect_dashboard_items(nodes: &[&TreeNode], state: ExecutionState) -> Vec<DashboardItem> {
+  let mut items = Vec::new();
+  collect_nodes(nodes, state, &mut items);
+  items
+    .iter()
+    .map(|item| {
+      let detail = if state == ExecutionState::Running {
+        elapsed_text(item)
+      } else {
+        let detail = detail_text(item);
+        if detail.is_empty() {
+          status_text(item)
+        } else {
+          format!("{} {}", status_text(item), detail)
+        }
+      };
+      DashboardItem {
+        label: compact_id(item),
+        detail,
+      }
+    })
+    .collect()
+}
+
+fn collect_nodes<'a>(nodes: &[&'a TreeNode], state: ExecutionState, items: &mut Vec<&'a TreeNode>) {
+  for node in nodes {
+    if node.state == state && node.children.is_empty() {
+      items.push(node);
+    }
+    let children = node.children.values().collect::<Vec<_>>();
+    collect_nodes(&children, state, items);
+  }
+}
+
+fn compact_id(node: &TreeNode) -> String {
+  node
+    .id
+    .split('/')
+    .rev()
+    .take(3)
+    .collect::<Vec<_>>()
+    .into_iter()
+    .rev()
+    .collect::<Vec<_>>()
+    .join("/")
+}
+
+fn elapsed_text(node: &TreeNode) -> String {
+  node
+    .started_at
+    .map(|started| format_duration_ms(started.elapsed()))
+    .unwrap_or_default()
 }
 
 fn status_text(node: &TreeNode) -> String {
@@ -665,156 +1179,22 @@ fn status_text(node: &TreeNode) -> String {
     .report
     .status
     .as_ref()
-    .map(|status| {
-      let style = match node.state {
-        ExecutionState::Pending => Style::new().dim(),
-        ExecutionState::Running => Style::new().blue(),
-        ExecutionState::Passed => Style::new().green(),
-        ExecutionState::Failed => Style::new().red(),
-      };
-      style.apply_to(to_title_case(status)).to_string()
-    })
-    .unwrap_or_else(|| match node.state {
-      ExecutionState::Pending => Style::new().dim().apply_to("Pending").to_string(),
-      ExecutionState::Running => Style::new().blue().apply_to("Running").to_string(),
-      ExecutionState::Passed => Style::new().green().apply_to("Accepted").to_string(),
-      ExecutionState::Failed => Style::new().red().apply_to("Failed").to_string(),
-    })
+    .map(|status| to_title_case(status))
+    .unwrap_or_else(|| "Failed".to_string())
 }
 
-fn detail_parts(node: &TreeNode) -> Vec<String> {
-  let mut details = Vec::new();
-  if let Some(duration) = node
-    .report
-    .duration
-    .or_else(|| node.started_at.map(|started| started.elapsed()))
-  {
-    details.push(
-      Style::new()
-        .dim()
-        .apply_to(format_duration_ms(duration))
-        .to_string(),
-    );
-  }
-  if let Some(score) = node.report.score {
-    details.push(
-      Style::new()
-        .green()
-        .apply_to(format!("{score:.3} pts"))
-        .to_string(),
-    );
-  }
-  if let Some(tick) = node.report.tick {
-    details.push(
-      Style::new()
-        .dim()
-        .apply_to(format!("tick {}", format_tick(tick)))
-        .to_string(),
-    );
+fn detail_text(node: &TreeNode) -> String {
+  let mut parts = Vec::new();
+  if let Some(duration) = node.report.duration {
+    parts.push(format_duration_ms(duration));
   }
   if let Some(memory) = node.report.memory {
-    details.push(
-      Style::new()
-        .dim()
-        .apply_to(format!("mem {}", format_size(memory)))
-        .to_string(),
-    );
+    parts.push(format_size(memory));
   }
-  details
-}
-
-fn visible_children(node: &TreeNode) -> Vec<&TreeNode> {
-  let summary = summary_counts(node);
-  if node.kind == NodeKind::Group(TaskKind::Solution)
-    && summary.pending == 0
-    && summary.running == 0
-    && summary.failed == 0
-  {
-    return Vec::new();
+  if let Some(tick) = node.report.tick {
+    parts.push(format!("tick {}", format_tick(tick)));
   }
-  if matches!(
-    node.kind,
-    NodeKind::Group(TaskKind::Validator | TaskKind::Checker)
-  ) && summary.pending == 0
-    && summary.running == 0
-    && summary.failed == 0
-  {
-    return Vec::new();
-  }
-
-  let mut running = Vec::new();
-  let mut failed = Vec::new();
-  let mut finished = Vec::new();
-  let mut groups = Vec::new();
-
-  for child in node.children.values() {
-    if !child.children.is_empty() {
-      groups.push(child);
-      continue;
-    }
-    match child.state {
-      ExecutionState::Running => running.push(child),
-      ExecutionState::Failed => failed.push(child),
-      ExecutionState::Passed => finished.push(child),
-      ExecutionState::Pending => {}
-    }
-  }
-
-  if !groups.is_empty() {
-    groups
-  } else {
-    sort_by_recent_finish(&mut failed);
-    sort_by_recent_finish(&mut finished);
-    let mut visible = Vec::new();
-    visible.extend(running);
-    visible.extend(failed);
-    if visible.len() < 4 {
-      visible.extend(finished.into_iter().take(4 - visible.len()));
-    }
-    visible.truncate(4);
-    visible
-  }
-}
-
-fn should_show_pending_suffix(node: &TreeNode, visible_count: usize) -> bool {
-  let summary = summary_counts(node);
-  !has_group_children(node) && summary.pending > 0 && hidden_pending_count(node, visible_count) > 0
-}
-
-fn hidden_pending_count(node: &TreeNode, visible_count: usize) -> usize {
-  let pending = node
-    .children
-    .values()
-    .filter(|child| child.state == ExecutionState::Pending && child.children.is_empty())
-    .count();
-  pending.saturating_sub(visible_count.saturating_sub(visible_leaf_count(node)))
-}
-
-fn visible_leaf_count(node: &TreeNode) -> usize {
-  visible_children(node)
-    .into_iter()
-    .filter(|child| child.children.is_empty())
-    .count()
-}
-
-fn has_group_children(node: &TreeNode) -> bool {
-  node
-    .children
-    .values()
-    .any(|child| !child.children.is_empty())
-}
-
-fn sort_by_recent_finish(nodes: &mut Vec<&TreeNode>) {
-  nodes.sort_by_key(|node| node.finished_at.unwrap_or_else(Instant::now));
-  nodes.reverse();
-}
-
-#[derive(Clone, Copy)]
-struct SummaryCounts {
-  done: usize,
-  running: usize,
-  pending: usize,
-  failed: usize,
+  parts.join(" ")
 }
 
 fn summary_counts(node: &TreeNode) -> SummaryCounts {
@@ -865,25 +1245,13 @@ fn summary_counts(node: &TreeNode) -> SummaryCounts {
   )
 }
 
-fn render_counter(done: usize, running: usize, pending: usize, failed: usize) -> String {
-  let mut parts = vec![
-    format!("{} {done}", Style::new().green().apply_to("D")),
-    format!("{} {running}", Style::new().blue().apply_to("R")),
-    format!("{} {pending}", Style::new().dim().apply_to("P")),
-  ];
-  if failed > 0 {
-    parts.push(format!("{} {failed}", Style::new().red().apply_to("F")));
-  }
-  format!("[{}]", parts.join(" / "))
-}
-
 fn task_label(kind: TaskKind) -> &'static str {
   match kind {
-    TaskKind::Problem => "Problems",
-    TaskKind::Validator => "Validator tests",
-    TaskKind::Checker => "Checker tests",
-    TaskKind::Solution => "Solution",
-    TaskKind::Artifact => "Runtime artifacts",
+    TaskKind::Problem => "problem",
+    TaskKind::Validator => "validator",
+    TaskKind::Checker => "checker",
+    TaskKind::Solution => "solution",
+    TaskKind::Artifact => "artifact",
   }
 }
 
@@ -902,34 +1270,6 @@ fn with_output_lock(f: impl FnOnce()) {
   f();
 }
 
-fn clear_active_render() {
-  let Some(inner) = active_progress() else {
-    return;
-  };
-  let mut state = inner.lock().unwrap();
-  if !state.enabled || state.last_rendered_lines == 0 {
-    return;
-  }
-  let mut out = stderr();
-  clear_previous_lines(&mut out, state.last_rendered_lines);
-  let _ = out.flush();
-  state.last_rendered_lines = 0;
-}
-
-fn detach_active_render() {
-  let Some(inner) = active_progress() else {
-    return;
-  };
-  let mut state = inner.lock().unwrap();
-  state.last_rendered_lines = 0;
-}
-
-fn redraw_active_render_locked() {
-  if let Some(inner) = active_progress() {
-    render_locked(&inner);
-  }
-}
-
 fn active_progress() -> Option<Arc<Mutex<InteractiveState>>> {
   let active = ACTIVE_PROGRESS.get_or_init(|| Arc::new(Mutex::new(None)));
   let mut guard = active.lock().unwrap();
@@ -938,38 +1278,6 @@ fn active_progress() -> Option<Arc<Mutex<InteractiveState>>> {
     *guard = None;
   }
   upgraded
-}
-
-fn spawn_refresh_thread(inner: &Arc<Mutex<InteractiveState>>) {
-  let weak = Arc::downgrade(inner);
-  thread::spawn(move || {
-    loop {
-      thread::sleep(Duration::from_millis(100));
-      let Some(inner) = weak.upgrade() else {
-        break;
-      };
-      let should_refresh = {
-        let state = inner.lock().unwrap();
-        state.enabled && state.roots.values().any(has_running_nodes)
-      };
-      if should_refresh {
-        render(&inner);
-      }
-    }
-  });
-}
-
-fn has_running_nodes(node: &TreeNode) -> bool {
-  node.state == ExecutionState::Running || node.children.values().any(has_running_nodes)
-}
-
-fn clear_previous_lines(out: &mut impl Write, line_count: usize) {
-  for index in 0..line_count {
-    if index > 0 {
-      let _ = write!(out, "\x1b[1A");
-    }
-    let _ = write!(out, "\r\x1b[2K");
-  }
 }
 
 #[cfg(test)]
@@ -1047,90 +1355,6 @@ mod tests {
   }
 
   #[test]
-  fn finished_solution_collapses() {
-    let node = group(
-      TaskKind::Solution,
-      "std",
-      &[
-        leaf("a", ExecutionState::Passed),
-        leaf("b", ExecutionState::Passed),
-      ],
-    );
-
-    assert!(visible_children(&node).is_empty());
-  }
-
-  #[test]
-  fn visible_children_priority() {
-    let mut finished_a = leaf("finished-a", ExecutionState::Passed);
-    finished_a.finished_at = Some(Instant::now() - Duration::from_secs(3));
-    let mut finished_b = leaf("finished-b", ExecutionState::Passed);
-    finished_b.finished_at = Some(Instant::now() - Duration::from_secs(2));
-    let mut failed = leaf("failed", ExecutionState::Failed);
-    failed.finished_at = Some(Instant::now() - Duration::from_secs(1));
-    let running = leaf("running", ExecutionState::Running);
-    let node = group(
-      TaskKind::Solution,
-      "std",
-      &[finished_a, finished_b, failed, running],
-    );
-
-    let labels = visible_children(&node)
-      .into_iter()
-      .map(|child| child.label.clone())
-      .collect::<Vec<_>>();
-    assert_eq!(labels[0], "running");
-    assert_eq!(labels[1], "failed");
-    assert_eq!(labels[2], "finished-b");
-    assert_eq!(labels[3], "finished-a");
-  }
-
-  #[test]
-  fn problem_items_nested_nodes() {
-    let child_solution = group(
-      TaskKind::Solution,
-      "std",
-      &[leaf("case1", ExecutionState::Running)],
-    );
-    let mut problem_item = leaf("aPlusB", ExecutionState::Pending);
-    problem_item
-      .children
-      .insert(child_solution.label.clone(), child_solution);
-    let root = group(TaskKind::Problem, "contest", &[problem_item]);
-
-    let rendered = render_node_tree(&root, true, "").join("\n");
-    let rendered = console::strip_ansi_codes(&rendered);
-    assert!(rendered.contains("Problems contest"));
-    assert!(rendered.contains("Problem aPlusB"));
-    assert!(rendered.contains("Solution std"));
-  }
-
-  #[test]
-  fn labels_and_phase_names() {
-    assert_eq!(task_label(TaskKind::Problem), "Problems");
-    assert_eq!(task_label(TaskKind::Validator), "Validator tests");
-    assert_eq!(phase_label(PhaseKind::NixPrepare), "Nix prepare");
-    assert_eq!(phase_label(PhaseKind::NixBuild), "Nix build");
-  }
-
-  #[test]
-  fn phase_guard_lifecycle() {
-    let progress = ProblemProgressHandle::disabled();
-    {
-      let _phase = progress.phase(PhaseKind::Runtime, "Running tests");
-      let state = progress.inner.lock().unwrap();
-      assert!(state.phase.is_some());
-      assert_eq!(
-        state.phase.as_ref().map(|phase| phase.label.as_str()),
-        Some("Running tests")
-      );
-    }
-
-    let state = progress.inner.lock().unwrap();
-    assert!(state.phase.is_none());
-  }
-
-  #[test]
   fn item_guard_internal_error() {
     let progress = ProblemProgressHandle::disabled();
     let handle = progress.register_group(TaskKind::Solution, "std", ["case1"], Some(0.0));
@@ -1147,20 +1371,78 @@ mod tests {
   }
 
   #[test]
+  fn problem_dashboard_keeps_all_rows_for_table_viewport() {
+    let mut state = InteractiveState {
+      enabled: false,
+      suspended: false,
+      title_label: "Problem".to_string(),
+      title_name: Some("many".to_string()),
+      phase: None,
+      roots: BTreeMap::new(),
+      terminal: None,
+      viewport_height: MIN_VIEWPORT_HEIGHT,
+    };
+    for index in 0..20 {
+      let name = format!("solution-{index}");
+      state.roots.insert(
+        name.clone(),
+        group(
+          TaskKind::Solution,
+          &name,
+          &[leaf("case", ExecutionState::Passed)],
+        ),
+      );
+    }
+    let dashboard = project_dashboard(&state);
+    assert_eq!(dashboard.rows.len(), 20);
+  }
+
+  #[test]
+  fn layout_constraints_fit_every_viewport_height() {
+    for height in MIN_VIEWPORT_HEIGHT..=MAX_VIEWPORT_HEIGHT {
+      assert!(header_height(height) + panel_height(height) <= height);
+    }
+  }
+
+  #[test]
   fn suspend_guard_restores() {
+    let _lock = suspend_test_lock();
+    reset_suspend_depth();
     let guard = suspend_live_render();
-    assert!(
-      *LIVE_RENDER_SUSPENDED
-        .get_or_init(|| Arc::new(Mutex::new(false)))
-        .lock()
-        .unwrap()
-    );
+    assert_eq!(suspend_depth(), 1);
     drop(guard);
-    assert!(
-      !*LIVE_RENDER_SUSPENDED
-        .get_or_init(|| Arc::new(Mutex::new(false)))
-        .lock()
-        .unwrap()
-    );
+    assert_eq!(suspend_depth(), 0);
+  }
+
+  #[test]
+  fn suspend_guard_supports_nesting() {
+    let _lock = suspend_test_lock();
+    reset_suspend_depth();
+    let outer = suspend_live_render();
+    let inner = suspend_live_render();
+    assert_eq!(suspend_depth(), 2);
+    drop(outer);
+    assert_eq!(suspend_depth(), 1);
+    drop(inner);
+    assert_eq!(suspend_depth(), 0);
+  }
+
+  fn suspend_depth() -> usize {
+    *LIVE_RENDER_SUSPENDED
+      .get_or_init(|| Arc::new(Mutex::new(0)))
+      .lock()
+      .unwrap()
+  }
+
+  fn reset_suspend_depth() {
+    *LIVE_RENDER_SUSPENDED
+      .get_or_init(|| Arc::new(Mutex::new(0)))
+      .lock()
+      .unwrap() = 0;
+  }
+
+  fn suspend_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    TEST_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
   }
 }

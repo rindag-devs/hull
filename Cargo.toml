@@ -12,6 +12,7 @@ clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
 console = "0.16"
 rand = "0.10"
+ratatui = { version = "0.30", features = ["scrolling-regions"] }
 rayon = "1"
 regex = "1"
 serde = "1"
