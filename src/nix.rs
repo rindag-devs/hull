@@ -22,6 +22,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
+use tracing::info;
 
 use crate::interactive;
 
@@ -548,7 +549,7 @@ fn run_nix_command(
       Ok(String::new())
     }
   } else {
-    interactive::log_line(&format!("Running {label}..."));
+    info!("Running {label}...");
     let _suspend = interactive::suspend_live_render();
     let mut child = command
       .stdin(if stdin_input.is_some() {

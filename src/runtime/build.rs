@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
+use tracing::info;
 
 use super::analysis::{analyze_problem, install_with_pool};
 use super::artifact::{collect_problem_realize_builds, storeify_runtime_data};
@@ -32,9 +33,7 @@ fn prepare_runtime_store_paths(
   runtime: &mut RuntimeData,
   progress: Option<&ProblemProgressHandle>,
 ) -> Result<()> {
-  crate::interactive::log_line(&format!(
-    "Importing runtime outputs into the Nix store for {label}..."
-  ));
+  info!("Importing runtime outputs into the Nix store for {label}...");
   storeify_runtime_data(runtime, progress)
 }
 

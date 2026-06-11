@@ -34,6 +34,7 @@ const MAX_PANEL_ITEMS: usize = 8;
 
 type InlineTerminal = Terminal<CrosstermBackend<std::io::Stderr>>;
 
+/// Writes tracing output through Hull's interactive log area.
 pub struct LogWriter;
 
 impl Write for LogWriter {
@@ -52,49 +53,77 @@ impl Write for LogWriter {
   }
 }
 
+/// Controls whether the inline interactive dashboard is enabled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InteractiveMode {
+  /// Enable the dashboard only when stderr is a terminal.
   Auto,
+  /// Always enable the dashboard.
   Always,
+  /// Never enable the dashboard.
   Never,
 }
 
+/// Identifies the high-level phase shown in the dashboard header.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PhaseKind {
+  /// Nix is evaluating expressions.
   NixEval,
+  /// Nix is preparing runtime inputs.
   NixPrepare,
+  /// Hull is running runtime analysis.
   Runtime,
+  /// Nix is building final outputs.
   NixBuild,
 }
 
+/// Identifies the kind of task represented by a progress group.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskKind {
+  /// A whole problem task.
   Problem,
+  /// A validator task.
   Validator,
+  /// A checker task.
   Checker,
+  /// A solution task.
   Solution,
+  /// An artifact preparation task.
   Artifact,
 }
 
+/// Tracks the execution state of a progress row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExecutionState {
+  /// Work has not started yet.
   Pending,
+  /// Work is currently running.
   Running,
+  /// Work completed successfully.
   Passed,
+  /// Work completed with a failure.
   Failed,
 }
 
+/// Runtime details displayed for a completed progress item.
 #[derive(Clone, Debug, Default)]
 pub struct TaskItemReport {
+  /// Optional status text reported by the runtime step.
   pub status: Option<String>,
+  /// Optional elapsed wall-clock duration.
   pub duration: Option<Duration>,
+  /// Optional consumed tick count.
   pub tick: Option<u64>,
+  /// Optional consumed memory in bytes.
   pub memory: Option<u64>,
+  /// Optional score associated with the item.
   pub score: Option<f64>,
 }
 
+/// Settings used to initialize interactive output.
 #[derive(Clone, Debug)]
 pub struct InteractiveSettings {
+  /// Dashboard activation mode.
   pub mode: InteractiveMode,
 }
 
@@ -107,6 +136,7 @@ impl Default for InteractiveSettings {
 }
 
 impl InteractiveSettings {
+  /// Returns whether interactive rendering should be active for the current stderr.
   pub fn enabled(self) -> bool {
     match self.mode {
       InteractiveMode::Always => true,
@@ -116,27 +146,32 @@ impl InteractiveSettings {
   }
 }
 
+/// Handle for updating the progress dashboard for one problem or scoped subtree.
 #[derive(Clone, Debug)]
 pub struct ProblemProgressHandle {
   inner: Arc<Mutex<InteractiveState>>,
   scope: Option<String>,
 }
 
+/// Guard that keeps a phase active until it is dropped.
 pub struct PhaseGuard {
   inner: Arc<Mutex<InteractiveState>>,
   active: bool,
 }
 
+/// Guard that temporarily suspends live dashboard rendering.
 pub struct LiveRenderSuspendGuard {
   active: bool,
 }
 
+/// Guard for one task item that records an internal error if dropped unfinished.
 pub struct ItemGuard {
   handle: TaskHandle,
   item_name: String,
   active: bool,
 }
 
+/// Handle for updating a registered task group.
 #[derive(Clone, Debug)]
 pub struct TaskHandle {
   inner: Arc<Mutex<InteractiveState>>,
@@ -153,6 +188,7 @@ struct InteractiveState {
   roots: BTreeMap<String, TreeNode>,
   terminal: Option<InlineTerminal>,
   viewport_height: u16,
+  dashboard_origin_y: Option<u16>,
 }
 
 #[derive(Clone, Debug)]
@@ -243,6 +279,7 @@ static OUTPUT_LOCK: OnceLock<OutputLock> = OnceLock::new();
 static ACTIVE_PROGRESS: OnceLock<ActiveProgress> = OnceLock::new();
 static LIVE_RENDER_SUSPENDED: OnceLock<SuspendState> = OnceLock::new();
 
+/// Initializes global interactive output settings.
 pub fn init(settings: InteractiveSettings) {
   let _ = SETTINGS.set(settings);
   let _ = OUTPUT_LOCK.set(Arc::new(Mutex::new(())));
@@ -250,11 +287,12 @@ pub fn init(settings: InteractiveSettings) {
   let _ = LIVE_RENDER_SUSPENDED.set(Arc::new(Mutex::new(0)));
 }
 
+/// Returns the active interactive settings, or defaults if not initialized.
 pub fn current_settings() -> InteractiveSettings {
   SETTINGS.get().cloned().unwrap_or_default()
 }
 
-pub fn log_line(message: &str) {
+fn log_line(message: &str) {
   with_output_lock(|| {
     if let Some(inner) = active_progress() {
       let mut state = inner.lock().unwrap();
@@ -268,6 +306,7 @@ pub fn log_line(message: &str) {
   });
 }
 
+/// Suspends live rendering so external output can write directly to the terminal.
 pub fn suspend_live_render() -> LiveRenderSuspendGuard {
   let suspended = LIVE_RENDER_SUSPENDED
     .get_or_init(|| Arc::new(Mutex::new(0)))
@@ -290,6 +329,7 @@ pub fn suspend_live_render() -> LiveRenderSuspendGuard {
   LiveRenderSuspendGuard { active: true }
 }
 
+/// Creates an interactive progress dashboard for a problem.
 pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
   let enabled = current_settings().enabled();
   let (terminal, viewport_height) = if enabled {
@@ -308,6 +348,7 @@ pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
     roots: BTreeMap::new(),
     terminal,
     viewport_height,
+    dashboard_origin_y: None,
   }));
 
   ACTIVE_PROGRESS
@@ -321,6 +362,7 @@ pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
 }
 
 impl ProblemProgressHandle {
+  /// Creates a disabled progress handle for non-interactive contexts.
   pub fn disabled() -> Self {
     Self {
       inner: Arc::new(Mutex::new(InteractiveState {
@@ -332,15 +374,18 @@ impl ProblemProgressHandle {
         roots: BTreeMap::new(),
         terminal: None,
         viewport_height: MIN_VIEWPORT_HEIGHT,
+        dashboard_origin_y: None,
       })),
       scope: None,
     }
   }
 
+  /// Returns whether this handle is rendering a live dashboard.
   pub fn enabled(&self) -> bool {
     self.inner.lock().unwrap().enabled
   }
 
+  /// Replaces the dashboard title and clears existing progress rows.
   pub fn set_title(&self, label: impl Into<String>, name: impl Into<String>) {
     {
       let mut state = self.inner.lock().unwrap();
@@ -352,6 +397,7 @@ impl ProblemProgressHandle {
     render(&self.inner);
   }
 
+  /// Creates a scoped handle whose task ids are nested under `name`.
   pub fn child_scope(&self, name: impl Into<String>) -> Self {
     Self {
       inner: self.inner.clone(),
@@ -359,6 +405,7 @@ impl ProblemProgressHandle {
     }
   }
 
+  /// Starts a dashboard phase and returns a guard that ends it on drop.
   pub fn phase(&self, kind: PhaseKind, label: impl Into<String>) -> PhaseGuard {
     {
       let mut state = self.inner.lock().unwrap();
@@ -375,6 +422,7 @@ impl ProblemProgressHandle {
     }
   }
 
+  /// Registers a task group with its expected child item names.
   pub fn register_group(
     &self,
     kind: TaskKind,
@@ -430,12 +478,15 @@ impl ProblemProgressHandle {
 
 impl Drop for ProblemProgressHandle {
   fn drop(&mut self) {
-    if self.scope.is_some() || Arc::strong_count(&self.inner) != 1 {
-      return;
+    if self.scope.is_none() {
+      close_dashboard_if_last_reference(&self.inner);
     }
-    with_output_lock(|| {
-      clear_dashboard(&mut self.inner.lock().unwrap());
-    });
+  }
+}
+
+impl Drop for TaskHandle {
+  fn drop(&mut self) {
+    close_dashboard_if_last_reference(&self.inner);
   }
 }
 
@@ -495,6 +546,7 @@ impl TaskHandle {
     });
   }
 
+  /// Marks an item as running and returns a guard used to finish it.
   pub fn item(&self, name: impl Into<String>) -> ItemGuard {
     let item_name = name.into();
     self.start_item(&item_name);
@@ -521,6 +573,7 @@ impl TaskHandle {
     });
   }
 
+  /// Sets the aggregate score for this task group.
   pub fn set_score(&self, score: f64) {
     {
       let mut state = self.inner.lock().unwrap();
@@ -533,6 +586,7 @@ impl TaskHandle {
 }
 
 impl ItemGuard {
+  /// Marks the item complete and records its final report.
   pub fn finish(mut self, success: bool, report: TaskItemReport) {
     self.handle.finish_item(&self.item_name, success, report);
     self.active = false;
@@ -657,9 +711,13 @@ fn draw_locked(state: &mut InteractiveState) {
   let Some(terminal) = state.terminal.as_mut() else {
     return;
   };
+  let mut dashboard_origin_y = None;
   let _ = terminal.draw(|frame| {
-    render_dashboard(frame.area(), frame.buffer_mut(), &dashboard);
+    let area = frame.area();
+    dashboard_origin_y = Some(area.y);
+    render_dashboard(area, frame.buffer_mut(), &dashboard);
   });
+  state.dashboard_origin_y = dashboard_origin_y;
 }
 
 fn update_terminal_for_resize(state: &mut InteractiveState) {
@@ -847,7 +905,23 @@ fn header_height(total_height: u16) -> u16 {
 fn clear_dashboard(state: &mut InteractiveState) {
   if let Some(terminal) = state.terminal.as_mut() {
     let _ = terminal.clear();
+    if let Some(y) = state.dashboard_origin_y {
+      let _ = terminal.set_cursor_position((0, y));
+    }
   }
+}
+
+fn close_dashboard(state: &mut InteractiveState) {
+  clear_dashboard(state);
+  state.terminal = None;
+  state.enabled = false;
+}
+
+fn close_dashboard_if_last_reference(inner: &Arc<Mutex<InteractiveState>>) {
+  if Arc::strong_count(inner) != 1 {
+    return;
+  }
+  with_output_lock(|| close_dashboard(&mut inner.lock().unwrap()));
 }
 
 fn row_style(style: RowStyle) -> Style {
@@ -1386,6 +1460,7 @@ mod tests {
       roots: BTreeMap::new(),
       terminal: None,
       viewport_height: MIN_VIEWPORT_HEIGHT,
+      dashboard_origin_y: None,
     };
     for index in 0..20 {
       let name = format!("solution-{index}");
