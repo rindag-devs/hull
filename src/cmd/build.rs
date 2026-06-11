@@ -38,6 +38,10 @@ pub struct BuildOpts {
   #[arg(short = 'j', long = "jobs")]
   pub jobs: Option<usize>,
 
+  /// Stop runtime analysis as soon as one failure is detected.
+  #[arg(long)]
+  pub stop_on_failure: bool,
+
   /// Extra arguments to pass through to the final `nix build` step.
   #[arg(trailing_var_arg = true)]
   pub nix_args: Vec<String>,
@@ -49,7 +53,9 @@ pub fn run(build_opts: &BuildOpts) -> Result<()> {
     &build_opts.problem,
     &build_opts.target,
     &build_opts.out_link,
-    RuntimeOptions::new(build_opts.jobs).with_progress(progress),
+    RuntimeOptions::new(build_opts.jobs)
+      .with_progress(progress)
+      .with_stop_on_failure(build_opts.stop_on_failure),
     &build_opts.nix_args,
   )
 }

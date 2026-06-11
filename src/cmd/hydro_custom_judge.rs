@@ -31,7 +31,9 @@ use crate::runtime::custom_judge_scheduler::{
   ScheduledTestCase, SchedulerProgress, collect_runtime_traits, execute_scheduled_test_cases,
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
-use crate::runtime::types::{BundleJudgeProblemSpec, JudgeReport, ProblemSpec, TestCaseSpec};
+use crate::runtime::types::{
+  BundleJudgeProblemSpec, JudgeReport, JudgeStatus, ProblemSpec, TestCaseSpec,
+};
 
 #[derive(Parser)]
 /// Hidden entry point that judges one bundled Hydro submission through Hull's scheduler.
@@ -213,7 +215,7 @@ fn aggregate_hydro_report(
     test_case_reports,
   );
   let failure_details = test_case_reports.values().find_map(|report| {
-    if report.status == "accepted" {
+    if report.status == JudgeStatus::Accepted {
       return None;
     }
     let mut parts = Vec::new();
@@ -263,34 +265,37 @@ fn aggregate_hydro_report(
   }
 }
 
-fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>) -> String {
+fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>) -> JudgeStatus {
   let statuses = test_case_reports
     .values()
-    .map(|report| report.status.as_str())
+    .map(|report| report.status)
     .collect::<Vec<_>>();
   if statuses.is_empty() {
-    return "judgment_failed".to_string();
+    return JudgeStatus::InternalError;
   }
-  if statuses.iter().all(|status| *status == "accepted") {
-    return "accepted".to_string();
+  if statuses
+    .iter()
+    .all(|status| *status == JudgeStatus::Accepted)
+  {
+    return JudgeStatus::Accepted;
   }
   for fatal in [
-    "runtime_error",
-    "time_limit_exceeded",
-    "memory_limit_exceeded",
-    "judgment_failed",
+    JudgeStatus::RuntimeError,
+    JudgeStatus::TimeLimitExceeded,
+    JudgeStatus::MemoryLimitExceeded,
+    JudgeStatus::InternalError,
   ] {
     if statuses.contains(&fatal) {
-      return fatal.to_string();
+      return fatal;
     }
   }
-  if statuses.contains(&"wrong_answer") {
-    return "wrong_answer".to_string();
+  if statuses.contains(&JudgeStatus::WrongAnswer) {
+    return JudgeStatus::WrongAnswer;
   }
-  if statuses.contains(&"partially_correct") {
-    return "partially_correct".to_string();
+  if statuses.contains(&JudgeStatus::PartiallyCorrect) {
+    return JudgeStatus::PartiallyCorrect;
   }
-  statuses[0].to_string()
+  statuses[0]
 }
 
 fn write_hydro_reports(stdout_report_path: &Path, report: &JudgeReport) -> Result<()> {
@@ -299,7 +304,7 @@ fn write_hydro_reports(stdout_report_path: &Path, report: &JudgeReport) -> Resul
   }
   let final_score = (report.score * 100.0).round().clamp(0.0, 100.0) as i64;
   let final_message = if report.message.is_empty() {
-    report.status.clone()
+    report.status.to_string()
   } else {
     format!("{}:\n{}", report.status, report.message)
   };

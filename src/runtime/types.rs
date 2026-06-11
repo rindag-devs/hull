@@ -14,6 +14,11 @@
 */
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::sync::{
+  Arc,
+  atomic::{AtomicBool, Ordering},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +31,8 @@ pub struct RuntimeOptions {
   pub jobs: usize,
   pub progress: ProblemProgressHandle,
   pub solution_names: Option<BTreeSet<String>>,
+  pub stop_on_failure: bool,
+  stop_requested: Arc<AtomicBool>,
 }
 
 impl RuntimeOptions {
@@ -35,6 +42,8 @@ impl RuntimeOptions {
       jobs: jobs.unwrap_or_else(default_parallelism).max(1),
       progress: ProblemProgressHandle::disabled(),
       solution_names: None,
+      stop_on_failure: false,
+      stop_requested: Arc::new(AtomicBool::new(false)),
     }
   }
 
@@ -48,6 +57,35 @@ impl RuntimeOptions {
   pub fn with_solution_names(mut self, solution_names: impl IntoIterator<Item = String>) -> Self {
     self.solution_names = Some(solution_names.into_iter().collect());
     self
+  }
+
+  /// Enables or disables fail-fast runtime analysis.
+  pub fn with_stop_on_failure(mut self, stop_on_failure: bool) -> Self {
+    self.stop_on_failure = stop_on_failure;
+    self
+  }
+
+  /// Creates child options for one serial problem analysis while sharing cancellation state.
+  pub fn single_job_child(&self, progress: ProblemProgressHandle) -> Self {
+    Self {
+      jobs: 1,
+      progress,
+      solution_names: self.solution_names.clone(),
+      stop_on_failure: self.stop_on_failure,
+      stop_requested: self.stop_requested.clone(),
+    }
+  }
+
+  /// Requests fail-fast cancellation for sibling runtime work.
+  pub fn request_stop(&self) {
+    if self.stop_on_failure {
+      self.stop_requested.store(true, Ordering::Relaxed);
+    }
+  }
+
+  /// Returns whether fail-fast cancellation has been requested.
+  pub fn should_stop(&self) -> bool {
+    self.stop_on_failure && self.stop_requested.load(Ordering::Relaxed)
   }
 }
 
@@ -300,16 +338,67 @@ pub struct RuntimeSolutionData {
 /// Aggregated scoring data for one subtask.
 pub struct SubtaskRuntimeReport {
   pub test_cases: BTreeMap<String, JudgeReport>,
-  pub statuses: Vec<String>,
+  pub statuses: Vec<JudgeStatus>,
   pub raw_score: f64,
   pub scaled_score: f64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+/// One testcase status returned by a Hull judger.
+pub enum JudgeStatus {
+  Accepted,
+  WrongAnswer,
+  PartiallyCorrect,
+  RuntimeError,
+  TimeLimitExceeded,
+  MemoryLimitExceeded,
+  InternalError,
+}
+
+impl JudgeStatus {
+  /// Returns whether this status should fail internal runtime analysis immediately.
+  pub fn is_fatal(self) -> bool {
+    self == Self::InternalError
+  }
+
+  /// Returns whether logging should include the full report details.
+  pub fn needs_detailed_log(self) -> bool {
+    self == Self::InternalError
+  }
+}
+
+impl fmt::Display for JudgeStatus {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str(match self {
+      Self::Accepted => "accepted",
+      Self::WrongAnswer => "wrong_answer",
+      Self::PartiallyCorrect => "partially_correct",
+      Self::RuntimeError => "runtime_error",
+      Self::TimeLimitExceeded => "time_limit_exceeded",
+      Self::MemoryLimitExceeded => "memory_limit_exceeded",
+      Self::InternalError => "internal_error",
+    })
+  }
+}
+
+impl Ord for JudgeStatus {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self.to_string().cmp(&other.to_string())
+  }
+}
+
+impl PartialOrd for JudgeStatus {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    Some(self.cmp(other))
+  }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// One testcase judging result returned by a Hull judger.
 pub struct JudgeReport {
-  pub status: String,
+  pub status: JudgeStatus,
   pub score: f64,
   pub message: String,
   pub tick: u64,
@@ -318,11 +407,47 @@ pub struct JudgeReport {
   pub outputs: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+/// One input validation status returned by a Hull validator.
+pub enum ValidationStatus {
+  Valid,
+  Invalid,
+  InternalError,
+}
+
+impl ValidationStatus {
+  /// Returns whether validation accepted the input.
+  pub fn is_valid(self) -> bool {
+    self == Self::Valid
+  }
+
+  /// Returns whether this status should fail internal runtime analysis immediately.
+  pub fn is_fatal(self) -> bool {
+    self == Self::InternalError
+  }
+
+  /// Returns whether logging should include the full report details.
+  pub fn needs_detailed_log(self) -> bool {
+    self == Self::InternalError
+  }
+}
+
+impl fmt::Display for ValidationStatus {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str(match self {
+      Self::Valid => "valid",
+      Self::Invalid => "invalid",
+      Self::InternalError => "internal_error",
+    })
+  }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// One input validation result and its optional trait annotations.
 pub struct ValidationReport {
-  pub status: String,
+  pub status: ValidationStatus,
   pub message: String,
   #[serde(default)]
   #[serde(alias = "reader_trace_stacks")]
@@ -334,11 +459,44 @@ pub struct ValidationReport {
   pub traits: BTreeMap<String, bool>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+/// One checker status returned by a Hull checker.
+pub enum CheckerStatus {
+  Accepted,
+  WrongAnswer,
+  PartiallyCorrect,
+  InternalError,
+}
+
+impl CheckerStatus {
+  /// Returns whether this status should fail internal runtime analysis immediately.
+  pub fn is_fatal(self) -> bool {
+    self == Self::InternalError
+  }
+
+  /// Returns whether logging should include the full report details.
+  pub fn needs_detailed_log(self) -> bool {
+    self == Self::InternalError
+  }
+}
+
+impl fmt::Display for CheckerStatus {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.write_str(match self {
+      Self::Accepted => "accepted",
+      Self::WrongAnswer => "wrong_answer",
+      Self::PartiallyCorrect => "partially_correct",
+      Self::InternalError => "internal_error",
+    })
+  }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// One checker result including score and optional trace data.
 pub struct CheckerReport {
-  pub status: String,
+  pub status: CheckerStatus,
   pub message: String,
   pub score: f64,
   #[serde(default)]
@@ -351,4 +509,52 @@ pub struct CheckerReport {
 
 fn default_json_object() -> serde_json::Value {
   serde_json::json!({})
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn judge_report_rejects_unknown_status() {
+    let err = serde_json::from_str::<JudgeReport>(
+      r#"{
+        "status": "mysterious_failure",
+        "score": 0.0,
+        "message": "bad",
+        "tick": 0,
+        "memory": 0
+      }"#,
+    )
+    .expect_err("unknown judge status must fail at the JSON boundary");
+
+    assert!(err.to_string().contains("unknown variant"));
+  }
+
+  #[test]
+  fn validator_report_rejects_unknown_status() {
+    let err = serde_json::from_str::<ValidationReport>(
+      r#"{
+        "status": "maybe_valid",
+        "message": "bad"
+      }"#,
+    )
+    .expect_err("unknown validation status must fail at the JSON boundary");
+
+    assert!(err.to_string().contains("unknown variant"));
+  }
+
+  #[test]
+  fn checker_report_rejects_unknown_status() {
+    let err = serde_json::from_str::<CheckerReport>(
+      r#"{
+        "status": "maybe_accepted",
+        "message": "bad",
+        "score": 0.0
+      }"#,
+    )
+    .expect_err("unknown checker status must fail at the JSON boundary");
+
+    assert!(err.to_string().contains("unknown variant"));
+  }
 }

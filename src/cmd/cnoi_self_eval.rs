@@ -26,7 +26,8 @@ use crate::report::{JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResul
 use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
 use crate::runtime::metadata::{load_bundle_contest_spec, load_bundle_judge_problem_spec};
 use crate::runtime::types::{
-  BundleJudgeProblemSpec, BundleLanguageSpec, ProblemSpec, ProgramSpec, SolutionSpec, TestCaseSpec,
+  BundleJudgeProblemSpec, BundleLanguageSpec, JudgeStatus, ProblemSpec, ProgramSpec, SolutionSpec,
+  TestCaseSpec,
 };
 use crate::runtime::workspace::RuntimeWorkspace;
 
@@ -111,12 +112,12 @@ pub fn run(opts: &CnoiSelfEvalOpts) -> Result<()> {
         subtask_results: vec![JudgeCliSubtaskResult {
           full_score: problem.full_score,
           scaled_score: 0.0,
-          statuses: vec!["internal_error".to_string()],
+          statuses: vec![JudgeStatus::InternalError],
         }],
         test_case_results: BTreeMap::from([(
           problem.name.clone(),
           JudgeCliTestCaseResult {
-            status: "internal_error".to_string(),
+            status: JudgeStatus::InternalError,
             score: 0.0,
             tick: 0,
             memory: 0,

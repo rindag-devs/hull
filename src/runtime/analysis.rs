@@ -16,20 +16,20 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result, bail};
 use rayon::{ThreadPoolBuilder, prelude::*};
-use tracing::info;
+use tracing::{error, info};
 
 use super::artifact::realize_artifact;
 use super::sandbox::run_wasm_for_stdio;
 use super::types::{
-  ArtifactSpec, CheckerReport, CheckerRuntimeData, JudgeReport, PreparedSolutionSpec, ProblemSpec,
-  RuntimeData, RuntimeOptions, RuntimeSolutionData, RuntimeTestCaseData, RuntimeTestCaseFiles,
-  ScoringMethod, SolutionSpec, SubtaskRuntimeReport, TestCaseSpec, ValidationReport,
-  ValidatorRuntimeData,
+  ArtifactSpec, CheckerReport, CheckerRuntimeData, JudgeReport, JudgeStatus, PreparedSolutionSpec,
+  ProblemSpec, RuntimeData, RuntimeOptions, RuntimeSolutionData, RuntimeTestCaseData,
+  RuntimeTestCaseFiles, ScoringMethod, SolutionSpec, SubtaskRuntimeReport, TestCaseSpec,
+  ValidationReport, ValidatorRuntimeData,
 };
 use super::workspace::RuntimeWorkspace;
 use crate::interactive::{ProblemProgressHandle, TaskHandle, TaskItemReport, TaskKind};
@@ -139,7 +139,6 @@ fn analyze_problem_in_pool(
   workspace: &RuntimeWorkspace,
   options: &RuntimeOptions,
 ) -> Result<RuntimeData> {
-  let progress = Some(&options.progress);
   let judged_solutions = problem
     .solutions
     .iter()
@@ -177,7 +176,7 @@ fn analyze_problem_in_pool(
     })?;
 
   let (validator_test_results, (checker_test_results, test_case_outputs)) = rayon::join(
-    || run_validator_tests(problem, workspace, progress),
+    || run_validator_tests(problem, workspace, options),
     || {
       rayon::join(
         || {
@@ -186,7 +185,7 @@ fn analyze_problem_in_pool(
             workspace,
             &prepared_solutions_by_name,
             main_solution,
-            progress,
+            options,
           )
         },
         || {
@@ -195,7 +194,7 @@ fn analyze_problem_in_pool(
             workspace,
             &prepared_judged_solutions,
             main_solution,
-            progress,
+            options,
           )
         },
       )
@@ -282,8 +281,9 @@ fn analyze_problem_in_pool(
 fn run_validator_tests(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
-  progress: Option<&ProblemProgressHandle>,
+  options: &RuntimeOptions,
 ) -> Result<BTreeMap<String, (String, ValidationReport)>> {
+  let progress = Some(&options.progress);
   let handle = register_progress_group(
     progress,
     TaskKind::Validator,
@@ -295,6 +295,7 @@ fn run_validator_tests(
     .validator_tests
     .par_iter()
     .map(|test| {
+      ensure_not_stopped(options)?;
       info!("Running validator test {}", test.name);
       let guard = handle.as_ref().map(|handle| handle.item(test.name.clone()));
       let input_path = resolve_test_input(
@@ -306,13 +307,23 @@ fn run_validator_tests(
         &format!("validator-test-{}", test.name),
       )?;
       let report = run_validator(problem, &input_path, 1)?;
+      log_validation_result("Finished validator test", &test.name, &report);
       if let Some(guard) = guard {
         guard.finish(
-          !is_fatal_validation_status(&report.status),
+          !report.status.is_fatal(),
           TaskItemReport {
-            status: Some(report.status.clone()),
+            status: Some(report.status.to_string()),
             ..TaskItemReport::default()
           },
+        );
+      }
+      if options.stop_on_failure && report.status.is_fatal() {
+        options.request_stop();
+        bail!(
+          "Validator test `{}` failed with status `{}`: {}",
+          test.name,
+          report.status,
+          report.message
         );
       }
       Ok((
@@ -328,8 +339,9 @@ fn run_checker_tests(
   workspace: &RuntimeWorkspace,
   solutions_by_name: &BTreeMap<String, PreparedSolutionEntry>,
   main_solution: &PreparedSolutionEntry,
-  progress: Option<&ProblemProgressHandle>,
+  options: &RuntimeOptions,
 ) -> Result<BTreeMap<String, (String, CheckerReport)>> {
+  let progress = Some(&options.progress);
   let handle = register_progress_group(
     progress,
     TaskKind::Checker,
@@ -341,6 +353,7 @@ fn run_checker_tests(
     .checker_tests
     .par_iter()
     .map(|test| {
+      ensure_not_stopped(options)?;
       info!("Running checker test {}", test.name);
       let guard = handle.as_ref().map(|handle| handle.item(test.name.clone()));
       let input_path = resolve_test_input(
@@ -413,14 +426,24 @@ fn run_checker_tests(
         &output_path,
         &answer_dir.join(&test.output_name),
       )?;
+      log_checker_result("Finished checker test", &test.name, &report);
       if let Some(guard) = guard {
         guard.finish(
-          !is_fatal_checker_status(&report.status),
+          !report.status.is_fatal(),
           TaskItemReport {
-            status: Some(report.status.clone()),
+            status: Some(report.status.to_string()),
             score: Some(report.score),
             ..TaskItemReport::default()
           },
+        );
+      }
+      if options.stop_on_failure && report.status.is_fatal() {
+        options.request_stop();
+        bail!(
+          "Checker test `{}` failed with status `{}`: {}",
+          test.name,
+          report.status,
+          report.message
         );
       }
       Ok((
@@ -436,8 +459,9 @@ fn run_test_cases(
   workspace: &RuntimeWorkspace,
   solutions: &[PreparedSolutionEntry],
   main_solution: &PreparedSolutionEntry,
-  progress: Option<&ProblemProgressHandle>,
+  options: &RuntimeOptions,
 ) -> Result<TestCaseRunMap> {
+  let progress = Some(&options.progress);
   let solution_handles = if problem.test_cases.is_empty() {
     None
   } else {
@@ -468,6 +492,7 @@ fn run_test_cases(
     .test_cases
     .par_iter()
     .map(|test_case| {
+      ensure_not_stopped(options)?;
       info!("Preparing test case {}", test_case.name);
       let input_path = resolve_test_input(
         problem,
@@ -484,6 +509,10 @@ fn run_test_cases(
         1
       };
       let validation = run_validator(problem, Path::new(&input_path), trace_level)?;
+      log_validation_result("Validated test case", &test_case.name, &validation);
+      if !validation.status.is_valid() {
+        options.request_stop();
+      }
       ensure_test_case_input_is_valid(&test_case.name, &validation)?;
       let concrete_test_case = TestCaseSpec {
         input_file: Some(input_path_string.clone()),
@@ -508,11 +537,13 @@ fn run_test_cases(
         &main_solution.prepared,
         workspace,
       )?;
+      info!("Prepared test case {}", test_case.name);
       let outputs_path = outputs_dir.to_string_lossy().into_owned();
 
       let solution_reports = solutions
         .par_iter()
         .map(|solution| {
+          ensure_not_stopped(options)?;
           info!(
             "Judging solution {} on {}",
             solution.solution.name, test_case.name
@@ -521,17 +552,27 @@ fn run_test_cases(
             .as_ref()
             .and_then(|handles| handles.get(&solution.solution.name))
             .map(|handle| handle.item(test_case.name.clone()));
-          let report = run_judge(
+          let report = match run_judge(
             problem,
             &concrete_test_case,
             &solution.solution.name,
             &solution.prepared,
             Path::new(&outputs_path),
             workspace,
-          )
-          .with_context(|| {
-            judge_failure_context(&problem.name, &solution.solution.name, &test_case.name)
-          })?;
+          ) {
+            Ok(report) => report,
+            Err(err) => {
+              let err = err.context(judge_failure_context(
+                &problem.name,
+                &solution.solution.name,
+                &test_case.name,
+              ));
+              options.request_stop();
+              error!("{err:#}");
+              return Err(err);
+            }
+          };
+          log_judge_result(&solution.solution.name, &test_case.name, &report);
           if let Some(handle) = solution_handles
             .as_ref()
             .and_then(|handles| handles.get(&solution.solution.name))
@@ -558,9 +599,9 @@ fn run_test_cases(
             };
             if let Some(guard) = guard {
               guard.finish(
-                !is_fatal_judge_status(&report.status),
+                !report.status.is_fatal(),
                 TaskItemReport {
-                  status: Some(report.status.clone()),
+                  status: Some(report.status.to_string()),
                   tick: Some(report.tick),
                   memory: Some(report.memory),
                   score: Some(report.score),
@@ -569,6 +610,17 @@ fn run_test_cases(
               );
             }
             handle.set_score(current_score);
+          }
+          if options.stop_on_failure && report.status.is_fatal() {
+            options.request_stop();
+            bail!(
+              "Judge failed for problem `{}`, solution `{}`, test case `{}` with status `{}`: {}",
+              problem.name,
+              solution.solution.name,
+              test_case.name,
+              report.status,
+              report.message
+            );
           }
           Ok((solution.solution.name.clone(), report))
         })
@@ -591,16 +643,77 @@ fn run_test_cases(
     .collect()
 }
 
-fn is_fatal_judge_status(status: &str) -> bool {
-  matches!(status, "internal_error")
+fn log_validation_result(action: &str, name: &str, report: &ValidationReport) {
+  if report.status.needs_detailed_log() {
+    let details = detail_lines(&[("message", report.message.trim())]);
+    error!(
+      "{} {} with status {}{}",
+      action, name, report.status, details
+    );
+  } else {
+    info!("{} {} with status {}", action, name, report.status);
+  }
 }
 
-fn is_fatal_validation_status(status: &str) -> bool {
-  matches!(status, "internal_error")
+fn log_checker_result(action: &str, name: &str, report: &CheckerReport) {
+  if report.status.needs_detailed_log() {
+    let score = format!("{:.3}", report.score);
+    let details = detail_lines(&[
+      ("score", score.as_str()),
+      ("message", report.message.trim()),
+    ]);
+    error!(
+      "{} {} with status {}{}",
+      action, name, report.status, details
+    );
+  } else {
+    info!(
+      "{} {} with status {} and score {:.3}",
+      action, name, report.status, report.score
+    );
+  }
+}
+
+fn log_judge_result(solution_name: &str, test_case_name: &str, report: &JudgeReport) {
+  if report.status.needs_detailed_log() {
+    let score = format!("{:.3}", report.score);
+    let tick = report.tick.to_string();
+    let memory = report.memory.to_string();
+    let details = detail_lines(&[
+      ("score", score.as_str()),
+      ("tick", tick.as_str()),
+      ("memory", memory.as_str()),
+      ("message", report.message.trim()),
+    ]);
+    error!(
+      "Finished judging solution {} on {} with status {}{}",
+      solution_name, test_case_name, report.status, details
+    );
+  } else {
+    info!(
+      "Finished judging solution {} on {} with status {}, score {:.3}, tick {}, memory {}",
+      solution_name, test_case_name, report.status, report.score, report.tick, report.memory
+    );
+  }
+}
+
+fn detail_lines(fields: &[(&str, &str)]) -> String {
+  fields
+    .iter()
+    .filter(|(_, value)| !value.is_empty())
+    .map(|(name, value)| format!("\n  {name}: {value}"))
+    .collect()
+}
+
+fn ensure_not_stopped(options: &RuntimeOptions) -> Result<()> {
+  if options.should_stop() {
+    bail!("Runtime analysis stopped after an earlier failure");
+  }
+  Ok(())
 }
 
 fn ensure_test_case_input_is_valid(test_case_name: &str, report: &ValidationReport) -> Result<()> {
-  if report.status == "valid" {
+  if report.status.is_valid() {
     Ok(())
   } else {
     bail!(
@@ -629,10 +742,6 @@ fn ensure_generator_succeeded(
     result.error_message,
     String::from_utf8_lossy(&result.stderr).trim()
   )
-}
-
-fn is_fatal_checker_status(status: &str) -> bool {
-  matches!(status, "internal_error")
 }
 
 fn register_progress_group<I>(
@@ -741,6 +850,10 @@ pub fn run_generate_outputs(
   prepared_solution: &PreparedSolutionSpec,
   workspace: &RuntimeWorkspace,
 ) -> Result<PathBuf> {
+  info!(
+    "Generating outputs for solution {} on {}",
+    solution_name, test_case.name
+  );
   let input_path = resolve_test_input(
     problem,
     workspace,
@@ -787,6 +900,11 @@ pub fn run_generate_outputs(
     generate_outputs_failure_context(&problem.name, solution_name, &test_case.name)
   })?;
 
+  info!(
+    "Generated outputs for solution {} on {}",
+    solution_name, test_case.name
+  );
+
   Ok(outputs_dir)
 }
 
@@ -795,6 +913,7 @@ pub fn run_prepare_solution(
   solution: &SolutionSpec,
   workspace: &RuntimeWorkspace,
 ) -> Result<PreparedSolutionSpec> {
+  info!("Preparing solution {}", solution.name);
   let work_dir = workspace.run_dir("prepared-solution", &solution.name)?;
   let report_path = work_dir.join("report.json");
   let prepared_src_path = work_dir.join("prepared-src");
@@ -823,7 +942,7 @@ pub fn run_prepare_solution(
     );
   }
 
-  serde_json::from_slice(&fs::read(&report_path).with_context(|| {
+  let prepared = serde_json::from_slice(&fs::read(&report_path).with_context(|| {
     format!(
       "Failed to read prepareSolution report {}",
       report_path.display()
@@ -834,7 +953,9 @@ pub fn run_prepare_solution(
       "Failed to parse prepareSolution report JSON for problem `{}`, solution `{}`",
       problem.name, solution.name
     )
-  })
+  })?;
+  info!("Prepared solution {}", solution.name);
+  Ok(prepared)
 }
 
 pub fn run_judge(
@@ -867,7 +988,7 @@ pub fn run_judge(
   fs::create_dir_all(&outputs_dir)?;
   let report_path = case_dir.join("report.json");
 
-  run_judger_script(JudgerInvocation {
+  let output = run_judger_script(JudgerInvocation {
     runner: &problem.judger.judge_runner,
     mode: "judge",
     input_path: &input_path,
@@ -878,23 +999,29 @@ pub fn run_judge(
     judge_context: Some((official_outputs_dir, &report_path)),
     work_dir: &work_dir,
   })
-  .with_context(|| judge_failure_context(&problem.name, solution_name, &test_case.name))?;
+  .context("Judger runner failed")?;
 
-  let mut report: JudgeReport = serde_json::from_slice(
-    &fs::read(&report_path)
-      .with_context(|| format!("Failed to read judge report at {}", report_path.display()))?,
-  )
-  .with_context(|| {
+  let report_bytes = fs::read(&report_path).with_context(|| {
     format!(
-      "Failed to parse judge report JSON for problem `{}`, solution `{}`, test case `{}`",
-      problem.name, solution_name, test_case.name
+      "Failed to read judge report at {}.\n{}",
+      report_path.display(),
+      judger_output_details(&output)
+    )
+  })?;
+  let mut report: JudgeReport = serde_json::from_slice(&report_bytes).with_context(|| {
+    format!(
+      "Failed to parse judge report JSON for problem `{}`, solution `{}`, test case `{}`.\n{}",
+      problem.name,
+      solution_name,
+      test_case.name,
+      judger_output_details(&output)
     )
   })?;
   report.outputs = outputs_dir.to_string_lossy().into_owned();
   Ok(report)
 }
 
-fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<()> {
+fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<Output> {
   // The packaged runners write helper files into their working directory, so
   // each invocation gets an isolated sandbox directory.
   let runner = realize_runner(invocation.runner)?;
@@ -946,7 +1073,15 @@ fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<()> {
     );
   }
 
-  Ok(())
+  Ok(output)
+}
+
+fn judger_output_details(output: &Output) -> String {
+  format!(
+    "Judger stdout:\n{}\nJudger stderr:\n{}",
+    String::from_utf8_lossy(&output.stdout).trim(),
+    String::from_utf8_lossy(&output.stderr).trim()
+  )
 }
 
 fn realize_runner(runner: &ArtifactSpec) -> Result<String> {
@@ -1011,10 +1146,10 @@ pub fn aggregate_subtask_results(
         })
         .collect();
 
-      let statuses: Vec<String> = BTreeSet::from_iter(
+      let statuses: Vec<JudgeStatus> = BTreeSet::from_iter(
         test_cases
           .values()
-          .map(|report| report.status.clone())
+          .map(|report| report.status)
           .collect::<Vec<_>>(),
       )
       .into_iter()
@@ -1088,11 +1223,13 @@ fn resolve_test_input(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::runtime::types::{ArtifactSpec, JudgerSpec, ProgramSpec, ScoringMethod, SubtaskSpec};
+  use crate::runtime::types::{
+    ArtifactSpec, JudgerSpec, ProgramSpec, ScoringMethod, SubtaskSpec, ValidationStatus,
+  };
 
-  fn judge_report(status: &str, score: f64) -> JudgeReport {
+  fn judge_report(status: JudgeStatus, score: f64) -> JudgeReport {
     JudgeReport {
-      status: status.to_string(),
+      status,
       score,
       message: String::new(),
       tick: 0,
@@ -1181,19 +1318,9 @@ mod tests {
   }
 
   #[test]
-  fn fatal_status_helpers() {
-    assert!(is_fatal_judge_status("internal_error"));
-    assert!(!is_fatal_judge_status("memory_limit_exceeded"));
-    assert!(is_fatal_validation_status("internal_error"));
-    assert!(!is_fatal_validation_status("invalid"));
-    assert!(is_fatal_checker_status("internal_error"));
-    assert!(!is_fatal_checker_status("wrong_answer"));
-  }
-
-  #[test]
   fn valid_input_passes_fail_fast() {
     let report = ValidationReport {
-      status: "valid".to_string(),
+      status: ValidationStatus::Valid,
       message: String::new(),
       reader_trace_stacks: Vec::new(),
       reader_trace_tree: serde_json::json!({}),
@@ -1206,7 +1333,7 @@ mod tests {
   #[test]
   fn invalid_input_fails_fast() {
     let report = ValidationReport {
-      status: "invalid".to_string(),
+      status: ValidationStatus::Invalid,
       message: "out of range".to_string(),
       reader_trace_stacks: Vec::new(),
       reader_trace_tree: serde_json::json!({}),
@@ -1224,8 +1351,11 @@ mod tests {
   fn subtask_results_min() {
     let problem = problem_with_subtasks(ScoringMethod::Min);
     let reports = BTreeMap::from([
-      ("a".to_string(), judge_report("accepted", 1.0)),
-      ("b".to_string(), judge_report("wrong_answer", 0.25)),
+      ("a".to_string(), judge_report(JudgeStatus::Accepted, 1.0)),
+      (
+        "b".to_string(),
+        judge_report(JudgeStatus::WrongAnswer, 0.25),
+      ),
     ]);
     let traits = BTreeMap::from([
       ("a".to_string(), BTreeMap::new()),
@@ -1236,15 +1366,21 @@ mod tests {
     assert_eq!(result.len(), 1);
     assert!((result[0].raw_score - 0.25).abs() < 1e-9);
     assert!((result[0].scaled_score - 0.125).abs() < 1e-9);
-    assert_eq!(result[0].statuses, vec!["accepted", "wrong_answer"]);
+    assert_eq!(
+      result[0].statuses,
+      vec![JudgeStatus::Accepted, JudgeStatus::WrongAnswer]
+    );
   }
 
   #[test]
   fn subtask_results_sum_average() {
     let problem = problem_with_subtasks(ScoringMethod::Sum);
     let reports = BTreeMap::from([
-      ("a".to_string(), judge_report("accepted", 1.0)),
-      ("b".to_string(), judge_report("partially_correct", 0.5)),
+      ("a".to_string(), judge_report(JudgeStatus::Accepted, 1.0)),
+      (
+        "b".to_string(),
+        judge_report(JudgeStatus::PartiallyCorrect, 0.5),
+      ),
     ]);
     let traits = BTreeMap::from([
       ("a".to_string(), BTreeMap::new()),
@@ -1260,7 +1396,7 @@ mod tests {
   #[test]
   fn subtask_results_ignore_missing() {
     let problem = problem_with_subtasks(ScoringMethod::Min);
-    let reports = BTreeMap::from([("a".to_string(), judge_report("accepted", 1.0))]);
+    let reports = BTreeMap::from([("a".to_string(), judge_report(JudgeStatus::Accepted, 1.0))]);
     let traits = BTreeMap::from([
       ("a".to_string(), BTreeMap::new()),
       ("b".to_string(), BTreeMap::new()),
@@ -1268,7 +1404,7 @@ mod tests {
 
     let result = aggregate_subtask_results(&problem, &reports, &traits);
     assert_eq!(result[0].test_cases.len(), 1);
-    assert_eq!(result[0].statuses, vec!["accepted"]);
+    assert_eq!(result[0].statuses, vec![JudgeStatus::Accepted]);
     assert!((result[0].raw_score - 1.0).abs() < 1e-9);
   }
 
@@ -1285,8 +1421,8 @@ mod tests {
     problem.test_cases[1].trait_hints = BTreeMap::from([("y".to_string(), true)]);
 
     let reports = BTreeMap::from([
-      ("a".to_string(), judge_report("accepted", 1.0)),
-      ("b".to_string(), judge_report("wrong_answer", 0.0)),
+      ("a".to_string(), judge_report(JudgeStatus::Accepted, 1.0)),
+      ("b".to_string(), judge_report(JudgeStatus::WrongAnswer, 0.0)),
     ]);
     let traits = BTreeMap::from([
       (
@@ -1299,6 +1435,6 @@ mod tests {
     let result = aggregate_subtask_results(&problem, &reports, &traits);
     assert_eq!(result[0].test_cases.len(), 1);
     assert!(result[0].test_cases.contains_key("a"));
-    assert_eq!(result[0].statuses, vec!["accepted"]);
+    assert_eq!(result[0].statuses, vec![JudgeStatus::Accepted]);
   }
 }

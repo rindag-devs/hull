@@ -31,7 +31,7 @@ use crate::{
     artifact::realize_artifact,
     metadata::load_problem_spec,
     sandbox::run_wasm_for_stdio,
-    types::{ProblemSpec, RuntimeOptions, ScoringMethod, SubtaskSpec, TestCaseSpec},
+    types::{JudgeStatus, ProblemSpec, RuntimeOptions, ScoringMethod, SubtaskSpec, TestCaseSpec},
     workspace::RuntimeWorkspace,
   },
 };
@@ -291,12 +291,12 @@ fn run_stress_round(context: &StressRoundContext<'_>) -> Result<Option<FailingTe
                   solution.name, test_case_name
                 )
               })?;
-            if solution_report.status != "accepted" {
+            if solution_report.status != JudgeStatus::Accepted {
               return Ok(Some(FailingTestCase {
                 args: generator_args.to_vec(),
                 failing_solution_name: solution.name.clone(),
                 report: JudgeRunResult {
-                  status: solution_report.status.clone(),
+                  status: solution_report.status.to_string(),
                   score: solution_report.score,
                   tick: solution_report.tick,
                   memory: solution_report.memory,

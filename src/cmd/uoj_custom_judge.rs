@@ -35,8 +35,8 @@ use crate::runtime::custom_judge_scheduler::{
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
 use crate::runtime::types::{
-  BundleJudgeProblemSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec, ScoringMethod,
-  SolutionSpec, TestCaseSpec,
+  BundleJudgeProblemSpec, JudgeReport, JudgeStatus, PreparedSolutionSpec, ProblemSpec,
+  ScoringMethod, SolutionSpec, TestCaseSpec,
 };
 use crate::runtime::workspace::RuntimeWorkspace;
 
@@ -700,7 +700,7 @@ struct CustomTestContext<'a> {
 fn run_custom_test_mode(ctx: CustomTestContext<'_>) -> Result<()> {
   let validation = run_validator(ctx.runtime_problem, ctx.input_path, 1)
     .context("Failed to validate custom test input")?;
-  if validation.status != "valid" {
+  if !validation.status.is_valid() {
     return write_custom_test_result(
       ctx.result_path,
       0.0,
@@ -768,7 +768,7 @@ fn run_hack_mode(ctx: HackModeContext<'_>) -> Result<()> {
 
   let validation = run_validator(ctx.runtime_problem, &hack_input_path, 1)
     .context("Failed to validate hack input")?;
-  if validation.status != "valid" {
+  if !validation.status.is_valid() {
     write_hack_input_invalid_result(result_path, &validation.message)?;
     return Ok(());
   }
@@ -900,9 +900,9 @@ fn write_custom_test_result(
   })
 }
 
-fn to_uoj_custom_test_info(status: &str) -> String {
+fn to_uoj_custom_test_info(status: &JudgeStatus) -> String {
   match status {
-    "accepted" => "Success".to_string(),
+    JudgeStatus::Accepted => "Success".to_string(),
     _ => to_uoj_info(status),
   }
 }
@@ -1005,31 +1005,34 @@ fn summarize_trivial_test_cases(
 }
 
 fn is_trivial_test_case(report: &JudgeReport) -> bool {
-  report.score >= 1.0 && report.status == "accepted" && report.message.is_empty()
+  report.score >= 1.0 && report.status == JudgeStatus::Accepted && report.message.is_empty()
 }
 
-fn subtask_status(statuses: &[String], raw_score: f64) -> String {
+fn subtask_status(statuses: &[JudgeStatus], raw_score: f64) -> String {
   if statuses.is_empty() {
     return "Skipped".to_string();
   }
   if raw_score >= 1.0 {
     return "Accepted".to_string();
   }
-  if let Some(status) = statuses.iter().find(|status| status.as_str() != "accepted") {
+  if let Some(status) = statuses
+    .iter()
+    .find(|status| **status != JudgeStatus::Accepted)
+  {
     return to_uoj_info(status);
   }
   "Accepted".to_string()
 }
 
-fn to_uoj_info(status: &str) -> String {
+fn to_uoj_info(status: &JudgeStatus) -> String {
   match status {
-    "accepted" => "Accepted",
-    "wrong_answer" => "Wrong Answer",
-    "partially_correct" => "Acceptable Answer",
-    "runtime_error" => "Runtime Error",
-    "time_limit_exceeded" => "Time Limit Exceeded",
-    "memory_limit_exceeded" => "Memory Limit Exceeded",
-    _ => "Judgment Failed",
+    JudgeStatus::Accepted => "Accepted",
+    JudgeStatus::WrongAnswer => "Wrong Answer",
+    JudgeStatus::PartiallyCorrect => "Acceptable Answer",
+    JudgeStatus::RuntimeError => "Runtime Error",
+    JudgeStatus::TimeLimitExceeded => "Time Limit Exceeded",
+    JudgeStatus::MemoryLimitExceeded => "Memory Limit Exceeded",
+    JudgeStatus::InternalError => "Judgment Failed",
   }
   .to_string()
 }
@@ -1203,9 +1206,9 @@ mod tests {
 
   #[test]
   fn maps_custom_test_info() {
-    assert_eq!(to_uoj_custom_test_info("accepted"), "Success");
+    assert_eq!(to_uoj_custom_test_info(&JudgeStatus::Accepted), "Success");
     assert_eq!(
-      to_uoj_custom_test_info("partially_correct"),
+      to_uoj_custom_test_info(&JudgeStatus::PartiallyCorrect),
       "Acceptable Answer"
     );
   }

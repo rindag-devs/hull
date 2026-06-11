@@ -15,7 +15,7 @@
 
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 
 use super::analysis::{analyze_problem, install_with_pool};
@@ -205,6 +205,9 @@ pub fn build_contest(
         .problems
         .par_iter()
         .map(|spec| {
+          if options.should_stop() {
+            bail!("Contest analysis stopped after an earlier failure");
+          }
           let guard = contest_handle
             .as_ref()
             .map(|handle| handle.item(spec.name.clone()));
@@ -213,17 +216,14 @@ pub fn build_contest(
             .progress
             .child_scope(contest)
             .child_scope(&spec.name);
-          let runtime = analyze_problem(
-            spec,
-            &workspace,
-            RuntimeOptions::new(Some(1)).with_progress(problem_progress),
-          )
-          .with_context(|| {
-            format!(
-              "Runtime analysis failed for contest `{contest}`, problem `{}`",
-              spec.name
-            )
-          })?;
+          let runtime =
+            analyze_problem(spec, &workspace, options.single_job_child(problem_progress))
+              .with_context(|| {
+                format!(
+                  "Runtime analysis failed for contest `{contest}`, problem `{}`",
+                  spec.name
+                )
+              })?;
           if let Some(guard) = guard {
             guard.finish(
               true,

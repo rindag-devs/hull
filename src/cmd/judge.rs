@@ -41,6 +41,10 @@ pub struct JudgeOpts {
   /// Print the report as JSON instead of a table.
   #[arg(long)]
   pub json: bool,
+
+  /// Stop runtime analysis as soon as one failure is detected.
+  #[arg(long)]
+  pub stop_on_failure: bool,
 }
 
 pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
@@ -58,6 +62,7 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
     &workspace,
     RuntimeOptions::new(judge_opts.jobs)
       .with_progress(progress)
+      .with_stop_on_failure(judge_opts.stop_on_failure)
       .with_solution_names([ad_hoc_name.clone()]),
   )?;
   let solution = runtime

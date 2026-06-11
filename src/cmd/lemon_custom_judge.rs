@@ -29,7 +29,7 @@ use crate::runtime::custom_judge_scheduler::{
   ScheduledTestCase, SchedulerProgress, collect_runtime_traits, execute_scheduled_test_cases,
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
-use crate::runtime::types::{BundleJudgeProblemSpec, JudgeReport};
+use crate::runtime::types::{BundleJudgeProblemSpec, JudgeReport, JudgeStatus};
 
 #[derive(Parser)]
 /// Hidden entry point that judges one bundled Lemon submission through Hull's own scheduler.
@@ -250,34 +250,37 @@ fn aggregate_lemon_report(
   }
 }
 
-fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>) -> String {
+fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>) -> JudgeStatus {
   let statuses = test_case_reports
     .values()
-    .map(|report| report.status.as_str())
+    .map(|report| report.status)
     .collect::<Vec<_>>();
   if statuses.is_empty() {
-    return "judgment_failed".to_string();
+    return JudgeStatus::InternalError;
   }
-  if statuses.iter().all(|status| *status == "accepted") {
-    return "accepted".to_string();
+  if statuses
+    .iter()
+    .all(|status| *status == JudgeStatus::Accepted)
+  {
+    return JudgeStatus::Accepted;
   }
   for fatal in [
-    "runtime_error",
-    "time_limit_exceeded",
-    "memory_limit_exceeded",
-    "judgment_failed",
+    JudgeStatus::RuntimeError,
+    JudgeStatus::TimeLimitExceeded,
+    JudgeStatus::MemoryLimitExceeded,
+    JudgeStatus::InternalError,
   ] {
     if statuses.contains(&fatal) {
-      return fatal.to_string();
+      return fatal;
     }
   }
-  if statuses.contains(&"wrong_answer") {
-    return "wrong_answer".to_string();
+  if statuses.contains(&JudgeStatus::WrongAnswer) {
+    return JudgeStatus::WrongAnswer;
   }
-  if statuses.contains(&"partially_correct") {
-    return "partially_correct".to_string();
+  if statuses.contains(&JudgeStatus::PartiallyCorrect) {
+    return JudgeStatus::PartiallyCorrect;
   }
-  statuses[0].to_string()
+  statuses[0]
 }
 
 fn write_lemon_report(
@@ -290,7 +293,7 @@ fn write_lemon_report(
   }
   let final_score = (report.score * lemon_metadata.lemon_full_score as f64).round() as i64;
   let final_message = if report.message.is_empty() {
-    report.status.clone()
+    report.status.to_string()
   } else {
     format!("{}:\n{}", report.status, report.message)
   };
@@ -352,7 +355,7 @@ mod tests {
 
   use super::*;
   use crate::runtime::bundle_judge::pack_official_data_tar;
-  use crate::runtime::types::ValidationReport;
+  use crate::runtime::types::{ValidationReport, ValidationStatus};
 
   #[test]
   fn loads_bundle_root_layout() {
@@ -437,7 +440,7 @@ mod tests {
     pack_official_data_tar(
       "hand1",
       &ValidationReport {
-        status: "valid".to_string(),
+        status: ValidationStatus::Valid,
         message: String::new(),
         reader_trace_stacks: Vec::new(),
         reader_trace_tree: serde_json::json!({}),

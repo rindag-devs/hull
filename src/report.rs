@@ -21,7 +21,7 @@ use serde::Serialize;
 
 use crate::format::{format_size, format_tick, to_title_case};
 use crate::runtime::types::{
-  JudgeReport, ProblemSpec, RuntimeSolutionData, SubtaskRuntimeReport, SubtaskSpec,
+  JudgeReport, JudgeStatus, ProblemSpec, RuntimeSolutionData, SubtaskRuntimeReport, SubtaskSpec,
 };
 
 #[derive(Serialize, Debug)]
@@ -40,14 +40,14 @@ pub struct JudgeCliReport {
 pub struct JudgeCliSubtaskResult {
   pub full_score: f64,
   pub scaled_score: f64,
-  pub statuses: Vec<String>,
+  pub statuses: Vec<JudgeStatus>,
 }
 
 #[derive(Clone, Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 /// One testcase entry in a CLI judging summary.
 pub struct JudgeCliTestCaseResult {
-  pub status: String,
+  pub status: JudgeStatus,
   pub score: f64,
   pub tick: u64,
   pub memory: u64,
@@ -76,7 +76,7 @@ impl JudgeCliReport {
           (
             name.clone(),
             JudgeCliTestCaseResult {
-              status: result.status.clone(),
+              status: result.status,
               score: result.score,
               tick: result.tick,
               memory: result.memory,
@@ -115,7 +115,7 @@ impl JudgeCliReport {
           (
             name.clone(),
             JudgeCliTestCaseResult {
-              status: report.status.clone(),
+              status: report.status,
               score: report.score,
               tick: report.tick,
               memory: report.memory,
@@ -140,10 +140,12 @@ impl JudgeCliReport {
 
     for (index, subtask) in self.subtask_results.iter().enumerate() {
       let status = get_subtask_status(&subtask.statuses);
-      let title_case_status = to_title_case(&status);
+      let title_case_status = status
+        .map(|status| to_title_case(&status.to_string()))
+        .unwrap_or_else(|| "N/A".to_string());
       subtask_table.add_row(vec![
         Cell::new(index),
-        colorize_status(&status, &title_case_status),
+        colorize_status(status, &title_case_status),
         Cell::new(format!("{:.3}", subtask.scaled_score)),
         Cell::new(format!("{:.3}", subtask.full_score)),
       ]);
@@ -160,10 +162,10 @@ impl JudgeCliReport {
     sorted_test_cases.sort_by_key(|(name, _)| *name);
 
     for (name, case) in sorted_test_cases {
-      let title_case_status = to_title_case(&case.status);
+      let title_case_status = to_title_case(&case.status.to_string());
       test_case_table.add_row(vec![
         Cell::new(name),
-        colorize_status(&case.status, &title_case_status),
+        colorize_status(Some(case.status), &title_case_status),
         Cell::new(format!("{:.3}", case.score)),
         Cell::new(format_tick(case.tick)),
         Cell::new(format_size(case.memory)),
@@ -175,25 +177,29 @@ impl JudgeCliReport {
   }
 }
 
-fn get_subtask_status(statuses: &[String]) -> String {
+fn get_subtask_status(statuses: &[JudgeStatus]) -> Option<JudgeStatus> {
   if statuses.is_empty() {
-    return "N/A".to_string();
+    return None;
   }
-  statuses
-    .iter()
-    .find(|status| *status != "accepted")
-    .cloned()
-    .unwrap_or_else(|| "accepted".to_string())
+  Some(
+    statuses
+      .iter()
+      .find(|status| **status != JudgeStatus::Accepted)
+      .copied()
+      .unwrap_or(JudgeStatus::Accepted),
+  )
 }
 
-fn colorize_status(status: &str, text: &str) -> Cell {
+fn colorize_status(status: Option<JudgeStatus>, text: &str) -> Cell {
   match status {
-    "accepted" => Cell::new(text).fg(Color::Green),
-    "wrong_answer" => Cell::new(text).fg(Color::Red),
-    "partially_correct" => Cell::new(text).fg(Color::Cyan),
-    "runtime_error" => Cell::new(text).fg(Color::Magenta),
-    "time_limit_exceeded" | "memory_limit_exceeded" => Cell::new(text).fg(Color::Yellow),
-    "internal_error" => Cell::new(text).fg(Color::Grey),
-    _ => Cell::new(text),
+    Some(JudgeStatus::Accepted) => Cell::new(text).fg(Color::Green),
+    Some(JudgeStatus::WrongAnswer) => Cell::new(text).fg(Color::Red),
+    Some(JudgeStatus::PartiallyCorrect) => Cell::new(text).fg(Color::Cyan),
+    Some(JudgeStatus::RuntimeError) => Cell::new(text).fg(Color::Magenta),
+    Some(JudgeStatus::TimeLimitExceeded | JudgeStatus::MemoryLimitExceeded) => {
+      Cell::new(text).fg(Color::Yellow)
+    }
+    Some(JudgeStatus::InternalError) => Cell::new(text).fg(Color::Grey),
+    None => Cell::new(text),
   }
 }

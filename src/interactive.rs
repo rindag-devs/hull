@@ -24,6 +24,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, LineGauge, Paragraph, Row, Table, Widget};
 use ratatui::{Terminal, TerminalOptions, Viewport};
+use tracing::error;
 
 use crate::format::{format_duration_ms, format_size, format_tick, to_title_case};
 
@@ -541,6 +542,10 @@ impl ItemGuard {
 impl Drop for ItemGuard {
   fn drop(&mut self) {
     if self.active {
+      error!(
+        "Task item {}/{} ended without an explicit result, status: internal_error",
+        self.handle.task_id, self.item_name
+      );
       self.handle.finish_item(
         &self.item_name,
         false,
