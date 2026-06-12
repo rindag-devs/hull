@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 use std::ffi::OsString;
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -400,11 +400,12 @@ pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()
   let mut children = Vec::new();
   let mut log_threads = Vec::new();
   for command in commands {
+    let command_with_nom = command.with_nom;
     let mut command = command.build_command();
     match command
       .stdin(Stdio::null())
       .stdout(Stdio::inherit())
-      .stderr(if with_nom {
+      .stderr(if command_with_nom {
         Stdio::piped()
       } else {
         Stdio::inherit()
@@ -412,22 +413,24 @@ pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()
       .spawn()
     {
       Ok(mut child) => {
-        if let Some(nom_stdin) = nom_stdin.clone() {
-          let mut stderr = child
+        if command_with_nom && let Some(nom_stdin) = nom_stdin.clone() {
+          let stderr = child
             .stderr
             .take()
             .with_context(|| format!("Failed to capture stderr from `{label}` process"))?;
           log_threads.push(std::thread::spawn(move || -> std::io::Result<()> {
-            let mut buffer = [0; 8192];
+            let mut stderr = BufReader::new(stderr);
+            let mut buffer = Vec::new();
             loop {
-              let read = stderr.read(&mut buffer)?;
+              buffer.clear();
+              let read = stderr.read_until(b'\n', &mut buffer)?;
               if read == 0 {
                 break;
               }
               let mut nom_stdin = nom_stdin
                 .lock()
                 .map_err(|_| std::io::Error::other("nom stdin lock poisoned"))?;
-              nom_stdin.write_all(&buffer[..read])?;
+              nom_stdin.write_all(&buffer)?;
             }
             Ok(())
           }));
