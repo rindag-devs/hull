@@ -29,8 +29,6 @@ use tracing::error;
 use crate::format::{format_duration_ms, format_size, format_tick, to_title_case};
 
 const MIN_VIEWPORT_HEIGHT: u16 = 12;
-const MAX_VIEWPORT_HEIGHT: u16 = 28;
-const MAX_PANEL_ITEMS: usize = 8;
 
 type InlineTerminal = Terminal<CrosstermBackend<std::io::Stderr>>;
 
@@ -194,7 +192,6 @@ struct InteractiveState {
 #[derive(Clone, Debug)]
 struct PhaseState {
   kind: PhaseKind,
-  label: String,
   started_at: Instant,
 }
 
@@ -222,7 +219,6 @@ struct Dashboard {
   title: String,
   summary: String,
   total: SummaryCounts,
-  viewport_height: u16,
   headers: [&'static str; 6],
   rows: Vec<DashboardRow>,
   active: Vec<DashboardItem>,
@@ -405,15 +401,11 @@ impl ProblemProgressHandle {
     }
   }
 
-  /// Starts a dashboard phase and returns a guard that ends it on drop.
-  pub fn phase(&self, kind: PhaseKind, label: impl Into<String>) -> PhaseGuard {
+  /// Starts a dashboard phase at `started_at` and returns a guard that ends it on drop.
+  pub fn phase(&self, kind: PhaseKind, started_at: Instant) -> PhaseGuard {
     {
       let mut state = self.inner.lock().unwrap();
-      state.phase = Some(PhaseState {
-        kind,
-        label: label.into(),
-        started_at: Instant::now(),
-      });
+      state.phase = Some(PhaseState { kind, started_at });
     }
     render(&self.inner);
     PhaseGuard {
@@ -630,7 +622,7 @@ fn create_terminal() -> Option<(InlineTerminal, u16)> {
 }
 
 fn viewport_height_for_terminal_rows(rows: u16) -> u16 {
-  ((rows as u32 * 35).div_ceil(100) as u16).clamp(MIN_VIEWPORT_HEIGHT, MAX_VIEWPORT_HEIGHT)
+  ((rows as u32 * 35).div_ceil(100) as u16).max(MIN_VIEWPORT_HEIGHT)
 }
 
 fn insert_log_line(state: &mut InteractiveState, message: &str) {
@@ -742,9 +734,9 @@ fn render_dashboard(area: Rect, buf: &mut ratatui::buffer::Buffer, dashboard: &D
   let chunks = Layout::default()
     .direction(Direction::Vertical)
     .constraints([
-      Constraint::Length(header_height(dashboard.viewport_height)),
-      Constraint::Min(0),
-      Constraint::Length(panel_height(dashboard.viewport_height)),
+      Constraint::Length(3),
+      Constraint::Ratio(1, 2),
+      Constraint::Ratio(1, 2),
     ])
     .split(area);
 
@@ -767,8 +759,11 @@ fn render_header(area: Rect, buf: &mut ratatui::buffer::Buffer, dashboard: &Dash
   block.render(area, buf);
 
   let chunks = Layout::default()
-    .direction(Direction::Vertical)
-    .constraints([Constraint::Length(1), Constraint::Length(1)])
+    .direction(Direction::Horizontal)
+    .constraints([
+      Constraint::Length(dashboard.summary.len() as u16 + 1),
+      Constraint::Min(0),
+    ])
     .split(inner);
   let progress = progress_ratio(dashboard.total);
   Paragraph::new(Line::from(dashboard.summary.clone())).render(chunks[0], buf);
@@ -848,7 +843,7 @@ fn render_item_panel(
   items: &[DashboardItem],
   accent: Color,
 ) {
-  let capacity = (area.height.saturating_sub(2) as usize).min(MAX_PANEL_ITEMS);
+  let capacity = area.height.saturating_sub(2) as usize;
   let mut lines = if items.is_empty() {
     vec![Line::styled("none", Style::default().fg(Color::DarkGray))]
   } else {
@@ -885,21 +880,6 @@ fn render_item_panel(
         )),
     )
     .render(area, buf);
-}
-
-fn panel_height(total_height: u16) -> u16 {
-  if total_height >= 22 {
-    8
-  } else if total_height >= 16 {
-    6
-  } else {
-    4
-  }
-}
-
-fn header_height(total_height: u16) -> u16 {
-  let _ = total_height;
-  4
 }
 
 fn clear_dashboard(state: &mut InteractiveState) {
@@ -1027,7 +1007,6 @@ fn project_contest_dashboard(state: &InteractiveState) -> Dashboard {
       problem_counts.pending
     ),
     total,
-    viewport_height: state.viewport_height,
     headers: [
       "Problem",
       "Phase",
@@ -1085,7 +1064,6 @@ fn project_problem_dashboard(state: &InteractiveState) -> Dashboard {
       total.pending
     ),
     total,
-    viewport_height: state.viewport_height,
     headers: ["Task", "Kind", "Progress", "Score", "Active", "Status"],
     active: collect_dashboard_items(&nodes, ExecutionState::Running),
     failures: collect_dashboard_items(&nodes, ExecutionState::Failed),
@@ -1100,9 +1078,8 @@ fn title_line(state: &InteractiveState) -> String {
     .as_ref()
     .map(|phase| {
       format!(
-        "{} | {} | {}",
+        "{} | {}",
         phase_label(phase.kind),
-        phase.label,
         format_duration_ms(phase.started_at.elapsed())
       )
     })
@@ -1202,6 +1179,9 @@ fn task_name(node: &TreeNode) -> String {
 fn collect_dashboard_items(nodes: &[&TreeNode], state: ExecutionState) -> Vec<DashboardItem> {
   let mut items = Vec::new();
   collect_nodes(nodes, state, &mut items);
+  if state == ExecutionState::Running {
+    items.sort_by_key(|item| item.started_at);
+  }
   items
     .iter()
     .map(|item| {
@@ -1478,10 +1458,10 @@ mod tests {
   }
 
   #[test]
-  fn layout_constraints_fit_every_viewport_height() {
-    for height in MIN_VIEWPORT_HEIGHT..=MAX_VIEWPORT_HEIGHT {
-      assert!(header_height(height) + panel_height(height) <= height);
-    }
+  fn viewport_height_has_minimum_but_no_maximum() {
+    assert_eq!(viewport_height_for_terminal_rows(20), MIN_VIEWPORT_HEIGHT);
+    assert_eq!(viewport_height_for_terminal_rows(100), 35);
+    assert_eq!(viewport_height_for_terminal_rows(200), 70);
   }
 
   #[test]

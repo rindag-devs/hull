@@ -15,6 +15,7 @@
 
 use std::collections::BTreeMap;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
@@ -29,6 +30,68 @@ use super::workspace::RuntimeWorkspace;
 use crate::interactive::ProblemProgressHandle;
 use crate::interactive::{PhaseKind, TaskItemReport, TaskKind};
 use crate::nix::{get_flake_url, run_build_commands};
+
+struct PhaseTiming {
+  name: &'static str,
+  elapsed: Duration,
+}
+
+struct BuildTimings {
+  started: Instant,
+  phases: Vec<PhaseTiming>,
+}
+
+struct DashboardPhase<'a> {
+  progress: &'a ProblemProgressHandle,
+  kind: PhaseKind,
+}
+
+impl BuildTimings {
+  fn new() -> Self {
+    Self {
+      started: Instant::now(),
+      phases: Vec::new(),
+    }
+  }
+
+  fn run_phase<T>(
+    &mut self,
+    name: &'static str,
+    dashboard: Option<DashboardPhase<'_>>,
+    run: impl FnOnce() -> Result<T>,
+  ) -> Result<T> {
+    let started = Instant::now();
+    let _phase = dashboard.map(|dashboard| dashboard.progress.phase(dashboard.kind, started));
+    let result = run();
+    let elapsed = started.elapsed();
+    self.phases.push(PhaseTiming { name, elapsed });
+    match &result {
+      Ok(_) => info!("Finished {name} in {}", format_duration(elapsed)),
+      Err(_) => info!("Failed {name} after {}", format_duration(elapsed)),
+    }
+    result
+  }
+
+  fn log_summary(&self, kind: &str, name: &str) {
+    info!(
+      "{kind} `{name}` build timing: total={}, phases: {}",
+      format_duration(self.started.elapsed()),
+      format_phase_timings(&self.phases)
+    );
+  }
+}
+
+fn format_duration(duration: Duration) -> String {
+  format!("{:.3}s", duration.as_secs_f64())
+}
+
+fn format_phase_timings(timings: &[PhaseTiming]) -> String {
+  timings
+    .iter()
+    .map(|timing| format!("{}={}", timing.name, format_duration(timing.elapsed)))
+    .collect::<Vec<_>>()
+    .join(", ")
+}
 
 fn prepare_runtime_store_paths(
   label: &str,
@@ -136,46 +199,48 @@ pub fn build_problem(
   options: RuntimeOptions,
   nix_args: &[String],
 ) -> Result<()> {
-  let spec = {
-    let _phase = options.progress.phase(
-      PhaseKind::NixEval,
-      format!("Loading metadata for {problem}"),
-    );
-    load_problem_spec(problem)?
-  };
-
-  {
-    let _phase = options.progress.phase(
-      PhaseKind::NixPrepare,
-      format!("Realizing toolchains and prepared artifacts for {problem}"),
-    );
-    run_build_commands(
-      collect_problem_realize_builds(&spec),
-      "nix prepare for runtime artifacts",
+  let mut timings = BuildTimings::new();
+  let result = (|| {
+    let spec = timings.run_phase(
+      "metadata eval",
+      Some(DashboardPhase {
+        progress: &options.progress,
+        kind: PhaseKind::NixEval,
+      }),
+      || load_problem_spec(problem),
     )?;
-  }
 
-  let workspace = RuntimeWorkspace::new()?;
-  let mut runtime = {
-    let _phase = options.progress.phase(
-      PhaseKind::Runtime,
-      "Running validators, checker tests, and solutions".to_string(),
-    );
-    analyze_problem(&spec, &workspace, options.clone())
-      .with_context(|| format!("Runtime analysis failed for problem `{problem}`"))?
-  };
+    timings.run_phase("runtime artifact prepare", None, || {
+      run_build_commands(
+        collect_problem_realize_builds(&spec),
+        "nix prepare for runtime artifacts",
+      )
+    })?;
 
-  {
-    let _phase = options
-      .progress
-      .phase(PhaseKind::NixBuild, format!("Packaging target {}", target));
-    prepare_runtime_store_paths(
-      &format!("problem `{problem}`"),
-      &mut runtime,
-      Some(&options.progress),
+    let mut runtime = timings.run_phase(
+      "runtime analysis",
+      Some(DashboardPhase {
+        progress: &options.progress,
+        kind: PhaseKind::Runtime,
+      }),
+      || {
+        let workspace = RuntimeWorkspace::new()?;
+        analyze_problem(&spec, &workspace, options.clone())
+          .with_context(|| format!("Runtime analysis failed for problem `{problem}`"))
+      },
     )?;
-    build_problem_target(problem, target, &runtime, out_link, nix_args)
-  }
+
+    timings.run_phase("target packaging", None, || {
+      prepare_runtime_store_paths(
+        &format!("problem `{problem}`"),
+        &mut runtime,
+        Some(&options.progress),
+      )?;
+      build_problem_target(problem, target, &runtime, out_link, nix_args)
+    })
+  })();
+  timings.log_summary("problem", problem);
+  result
 }
 
 pub fn build_contest(
@@ -185,106 +250,107 @@ pub fn build_contest(
   options: RuntimeOptions,
   nix_args: &[String],
 ) -> Result<()> {
-  let contest_spec = {
-    let _phase = options.progress.phase(
-      PhaseKind::NixEval,
-      format!("Loading contest metadata for {contest}"),
-    );
-    load_contest_spec(contest)?
-  };
-
-  {
-    let _phase = options.progress.phase(
-      PhaseKind::NixPrepare,
-      format!("Realizing toolchains and prepared artifacts for contest {contest}"),
-    );
-    run_build_commands(
-      contest_spec
-        .problems
-        .iter()
-        .flat_map(collect_problem_realize_builds)
-        .collect(),
-      "nix prepare for contest runtime artifacts",
+  let mut timings = BuildTimings::new();
+  let result = (|| {
+    let contest_spec = timings.run_phase(
+      "metadata eval",
+      Some(DashboardPhase {
+        progress: &options.progress,
+        kind: PhaseKind::NixEval,
+      }),
+      || load_contest_spec(contest),
     )?;
-  }
 
-  let mut runtime_by_problem = {
-    let _phase = options.progress.phase(
-      PhaseKind::Runtime,
-      format!("Running analysis for contest {}", contest),
-    );
+    timings.run_phase("runtime artifact prepare", None, || {
+      run_build_commands(
+        contest_spec
+          .problems
+          .iter()
+          .flat_map(collect_problem_realize_builds)
+          .collect(),
+        "nix prepare for contest runtime artifacts",
+      )
+    })?;
+
     options.progress.set_title("Contest", contest);
-    let contest_handle = if contest_spec.problems.is_empty() {
-      None
-    } else {
-      Some(options.progress.register_group(
-        TaskKind::Problem,
-        contest,
-        contest_spec.problems.iter().map(|spec| spec.name.clone()),
-        None,
-      ))
-    };
-    install_with_pool(options.clone(), || {
-      contest_spec
-        .problems
-        .par_iter()
-        .map(|spec| {
-          if options.should_stop() {
-            bail!("Contest analysis stopped after an earlier failure");
-          }
-          let guard = contest_handle
-            .as_ref()
-            .map(|handle| handle.item(spec.name.clone()));
-          let workspace = RuntimeWorkspace::new()?;
-          let problem_progress = options
-            .progress
-            .child_scope(contest)
-            .child_scope(&spec.name);
-          let runtime =
-            analyze_problem(spec, &workspace, options.single_job_child(problem_progress))
-              .with_context(|| {
-                format!(
-                  "Runtime analysis failed for contest `{contest}`, problem `{}`",
-                  spec.name
-                )
-              })?;
-          if let Some(guard) = guard {
-            guard.finish(
-              true,
-              TaskItemReport {
-                status: Some("accepted".to_string()),
-                ..TaskItemReport::default()
-              },
-            );
-          }
-          Ok((spec.name.clone(), (workspace, runtime)))
+    let mut runtime_by_problem = timings.run_phase(
+      "runtime analysis",
+      Some(DashboardPhase {
+        progress: &options.progress,
+        kind: PhaseKind::Runtime,
+      }),
+      || {
+        let contest_handle = if contest_spec.problems.is_empty() {
+          None
+        } else {
+          Some(options.progress.register_group(
+            TaskKind::Problem,
+            contest,
+            contest_spec.problems.iter().map(|spec| spec.name.clone()),
+            None,
+          ))
+        };
+        install_with_pool(options.clone(), || {
+          contest_spec
+            .problems
+            .par_iter()
+            .map(|spec| {
+              if options.should_stop() {
+                bail!("Contest analysis stopped after an earlier failure");
+              }
+              let guard = contest_handle
+                .as_ref()
+                .map(|handle| handle.item(spec.name.clone()));
+              let workspace = RuntimeWorkspace::new()?;
+              let problem_progress = options
+                .progress
+                .child_scope(contest)
+                .child_scope(&spec.name);
+              let runtime =
+                analyze_problem(spec, &workspace, options.single_job_child(problem_progress))
+                  .with_context(|| {
+                    format!(
+                      "Runtime analysis failed for contest `{contest}`, problem `{}`",
+                      spec.name
+                    )
+                  })?;
+              if let Some(guard) = guard {
+                guard.finish(
+                  true,
+                  TaskItemReport {
+                    status: Some("accepted".to_string()),
+                    ..TaskItemReport::default()
+                  },
+                );
+              }
+              Ok((spec.name.clone(), (workspace, runtime)))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()
         })
-        .collect::<Result<BTreeMap<_, _>>>()
-    })?
-  };
+      },
+    )?;
 
-  {
-    let _phase = options.progress.phase(
-      PhaseKind::NixBuild,
-      format!("Packaging contest target {}", target),
-    );
-    for (problem_name, (_, runtime)) in &mut runtime_by_problem {
-      let problem_progress = options.progress.child_scope(problem_name);
-      prepare_runtime_store_paths(
-        &format!("contest `{contest}`, problem `{problem_name}`"),
-        runtime,
-        Some(&problem_progress),
-      )?;
-    }
-    build_contest_target(
-      contest,
-      target,
-      &runtime_by_problem
-        .iter()
-        .map(|(name, (_, runtime))| (name.clone(), runtime.clone()))
-        .collect(),
-      out_link,
-      nix_args,
-    )
-  }
+    timings.run_phase("target packaging", None, || {
+      for (problem_name, (_, runtime)) in &mut runtime_by_problem {
+        let problem_progress = options.progress.child_scope(problem_name);
+        prepare_runtime_store_paths(
+          &format!("contest `{contest}`, problem `{problem_name}`"),
+          runtime,
+          Some(&problem_progress),
+        )?;
+      }
+      build_contest_target(
+        contest,
+        target,
+        &runtime_by_problem
+          .iter()
+          .map(|(name, (_, runtime))| (name.clone(), runtime.clone()))
+          .collect(),
+        out_link,
+        nix_args,
+      )
+    })
+  })();
+  timings.log_summary("contest", contest);
+  result
 }
