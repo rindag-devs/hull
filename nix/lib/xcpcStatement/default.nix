@@ -63,11 +63,6 @@ hull.document.mkProblemTypstDocument problem {
       hash = "sha256-Z0okd0uGhUDpdLXWpS+GvKVk1LSs15CE7l0l7kZqWLo=";
     }
     {
-      name = "tablex";
-      version = "0.0.9";
-      hash = "sha256-yzg4LKpT1xfVUR5JyluDQy87zi2sU5GM27mThARx7ok=";
-    }
-    {
       name = "diagraph";
       version = "0.3.6";
       hash = "sha256-U/KxwlNyCIFHyMJKkjeQ4NDCYZhqNgM+oxJZ8Lov3nA=";

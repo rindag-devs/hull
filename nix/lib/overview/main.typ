@@ -14,7 +14,6 @@
 */
 
 #import "@preview/oxifmt:1.0.0": strfmt
-#import "@preview/tablex:0.0.9": cellx, colspanx, hlinex, tablex
 
 // Helper to get input from command line or use a default for local testing
 #let get-input-or-default(name, default) = {
@@ -152,15 +151,16 @@
 #pagebreak()
 = Traits
 
-#tablex(
+#table(
   columns: (auto, 1fr),
   align: (left, left),
-  auto-lines: false,
-  header-rows: 1,
-  // Header
-  [*Trait Name*],
-  [*Description (en)*],
-  hlinex(),
+  stroke: none,
+  table.header(
+    repeat: true,
+    // Header
+    [*Trait Name*], [*Description (en)*],
+  ),
+  table.hline(),
   // Body
   ..problem
     .traits
@@ -176,17 +176,16 @@
 = Test Cases
 
 // Table 1: General Information
-#tablex(
+#table(
   columns: (auto, auto, 1fr, auto),
   align: (left, left, left, center),
-  auto-lines: false,
-  header-rows: 1,
-  // Header
-  [*Name*],
-  [*Generator*],
-  [*Arguments*],
-  [*Groups*],
-  hlinex(),
+  stroke: none,
+  table.header(
+    repeat: true,
+    // Header
+    [*Name*], [*Generator*], [*Arguments*], [*Groups*],
+  ),
+  table.hline(),
   // Body
   ..problem
     .at("test-cases")
@@ -216,15 +215,17 @@
   problem.at("test-cases").pairs().sorted(key: p => p.at(0))
 )
 
-#tablex(
+#table(
   columns: (auto, ..all_trait_names.map(_ => 1fr)),
   align: (left + bottom, ..all_trait_names.map(_ => center + bottom)),
-  auto-lines: false,
-  header-rows: 1,
-  // Header
-  [*Test Case*],
-  ..all_trait_names.map(name => text(size: 0.8em, breakable-text(name))),
-  hlinex(),
+  stroke: none,
+  table.header(
+    repeat: true,
+    // Header
+    [*Test Case*],
+    ..all_trait_names.map(name => text(size: 0.8em, breakable-text(name))),
+  ),
+  table.hline(),
   // Body
   ..test_case_pairs
     .map(((name, tc)) => {
@@ -241,7 +242,7 @@
           } else {
             ("?", yellow.lighten(60%))
           }
-          cellx(fill: color, align(center, symbol))
+          table.cell(fill: color, align(center, symbol))
         }),
       )
     })
@@ -252,23 +253,22 @@
 #pagebreak()
 = Subtasks
 
-#tablex(
+#table(
   columns: (auto, auto, 1fr, 1.5fr),
   align: (center, center, left, left),
-  auto-lines: false,
-  header-rows: 1,
-  // Header
-  [*Subtask*],
-  [*Score*],
-  [*Required Traits*],
-  [*Test Cases*],
-  hlinex(),
+  stroke: none,
+  table.header(
+    repeat: true,
+    // Header
+    [*Subtask*], [*Score*], [*Required Traits*], [*Test Cases*],
+  ),
+  table.hline(),
   // Body
   ..problem
     .subtasks
     .enumerate()
     .map(((i, st)) => (
-      i,
+      [#i],
       strfmt("{:.3}", st.at("full-score")),
       {
         let traits = st
@@ -293,32 +293,34 @@
 #let test-case-names = problem.at("test-cases").keys().sorted()
 #let solution-names = problem.solutions.keys().sorted()
 
-#tablex(
+#table(
   // Columns: One for test case names, then one for each solution.
   columns: (auto, ..solution-names.map(_ => 1fr)),
   // Align: Test case names left, results centered.
   align: (left + bottom, ..solution-names.map(_ => center + bottom)),
-  auto-lines: false,
-  header-rows: 1,
+  stroke: none,
 
-  // --- Header Row ---
-  // First cell is the corner label.
-  [*Test Case*],
-  // The rest of the header cells are the solution names.
-  ..solution-names.map(name => {
-    let sol = problem.solutions.at(name)
-    let is_main = sol.at("main-correct-solution")
-    // Use a smaller font and add a star for the main solution.
-    text(
-      size: 0.8em,
-      weight: "bold",
-      if is_main { [*#emoji.star #breakable-text(name)*] } else {
-        [#breakable-text(name)]
-      },
-    )
-  }),
+  table.header(
+    repeat: true,
+    // --- Header Row ---
+    // First cell is the corner label.
+    [*Test Case*],
+    // The rest of the header cells are the solution names.
+    ..solution-names.map(name => {
+      let sol = problem.solutions.at(name)
+      let is_main = sol.at("main-correct-solution")
+      // Use a smaller font and add a star for the main solution.
+      text(
+        size: 0.8em,
+        weight: "bold",
+        if is_main { [*#emoji.star #breakable-text(name)*] } else {
+          [#breakable-text(name)]
+        },
+      )
+    }),
+  ),
 
-  hlinex(),
+  table.hline(),
 
   // --- Body Rows (one for each test case) ---
   ..test-case-names
@@ -340,19 +342,19 @@
     })
     .flatten(),
 
-  hlinex(),
+  table.hline(),
 
   // Subtasks
   [*Subtask*],
-  colspanx(solution-names.len(), align: left)[*Score*],
+  table.cell(colspan: solution-names.len(), align: left)[*Score*],
 
-  hlinex(),
+  table.hline(),
 
   ..problem
     .subtasks
     .enumerate()
     .map(((i, st)) => (
-      i,
+      [#i],
       ..solution-names.map(sol => {
         let score = problem.solutions.at(sol).subtask-results.at(i).scaled-score
         strfmt("{:.3}", score)
@@ -360,7 +362,7 @@
     ))
     .flatten(),
 
-  hlinex(),
+  table.hline(),
 
   // Footer Row (for total scores)
   // First cell: The label for the score row.

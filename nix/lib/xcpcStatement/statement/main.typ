@@ -13,7 +13,6 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-#import "@preview/tablex:0.0.9": cellx, hlinex, tablex
 #import "@preview/titleize:0.1.1": titlecase
 #import "@preview/diagraph:0.3.6"
 
@@ -370,19 +369,21 @@
   #if problem.subtasks.len() >= 2 [
     == #titlecase(translation.subtasks)
 
-    #tablex(
+    #table(
       columns: (0.5fr, 1fr) + (1fr,) * problem.traits.len(),
       align: (
         left + bottom,
         center + bottom,
         ..problem.traits.keys().map(_ => center + bottom),
       ),
-      auto-lines: false,
-      header-rows: 1,
-      [*\#*],
-      [*#titlecase(translation.score)*],
-      ..problem.traits.keys().map(x => breakable-text(x)),
-      hlinex(),
+      stroke: none,
+      table.header(
+        repeat: true,
+        [*\#*],
+        [*#titlecase(translation.score)*],
+        ..problem.traits.keys().map(x => breakable-text(x)),
+      ),
+      table.hline(),
       ..problem
         .subtasks
         .enumerate()
@@ -394,11 +395,11 @@
                 .keys()
                 .map(trait => {
                   if not st.traits.keys().contains(trait) {
-                    cellx(fill: yellow.lighten(60%))[?]
+                    table.cell(fill: yellow.lighten(60%))[?]
                   } else if st.traits.at(trait) {
-                    cellx(fill: green.lighten(60%))[#sym.checkmark]
+                    table.cell(fill: green.lighten(60%))[#sym.checkmark]
                   } else {
-                    cellx(fill: red.lighten(60%))[$times$]
+                    table.cell(fill: red.lighten(60%))[$times$]
                   }
                 })
           )
