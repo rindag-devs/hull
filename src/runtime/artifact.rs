@@ -29,6 +29,7 @@ use crate::runner;
 
 static NATIVE_MODULE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 const STORE_ADD_BATCH_SIZE: usize = 128;
+const STORE_ADD_ARG_BYTES_LIMIT: usize = 128 * 1024;
 
 pub fn collect_problem_realize_builds(
   problem: &super::types::ProblemSpec,
@@ -309,6 +310,28 @@ fn add_paths_to_store(paths: &[String]) -> Result<Vec<String>> {
   Ok(added)
 }
 
+fn store_add_batches(paths: &[String]) -> Vec<&[String]> {
+  let mut batches = Vec::new();
+  let mut start = 0;
+  let mut arg_bytes = 0;
+  for (index, path) in paths.iter().enumerate() {
+    let path_bytes = path.len() + 1;
+    if index > start
+      && (index - start >= STORE_ADD_BATCH_SIZE
+        || arg_bytes + path_bytes > STORE_ADD_ARG_BYTES_LIMIT)
+    {
+      batches.push(&paths[start..index]);
+      start = index;
+      arg_bytes = 0;
+    }
+    arg_bytes += path_bytes;
+  }
+  if start < paths.len() {
+    batches.push(&paths[start..]);
+  }
+  batches
+}
+
 fn visit_runtime_paths_mut(
   runtime: &mut RuntimeData,
   mut f: impl FnMut(&mut String) -> Result<()>,
@@ -357,7 +380,8 @@ pub fn storeify_runtime_data(
     Ok(())
   })?;
 
-  let total_batches = pending_paths.len().div_ceil(STORE_ADD_BATCH_SIZE);
+  let store_batches = store_add_batches(&pending_paths);
+  let total_batches = store_batches.len();
   let batch_names = (0..total_batches)
     .map(|index| format!("batch {:04}", index + 1))
     .collect::<Vec<_>>();
@@ -372,7 +396,7 @@ pub fn storeify_runtime_data(
     })
   });
 
-  for (index, batch) in pending_paths.chunks(STORE_ADD_BATCH_SIZE).enumerate() {
+  for (index, batch) in store_batches.into_iter().enumerate() {
     let batch_name = &batch_names[index];
     let guard = progress_handle
       .as_ref()
@@ -453,6 +477,25 @@ mod tests {
     let unique_names = names.iter().cloned().collect::<HashSet<_>>();
 
     assert_eq!(unique_names.len(), names.len());
+  }
+
+  #[test]
+  fn store_add_batches_respect_count_and_byte_limits() {
+    let short_paths = (0..(STORE_ADD_BATCH_SIZE + 1))
+      .map(|index| format!("/tmp/hull/{index}"))
+      .collect::<Vec<_>>();
+    let short_batches = store_add_batches(&short_paths);
+    assert_eq!(short_batches.len(), 2);
+    assert_eq!(short_batches[0].len(), STORE_ADD_BATCH_SIZE);
+    assert_eq!(short_batches[1].len(), 1);
+
+    let long_path = format!("/tmp/hull/{}", "x".repeat(STORE_ADD_ARG_BYTES_LIMIT / 2));
+    let long_paths = vec![long_path.clone(), long_path.clone(), long_path];
+    let long_batches = store_add_batches(&long_paths);
+    assert!(long_batches.len() > 1);
+    assert!(long_batches.iter().all(|batch| {
+      batch.iter().map(|path| path.len() + 1).sum::<usize>() <= STORE_ADD_ARG_BYTES_LIMIT
+    }));
   }
 
   fn problem_with_artifacts() -> ProblemSpec {

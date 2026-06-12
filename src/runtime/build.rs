@@ -14,9 +14,11 @@
 */
 
 use std::collections::BTreeMap;
+use std::io::Write;
 
 use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
+use tempfile::NamedTempFile;
 use tracing::info;
 
 use super::analysis::{analyze_problem, install_with_pool};
@@ -41,6 +43,23 @@ pub fn render_runtime_json(runtime: &RuntimeData) -> Result<String> {
   serde_json::to_string(runtime).context("Failed to serialize runtime analysis JSON")
 }
 
+fn write_runtime_json_file(runtime_json: &str) -> Result<NamedTempFile> {
+  let mut file = NamedTempFile::new().context("Failed to create runtime JSON file")?;
+  file
+    .write_all(runtime_json.as_bytes())
+    .context("Failed to write runtime JSON file")?;
+  file.flush().context("Failed to flush runtime JSON file")?;
+  Ok(file)
+}
+
+fn runtime_json_path(file: &NamedTempFile) -> Result<String> {
+  file
+    .path()
+    .to_str()
+    .map(ToOwned::to_owned)
+    .context("Runtime JSON path contains non-UTF-8 characters")
+}
+
 pub fn build_problem_target(
   problem: &str,
   target: &str,
@@ -50,15 +69,18 @@ pub fn build_problem_target(
 ) -> Result<()> {
   let flake_ref = get_flake_url()?;
   let runtime_json = render_runtime_json(runtime)?;
+  let runtime_json_file = write_runtime_json_file(&runtime_json)?;
+  let runtime_json_path = runtime_json_path(&runtime_json_file)?;
   let expr = format!(
     r#"
-      {{ runtimeJson }}:
+      {{ runtimeJsonPath }}:
       let
         flake = builtins.getFlake {flake_ref};
         lib = flake.inputs.hull.lib or flake.outputs.lib;
         problemConfig = flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem}.config;
+        runtime = builtins.fromJSON (builtins.readFile (/. + runtimeJsonPath));
       in
-      lib.${{builtins.currentSystem}}.runtime.buildProblemTarget problemConfig (builtins.fromJSON runtimeJson) {target}
+      lib.${{builtins.currentSystem}}.runtime.buildProblemTarget problemConfig runtime {target}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
     target = serde_json::to_string(target)?,
@@ -66,7 +88,7 @@ pub fn build_problem_target(
   crate::nix::BuildCommand::new()
     .impure(true)
     .expr_stdin(&expr)
-    .argstr("runtimeJson", &runtime_json)
+    .argstr("runtimeJsonPath", &runtime_json_path)
     .out_link(out_link)
     .extra_args(nix_args)
     .run()
@@ -82,15 +104,18 @@ pub fn build_contest_target(
   let flake_ref = get_flake_url()?;
   let runtime_json = serde_json::to_string(runtime_by_problem)
     .context("Failed to serialize contest runtime analysis JSON")?;
+  let runtime_json_file = write_runtime_json_file(&runtime_json)?;
+  let runtime_json_path = runtime_json_path(&runtime_json_file)?;
   let expr = format!(
     r#"
-      {{ runtimeJson }}:
+      {{ runtimeJsonPath }}:
       let
         flake = builtins.getFlake {flake_ref};
         lib = flake.inputs.hull.lib or flake.outputs.lib;
         contestConfig = flake.outputs.hullContests.${{builtins.currentSystem}}.{contest}.config;
+        runtime = builtins.fromJSON (builtins.readFile (/. + runtimeJsonPath));
       in
-      lib.${{builtins.currentSystem}}.runtime.buildContestTarget contestConfig (builtins.fromJSON runtimeJson) {target}
+      lib.${{builtins.currentSystem}}.runtime.buildContestTarget contestConfig runtime {target}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
     target = serde_json::to_string(target)?,
@@ -98,7 +123,7 @@ pub fn build_contest_target(
   crate::nix::BuildCommand::new()
     .impure(true)
     .expr_stdin(&expr)
-    .argstr("runtimeJson", &runtime_json)
+    .argstr("runtimeJsonPath", &runtime_json_path)
     .out_link(out_link)
     .extra_args(nix_args)
     .run()
