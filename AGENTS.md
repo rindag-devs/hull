@@ -45,7 +45,6 @@ Hull is a Nix-based framework for competitive programming problem authoring, run
 
 - Run `just format` after edits that affect formatted files.
 - Run `cargo check` after Rust changes.
-- Run targeted `cargo test` commands for changed logic.
 
 ## Repository Hygiene
 

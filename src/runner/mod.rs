@@ -26,8 +26,6 @@ use wasi_common::{
 };
 use wasmtime::{Config, Engine, Linker, Module, ResourceLimiter, Store, Trap};
 
-pub use crate::runner::limited_buffer::LimitedBuffer;
-
 #[derive(Clone, Debug)]
 struct MemoryLimiter {
   memory_bytes: usize,

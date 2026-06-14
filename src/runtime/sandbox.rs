@@ -24,7 +24,7 @@ use wasi_common::{
 };
 
 use crate::{
-  runner::{self, LimitedBuffer, RunStatus},
+  runner::{self, RunStatus, limited_buffer::LimitedBuffer},
   runtime::artifact::cache_native_module,
 };
 
