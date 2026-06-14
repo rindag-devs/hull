@@ -20,8 +20,8 @@ jobs:
       - name: Install Lix
         uses: canidae-solutions/lix-quick-install-action@v4
 
-      - name: Run cargo tests in dev shell
-        run: nix develop .#default --command cargo test
+      - name: Lint
+        run: nix develop .#default --command just lint
 
-      - name: Build all test problems contest
-        run: nix run . -- build-contest --contest test.allProblems
+      - name: Build all test problems
+        run: nix develop .#default --command just all-problems
