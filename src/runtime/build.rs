@@ -217,7 +217,7 @@ pub fn build_problem(
       )
     })?;
 
-    let mut runtime = timings.run_phase(
+    let (_workspace, mut runtime) = timings.run_phase(
       "runtime analysis",
       Some(DashboardPhase {
         progress: &options.progress,
@@ -225,8 +225,9 @@ pub fn build_problem(
       }),
       || {
         let workspace = RuntimeWorkspace::new()?;
-        analyze_problem(&spec, &workspace, options.clone())
-          .with_context(|| format!("Runtime analysis failed for problem `{problem}`"))
+        let runtime = analyze_problem(&spec, &workspace, options.clone())
+          .with_context(|| format!("Runtime analysis failed for problem `{problem}`"))?;
+        Ok((workspace, runtime))
       },
     )?;
 

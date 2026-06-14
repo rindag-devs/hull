@@ -157,8 +157,12 @@
               pkgs.cargo-edit
               pkgs.cargo-watch
               pkgs.biome
+              pkgs.clang-tools
+              pkgs.git
+              pkgs.just
               pkgs.pkg-config
               pkgs.nix-output-monitor
+              pkgs.typstyle
               hullPkgs.wasm32-wasi-wasip1.clang
             ];
 
