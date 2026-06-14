@@ -112,7 +112,7 @@ struct Edge {
 auto solve() -> void {
   i32 n, m;
   if (!In.readInt(n)) return;
-  In.readInt(m);
+  if (!In.readInt(m)) return;
 
   std::vector<Edge> edges(m);
   for (i32 i = 0; i < m; ++i) {

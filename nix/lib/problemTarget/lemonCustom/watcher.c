@@ -29,7 +29,11 @@
 #include <unistd.h>
 
 /* clang-format off */
+#ifdef CPLIB_CLANGD
+#define TICKS_PER_MS 1
+#else
 #define TICKS_PER_MS @TICKS_PER_MS@
+#endif
 /* clang-format on */
 
 static int make_path(char *buffer, size_t buffer_size, const char *lhs, const char *rhs) {
@@ -80,6 +84,7 @@ static int copy_archive_data(struct archive *reader, struct archive *writer) {
   size_t size;
   la_int64_t offset;
   int result;
+  la_ssize_t written;
 
   for (;;) {
     result = archive_read_data_block(reader, &buffer, &size, &offset);
@@ -89,9 +94,13 @@ static int copy_archive_data(struct archive *reader, struct archive *writer) {
     if (result != ARCHIVE_OK) {
       return result;
     }
-    result = archive_write_data_block(writer, buffer, size, offset);
-    if (result != ARCHIVE_OK) {
-      return result;
+    written = archive_write_data_block(writer, buffer, size, offset);
+    if (written < 0) {
+      return (int)written;
+    }
+    if ((size_t)written != size) {
+      archive_set_error(writer, EIO, "short archive write");
+      return ARCHIVE_FATAL;
     }
   }
 }
@@ -188,7 +197,7 @@ static int extract_tar_archive(const char *archive_path, const char *dest_dir) {
     }
     result = copy_archive_data(reader, writer);
     if (result != ARCHIVE_OK) {
-      fprintf(stderr, "archive data copy failed: %s\n", archive_error_string(reader));
+      fprintf(stderr, "archive data copy failed: %s\n", archive_error_string(writer));
       archive_write_free(writer);
       archive_read_free(reader);
       return -1;

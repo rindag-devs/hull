@@ -160,6 +160,7 @@
               pkgs.clang-tools
               pkgs.git
               pkgs.just
+              pkgs.libarchive
               pkgs.pkg-config
               pkgs.nix-output-monitor
               pkgs.typstyle

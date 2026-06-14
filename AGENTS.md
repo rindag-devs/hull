@@ -7,8 +7,8 @@ Hull is a Nix-based framework for competitive programming problem authoring, run
 ## Development Commands
 
 - Enter the development environment with `nix develop`.
-- Use `just` for project workflows; `just` without a recipe intentionally fails.
 - Format the repository with `just format`.
+- Run lint checks with `just lint`.
 - Clean build artifacts with `just clean`.
 - Update dependencies with `just update`.
 - Build one test problem with `just -- problem <name> [args...]`, for example `just -- problem aPlusB --stop-on-failure`.

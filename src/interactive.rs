@@ -920,7 +920,7 @@ fn styled_row_cells(row: &DashboardRow) -> Vec<Cell<'static>> {
     .enumerate()
     .map(|(index, cell)| {
       let style = match index {
-        0 | 1 | 2 | 3 => Style::default(),
+        0..=3 => Style::default(),
         4 | 5 => row_style(row.style),
         _ => Style::default(),
       };

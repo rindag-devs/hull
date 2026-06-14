@@ -177,7 +177,9 @@ unsigned query(node *root, unsigned k) {
   a = root->a;
   b = root->b;
   if (root->r - root->l + 1 == 8) {
-    return v[(qwq(k) & 7) + root->l];
+    int index = static_cast<int>(qwq(k) & 7) + root->l;
+    if (index < 0 || index >= 1024) return 0;
+    return v[index];
   }
   if (qwq(k) & 1) {
     return query(root->ls, k);

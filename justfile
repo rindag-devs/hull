@@ -1,6 +1,5 @@
-default:
-	@echo "No command specified" >&2
-	@exit 1
+build:
+	cargo build
 
 clean:
 	rm -rf ./result ./result-*
@@ -16,6 +15,12 @@ format:
 update:
 	nix flake update
 	cargo update
+
+lint:
+	cargo check
+	cargo test
+	cargo clippy --all-targets --all-features -- -D warnings
+	biome check .
 
 problem name *extra_args:
 	cargo run -- build -p test.{{name}} {{extra_args}}

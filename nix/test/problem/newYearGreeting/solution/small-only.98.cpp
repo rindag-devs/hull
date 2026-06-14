@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 const int N = 1200;
@@ -22,7 +21,7 @@ void decode() {
   scanf("%d", &q);
   while (q--) {
     scanf("%d", &x);
-    printf("%d\n", into[x]);
+    printf("%d\n", x >= 0 && x < t ? into[x] : -1);
   }
 }
 void encode() {
