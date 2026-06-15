@@ -28,7 +28,7 @@ void generator_main() {
   std::cout << T << '\n';
 
   for (int t = 1; t <= T; ++t) {
-    int n = gen.rnd.next(n_max, n_max);
+    int n = gen.rnd.next(n_min, n_max);
 
     int final_m_min = std::max(m_min, n - 1);
     if (final_m_min > m_max) panic("final_m_min must be <= m_max");

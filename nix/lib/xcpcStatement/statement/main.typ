@@ -219,7 +219,7 @@
 #let escape-dot-string(s) = {
   let escaped-parts = ()
   for cluster in str(s).clusters() {
-    let escaped-cluster = if cluster == "\\" {
+    let escaped-cluster = if cluster == "\"" {
       "\\\""
     } else if cluster == "\\" {
       "\\\\"
@@ -294,11 +294,9 @@
   #grid(
     columns: (auto, auto),
     inset: 0% + 3pt,
-    [#titlecase(translation.tick-limit):],
-    translation.ticks(problem.tick-limit),
+    [#titlecase(translation.tick-limit):], translation.ticks(problem.tick-limit),
 
-    [#titlecase(translation.memory-limit):],
-    translation.bytes(problem.memory-limit),
+    [#titlecase(translation.memory-limit):], translation.bytes(problem.memory-limit),
   )
 
   #line(length: 100%)

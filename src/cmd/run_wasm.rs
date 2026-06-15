@@ -203,7 +203,7 @@ fn reject_stdio_output_conflicts(opts: &RunWasmOpts) -> Result<()> {
       continue;
     };
     if output_path == wasm_path || stdin_path.as_ref() == Some(&output_path) {
-      panic!("stdio output path must not equal the wasm path or stdin path");
+      bail!("stdio output path must not equal the wasm path or stdin path");
     }
   }
   Ok(())
