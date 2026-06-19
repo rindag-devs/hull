@@ -23,56 +23,84 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 
-use super::types::{ArtifactSpec, RuntimeData};
+use super::types::{ArtifactSpec, ProblemSpec, RuntimeData};
 use crate::interactive::{ProblemProgressHandle, TaskItemReport, TaskKind};
+use crate::nix::BuildCommand;
 use crate::runner;
 
 static NATIVE_MODULE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 const STORE_ADD_BATCH_SIZE: usize = 128;
 const STORE_ADD_ARG_BYTES_LIMIT: usize = 128 * 1024;
 
-pub fn collect_problem_realize_builds(
-  problem: &super::types::ProblemSpec,
-) -> Vec<crate::nix::BuildCommand> {
+/// Returns the Nix builds needed to realize one problem's runtime artifacts.
+pub fn collect_problem_realize_builds(problem: &ProblemSpec) -> Vec<BuildCommand> {
+  collect_problems_realize_builds(std::slice::from_ref(problem))
+}
+
+/// Returns deduplicated Nix builds needed to realize runtime artifacts.
+pub fn collect_problems_realize_builds(problems: &[ProblemSpec]) -> Vec<BuildCommand> {
   let mut builds = Vec::new();
-  collect_artifact_build(&mut builds, problem.validator.wasm.as_ref());
-  collect_artifact_build(&mut builds, problem.checker.wasm.as_ref());
-  collect_artifact_build(&mut builds, problem.judger.generate_outputs_runner.as_ref());
-  collect_artifact_build(&mut builds, Some(&problem.judger.judge_runner));
-
-  for generator in problem.generators.values() {
-    collect_artifact_build(&mut builds, generator.wasm.as_ref());
+  for problem in problems {
+    collect_problem_artifact_builds(&mut builds, problem);
   }
-
   dedup_builds(builds)
 }
 
-fn collect_artifact_build(
-  builds: &mut Vec<crate::nix::BuildCommand>,
-  artifact: Option<&ArtifactSpec>,
-) {
-  let Some(artifact) = artifact else {
-    return;
-  };
-  if Path::new(&artifact.path).exists() {
-    return;
-  }
-  if let Some(drv_path) = &artifact.drv_path {
-    builds.push(
-      crate::nix::BuildCommand::new()
-        .no_link(true)
-        .installable(&format!("{drv_path}^*")),
-    );
-  } else if let Some(parent) = Path::new(&artifact.path).parent() {
-    builds.push(
-      crate::nix::BuildCommand::new()
-        .no_link(true)
-        .installable(parent.to_string_lossy().as_ref()),
-    );
+fn collect_problem_artifact_builds(builds: &mut Vec<BuildCommand>, problem: &ProblemSpec) {
+  collect_artifact_builds(
+    builds,
+    [
+      problem.validator.wasm.as_ref(),
+      problem.checker.wasm.as_ref(),
+      Some(&problem.judger.prepare_solution_runner),
+      problem.judger.generate_outputs_runner.as_ref(),
+      Some(&problem.judger.judge_runner),
+    ],
+  );
+
+  for generator in problem.generators.values() {
+    collect_artifact_build(builds, generator.wasm.as_ref());
   }
 }
 
-fn dedup_builds(builds: Vec<crate::nix::BuildCommand>) -> Vec<crate::nix::BuildCommand> {
+fn collect_artifact_builds<'a>(
+  builds: &mut Vec<BuildCommand>,
+  artifacts: impl IntoIterator<Item = Option<&'a ArtifactSpec>>,
+) {
+  for artifact in artifacts {
+    collect_artifact_build(builds, artifact);
+  }
+}
+
+fn collect_artifact_build(builds: &mut Vec<BuildCommand>, artifact: Option<&ArtifactSpec>) {
+  let Some(artifact) = artifact else {
+    return;
+  };
+  if let Some(build) = artifact_build_command(artifact) {
+    builds.push(build);
+  }
+}
+
+fn artifact_build_command(artifact: &ArtifactSpec) -> Option<BuildCommand> {
+  if Path::new(&artifact.path).exists() {
+    return None;
+  }
+
+  let installable = artifact_installable(artifact)?;
+  Some(BuildCommand::new().no_link(true).installable(&installable))
+}
+
+fn artifact_installable(artifact: &ArtifactSpec) -> Option<String> {
+  if let Some(drv_path) = &artifact.drv_path {
+    return Some(format!("{drv_path}^*"));
+  }
+
+  Path::new(&artifact.path)
+    .parent()
+    .map(|parent| parent.to_string_lossy().into_owned())
+}
+
+fn dedup_builds(builds: Vec<BuildCommand>) -> Vec<BuildCommand> {
   let mut seen = std::collections::BTreeSet::new();
   let mut unique = Vec::new();
   for build in builds {
@@ -84,54 +112,56 @@ fn dedup_builds(builds: Vec<crate::nix::BuildCommand>) -> Vec<crate::nix::BuildC
   unique
 }
 
+/// Realizes one artifact and returns the concrete path declared in metadata.
 pub fn realize_artifact(artifact: &ArtifactSpec) -> Result<String> {
   if Path::new(&artifact.path).exists() {
     return Ok(artifact.path.clone());
   }
 
-  if let Some(drv_path) = &artifact.drv_path {
-    let output = Command::new("nix")
-      .args(["build", "--no-link", &format!("{drv_path}^*")])
-      .output()
-      .with_context(|| format!("Failed to realize derivation {}", drv_path))?;
-    if !output.status.success() {
-      bail!(
-        "Failed to realize artifact {}.\nStderr:\n{}",
-        artifact.path,
-        String::from_utf8_lossy(&output.stderr).trim()
-      );
-    }
+  run_artifact_build(artifact)
+    .with_context(|| format!("Failed to realize artifact {}", artifact.path))?;
+
+  if Path::new(&artifact.path).exists() {
+    return Ok(artifact.path.clone());
+  }
+
+  if artifact.drv_path.is_some() {
+    run_parent_build(artifact).with_context(|| {
+      format!(
+        "Failed to realize parent path for artifact {}",
+        artifact.path
+      )
+    })?;
   }
 
   if Path::new(&artifact.path).exists() {
     Ok(artifact.path.clone())
   } else {
-    let parent = Path::new(&artifact.path)
-      .parent()
-      .with_context(|| format!("Artifact path {} has no parent", artifact.path))?;
-    let output = Command::new("nix")
-      .args(["build", "--no-link", parent.to_string_lossy().as_ref()])
-      .output()
-      .with_context(|| format!("Failed to realize parent path {}", parent.display()))?;
-    if !output.status.success() {
-      bail!(
-        "Failed to realize artifact {}.\nStderr:\n{}",
-        artifact.path,
-        String::from_utf8_lossy(&output.stderr).trim()
-      );
-    }
-
-    if Path::new(&artifact.path).exists() {
-      Ok(artifact.path.clone())
-    } else {
-      bail!(
-        "Artifact path {} does not exist after realization",
-        artifact.path
-      )
-    }
+    bail!(
+      "Artifact path {} does not exist after realization",
+      artifact.path
+    )
   }
 }
 
+fn run_artifact_build(artifact: &ArtifactSpec) -> Result<()> {
+  let Some(build) = artifact_build_command(artifact) else {
+    return Ok(());
+  };
+  build.run()
+}
+
+fn run_parent_build(artifact: &ArtifactSpec) -> Result<()> {
+  let parent = Path::new(&artifact.path)
+    .parent()
+    .with_context(|| format!("Artifact path {} has no parent", artifact.path))?;
+  BuildCommand::new()
+    .no_link(true)
+    .installable(parent.to_string_lossy().as_ref())
+    .run()
+}
+
+/// Compiles a WASM module into Hull's native module cache and returns its path.
 pub fn cache_native_module(module_path: &str) -> Result<String> {
   let module_bytes = fs::read(module_path)
     .with_context(|| format!("Failed to read module artifact {}", module_path))?;
@@ -245,6 +275,7 @@ fn native_module_cache_dir() -> Result<PathBuf> {
   )
 }
 
+/// Imports one path into the Nix store and returns the resulting store path.
 pub fn add_path_to_store(path: &str) -> Result<String> {
   if path.starts_with("/nix/store/") {
     return Ok(path.to_string());
@@ -364,6 +395,7 @@ fn visit_runtime_paths_mut(
   Ok(())
 }
 
+/// Rewrites runtime output paths so target packaging can consume store paths.
 pub fn storeify_runtime_data(
   runtime: &mut RuntimeData,
   progress: Option<&ProblemProgressHandle>,
@@ -452,6 +484,30 @@ mod tests {
       path: path.to_string(),
       drv_path: drv_path.map(str::to_string),
     }
+  }
+
+  fn collect_command_args(problem: &ProblemSpec) -> Vec<Vec<String>> {
+    collect_problem_realize_builds(problem)
+      .into_iter()
+      .map(command_args)
+      .collect::<Vec<_>>()
+  }
+
+  fn command_args(command: BuildCommand) -> Vec<String> {
+    command
+      .build_command_key()
+      .into_iter()
+      .map(|arg| arg.to_string_lossy().into_owned())
+      .collect::<Vec<_>>()
+  }
+
+  fn assert_command_contains_installable(commands: &[Vec<String>], installable: &str) {
+    assert!(
+      commands
+        .iter()
+        .any(|command| command.iter().any(|arg| arg == installable)),
+      "missing build installable {installable} in {commands:?}"
+    );
   }
 
   #[test]
@@ -584,57 +640,20 @@ mod tests {
   #[test]
   fn collect_builds_all_artifacts() {
     let problem = problem_with_artifacts();
-    let commands = collect_problem_realize_builds(&problem)
-      .into_iter()
-      .map(|command| command.build_command_key())
-      .map(|command| {
-        command
-          .into_iter()
-          .map(|arg| arg.to_string_lossy().into_owned())
-          .collect::<Vec<_>>()
-      })
-      .collect::<Vec<_>>();
+    let commands = collect_command_args(&problem);
 
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.iter().any(|arg| arg == "/nix/store/checker.drv^*"))
-    );
-    assert!(commands.iter().any(|command| {
-      command
-        .iter()
-        .any(|arg| arg == "/nix/store/validator.drv^*")
-    }));
-    assert!(commands.iter().any(|command| {
-      command
-        .iter()
-        .any(|arg| arg == "/nix/store/generator.drv^*")
-    }));
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.iter().any(|arg| arg == "/nix/store/genout.drv^*"))
-    );
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.iter().any(|arg| arg == "/nix/store/judge.drv^*"))
-    );
+    assert_command_contains_installable(&commands, "/nix/store/checker.drv^*");
+    assert_command_contains_installable(&commands, "/nix/store/validator.drv^*");
+    assert_command_contains_installable(&commands, "/nix/store/generator.drv^*");
+    assert_command_contains_installable(&commands, "/nix/store/prepare.drv^*");
+    assert_command_contains_installable(&commands, "/nix/store/genout.drv^*");
+    assert_command_contains_installable(&commands, "/nix/store/judge.drv^*");
   }
 
   #[test]
   fn collect_builds_deduplicates() {
     let problem = problem_with_artifacts();
-    let commands = collect_problem_realize_builds(&problem)
-      .into_iter()
-      .map(|command| command.build_command_key())
-      .map(|command| {
-        command
-          .into_iter()
-          .map(|arg| arg.to_string_lossy().into_owned())
-          .collect::<Vec<_>>()
-      })
-      .collect::<Vec<_>>();
+    let commands = collect_command_args(&problem);
 
     let judge_matches = commands
       .iter()
@@ -644,24 +663,28 @@ mod tests {
   }
 
   #[test]
+  fn collect_builds_deduplicates_across_problems() {
+    let first = problem_with_artifacts();
+    let mut second = problem_with_artifacts();
+    second.name = "second".to_string();
+    let commands = collect_problems_realize_builds(&[first, second])
+      .into_iter()
+      .map(command_args)
+      .collect::<Vec<_>>();
+
+    let prepare_matches = commands
+      .iter()
+      .filter(|command| command.iter().any(|arg| arg == "/nix/store/prepare.drv^*"))
+      .count();
+    assert_eq!(prepare_matches, 1);
+  }
+
+  #[test]
   fn collect_builds_parent_fallback() {
     let mut problem = problem_with_artifacts();
     problem.validator.wasm = Some(artifact("/tmp/hull/validator/output.wasm", None));
-    let commands = collect_problem_realize_builds(&problem)
-      .into_iter()
-      .map(|command| command.build_command_key())
-      .map(|command| {
-        command
-          .into_iter()
-          .map(|arg| arg.to_string_lossy().into_owned())
-          .collect::<Vec<_>>()
-      })
-      .collect::<Vec<_>>();
+    let commands = collect_command_args(&problem);
 
-    assert!(
-      commands
-        .iter()
-        .any(|command| command.iter().any(|arg| arg == "/tmp/hull/validator"))
-    );
+    assert_command_contains_installable(&commands, "/tmp/hull/validator");
   }
 }

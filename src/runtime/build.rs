@@ -23,7 +23,9 @@ use tempfile::NamedTempFile;
 use tracing::info;
 
 use super::analysis::{analyze_problem, install_with_pool};
-use super::artifact::{collect_problem_realize_builds, storeify_runtime_data};
+use super::artifact::{
+  collect_problem_realize_builds, collect_problems_realize_builds, storeify_runtime_data,
+};
 use super::metadata::{load_contest_spec, load_problem_spec};
 use super::types::{RuntimeData, RuntimeOptions};
 use super::workspace::RuntimeWorkspace;
@@ -102,6 +104,7 @@ fn prepare_runtime_store_paths(
   storeify_runtime_data(runtime, progress)
 }
 
+/// Serializes runtime analysis data for reinjection into Nix evaluation.
 pub fn render_runtime_json(runtime: &RuntimeData) -> Result<String> {
   serde_json::to_string(runtime).context("Failed to serialize runtime analysis JSON")
 }
@@ -123,6 +126,7 @@ fn runtime_json_path(file: &NamedTempFile) -> Result<String> {
     .context("Runtime JSON path contains non-UTF-8 characters")
 }
 
+/// Builds one problem target using precomputed runtime analysis data.
 pub fn build_problem_target(
   problem: &str,
   target: &str,
@@ -157,6 +161,7 @@ pub fn build_problem_target(
     .run()
 }
 
+/// Builds one contest target using precomputed runtime analysis data.
 pub fn build_contest_target(
   contest: &str,
   target: &str,
@@ -192,6 +197,7 @@ pub fn build_contest_target(
     .run()
 }
 
+/// Analyzes one problem and builds the requested problem target.
 pub fn build_problem(
   problem: &str,
   target: &str,
@@ -244,6 +250,7 @@ pub fn build_problem(
   result
 }
 
+/// Analyzes one contest and builds the requested contest target.
 pub fn build_contest(
   contest: &str,
   target: &str,
@@ -264,11 +271,7 @@ pub fn build_contest(
 
     timings.run_phase("runtime artifact prepare", None, || {
       run_build_commands(
-        contest_spec
-          .problems
-          .iter()
-          .flat_map(collect_problem_realize_builds)
-          .collect(),
+        collect_problems_realize_builds(&contest_spec.problems),
         "nix prepare for contest runtime artifacts",
       )
     })?;

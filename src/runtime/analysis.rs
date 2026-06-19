@@ -106,8 +106,7 @@ fn prepare_solutions(
     .collect()
 }
 
-// Execute the full runtime analysis for one problem and return the data that
-// problem and contest targets consume during packaging.
+/// Executes a closure inside the runtime analysis thread pool when jobs > 1.
 pub fn install_with_pool<T, F>(options: RuntimeOptions, f: F) -> Result<T>
 where
   T: Send,
@@ -124,6 +123,7 @@ where
     .install(f)
 }
 
+/// Executes full runtime analysis for one problem.
 pub fn analyze_problem(
   problem: &ProblemSpec,
   workspace: &RuntimeWorkspace,
@@ -843,6 +843,7 @@ fn run_checker(
   serde_json::from_slice(&result.stderr).context("Failed to parse checker report JSON")
 }
 
+/// Runs the configured judger to generate official outputs for one test case.
 pub fn run_generate_outputs(
   problem: &ProblemSpec,
   test_case: &TestCaseSpec,
@@ -908,6 +909,7 @@ pub fn run_generate_outputs(
   Ok(outputs_dir)
 }
 
+/// Runs the configured judger to prepare one solution for later judging.
 pub fn run_prepare_solution(
   problem: &ProblemSpec,
   solution: &SolutionSpec,
@@ -919,7 +921,7 @@ pub fn run_prepare_solution(
   let prepared_src_path = work_dir.join("prepared-src");
   let prepared_executable_path = work_dir.join("prepared-executable");
 
-  let runner = realize_runner(&problem.judger.prepare_solution_runner)?;
+  let runner = realize_artifact(&problem.judger.prepare_solution_runner)?;
   let output = Command::new(&runner)
     .current_dir(&work_dir)
     .env("HULL_SOLUTION_NAME", &solution.name)
@@ -958,6 +960,7 @@ pub fn run_prepare_solution(
   Ok(prepared)
 }
 
+/// Runs the configured judger for one prepared solution and test case.
 pub fn run_judge(
   problem: &ProblemSpec,
   test_case: &TestCaseSpec,
@@ -1024,7 +1027,7 @@ pub fn run_judge(
 fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<Output> {
   // The packaged runners write helper files into their working directory, so
   // each invocation gets an isolated sandbox directory.
-  let runner = realize_runner(invocation.runner)?;
+  let runner = realize_artifact(invocation.runner)?;
   let mut command = Command::new(&runner);
   command
     .current_dir(invocation.work_dir)
@@ -1084,35 +1087,7 @@ fn judger_output_details(output: &Output) -> String {
   )
 }
 
-fn realize_runner(runner: &ArtifactSpec) -> Result<String> {
-  if Path::new(&runner.path).exists() {
-    return Ok(runner.path.clone());
-  }
-
-  if let Some(drv_path) = &runner.drv_path {
-    let output = Command::new("nix")
-      .args(["build", "--no-link", &format!("{drv_path}^*")])
-      .output()
-      .with_context(|| format!("Failed to realize runner {}", runner.path))?;
-    if !output.status.success() {
-      bail!(
-        "Failed to realize runner {}.\nStderr:\n{}",
-        runner.path,
-        String::from_utf8_lossy(&output.stderr).trim()
-      );
-    }
-  }
-
-  if Path::new(&runner.path).exists() {
-    Ok(runner.path.clone())
-  } else {
-    bail!(
-      "Runner path {} does not exist after realization",
-      runner.path
-    )
-  }
-}
-
+/// Aggregates test case judge reports into subtask runtime reports.
 pub fn aggregate_subtask_results(
   problem: &ProblemSpec,
   test_case_results: &BTreeMap<String, JudgeReport>,
