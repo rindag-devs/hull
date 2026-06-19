@@ -18,6 +18,31 @@
 
   options = {
 
+    assertionHelpers = lib.mkOption {
+      type = lib.types.raw;
+      internal = true;
+      readOnly = true;
+      description = "Shared helpers used to build problem assertions.";
+    };
+
+    staticAssertions = lib.mkOption {
+      type = lib.types.listOf lib.types.unspecified;
+      internal = true;
+      default = [ ];
+      description = ''
+        Assertions that only depend on author-provided configuration and can be checked before runtime analysis.
+      '';
+    };
+
+    runtimeAssertions = lib.mkOption {
+      type = lib.types.listOf lib.types.unspecified;
+      internal = true;
+      default = [ ];
+      description = ''
+        Assertions that depend on runtime analysis data injected by the Hull CLI.
+      '';
+    };
+
     assertions = lib.mkOption {
       type = lib.types.listOf lib.types.unspecified;
       internal = true;
@@ -49,7 +74,7 @@
   };
 
   config = {
-    assertions =
+    assertionHelpers =
       let
         getTestCaseName =
           tc:
@@ -58,6 +83,293 @@
           }, args: ${builtins.toJSON tc.arguments})";
 
         getSubtaskName = index: st: "Subtask #${toString index} (traits: ${builtins.toJSON st.traits})";
+
+        hasExactlyOne = a: b: (a != null && b == null) || (a == null && b != null);
+
+        inputSourceDescription = item: ''
+          inputFile: ${if item.inputFile == null then "null" else toString item.inputFile}
+          generator: ${if item.generator == null then "null" else item.generator}
+        '';
+
+        outputSourceDescription = item: ''
+          outputFile: ${if item.outputFile == null then "null" else toString item.outputFile}
+          solution: ${if item.solution == null then "null" else item.solution}
+        '';
+
+        generatorNames = builtins.attrNames config.generators;
+        solutionNames = builtins.attrNames config.solutions;
+        subtaskCount = builtins.length config.subtasks;
+        subtaskIndexRangeDescription =
+          if subtaskCount == 0 then
+            "This problem has no subtasks, so no subtask prediction indexes are valid."
+          else
+            "Valid indexes are integers from 0 to ${toString (subtaskCount - 1)}.";
+
+        subtaskPredictionIndexIsValid =
+          pred:
+          let
+            match = builtins.match "[0-9]+" pred.name;
+          in
+          match != null && (lib.toIntBase10 pred.name) < subtaskCount;
+      in
+      {
+        inherit
+          getTestCaseName
+          getSubtaskName
+          hasExactlyOne
+          inputSourceDescription
+          outputSourceDescription
+          generatorNames
+          solutionNames
+          subtaskCount
+          subtaskIndexRangeDescription
+          subtaskPredictionIndexIsValid
+          ;
+      };
+
+    assertions = config.staticAssertions ++ config.runtimeAssertions;
+    staticAssertions =
+      let
+        inherit (config.assertionHelpers)
+          getTestCaseName
+          hasExactlyOne
+          inputSourceDescription
+          outputSourceDescription
+          generatorNames
+          solutionNames
+          subtaskCount
+          subtaskIndexRangeDescription
+          subtaskPredictionIndexIsValid
+          ;
+
+        # Assertion: Every test case must define exactly one input source.
+        testCasesWithInvalidInputSource = builtins.filter (tc: !(hasExactlyOne tc.inputFile tc.generator)) (
+          builtins.attrValues config.testCases
+        );
+        testCaseInputSourceAssertion = {
+          assertion = testCasesWithInvalidInputSource == [ ];
+          message =
+            let
+              report = lib.concatMapStringsSep "\n" (tc: ''
+                - ${getTestCaseName tc}:
+                    Expected exactly one of `inputFile` or `generator`.
+                    ${inputSourceDescription tc}
+              '') testCasesWithInvalidInputSource;
+            in
+            ''
+              Problem `${config.name}` has test cases with invalid input sources.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: All test case generator references must exist.
+        testCasesWithUnknownGenerator = builtins.filter (
+          tc: tc.generator != null && !(builtins.hasAttr tc.generator config.generators)
+        ) (builtins.attrValues config.testCases);
+        testCaseGeneratorReferenceAssertion = {
+          assertion = testCasesWithUnknownGenerator == [ ];
+          message =
+            let
+              report = lib.concatMapStringsSep "\n" (tc: ''
+                - ${getTestCaseName tc}:
+                    Unknown generator `${tc.generator}`.
+                    Available generators: ${builtins.toJSON generatorNames}
+              '') testCasesWithUnknownGenerator;
+            in
+            ''
+              Problem `${config.name}` has test cases that reference missing generators.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: Every checker test must define exactly one input source.
+        checkerTestsWithInvalidInputSource = lib.filterAttrs (
+          name: test: !(hasExactlyOne test.inputFile test.generator)
+        ) config.checker.tests;
+        checkerTestInputSourceAssertion = {
+          assertion = checkerTestsWithInvalidInputSource == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Checker test `${name}`:
+                    Expected exactly one of `inputFile` or `generator`.
+                    ${inputSourceDescription test}
+              '') checkerTestsWithInvalidInputSource;
+            in
+            ''
+              Problem `${config.name}` has checker tests with invalid input sources.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: Every checker test must define exactly one expected-output source.
+        checkerTestsWithInvalidOutputSource = lib.filterAttrs (
+          name: test: !(hasExactlyOne test.outputFile test.solution)
+        ) config.checker.tests;
+        checkerTestOutputSourceAssertion = {
+          assertion = checkerTestsWithInvalidOutputSource == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Checker test `${name}`:
+                    Expected exactly one of `outputFile` or `solution`.
+                    ${outputSourceDescription test}
+              '') checkerTestsWithInvalidOutputSource;
+            in
+            ''
+              Problem `${config.name}` has checker tests with invalid output sources.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: All checker test generator and solution references must exist.
+        checkerTestsWithUnknownGenerator = lib.filterAttrs (
+          name: test: test.generator != null && !(builtins.hasAttr test.generator config.generators)
+        ) config.checker.tests;
+        checkerTestGeneratorReferenceAssertion = {
+          assertion = checkerTestsWithUnknownGenerator == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Checker test `${name}`:
+                    Unknown generator `${test.generator}`.
+                    Available generators: ${builtins.toJSON generatorNames}
+              '') checkerTestsWithUnknownGenerator;
+            in
+            ''
+              Problem `${config.name}` has checker tests that reference missing generators.
+              Details:
+              ${report}
+            '';
+        };
+
+        checkerTestsWithUnknownSolution = lib.filterAttrs (
+          name: test: test.solution != null && !(builtins.hasAttr test.solution config.solutions)
+        ) config.checker.tests;
+        checkerTestSolutionReferenceAssertion = {
+          assertion = checkerTestsWithUnknownSolution == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Checker test `${name}`:
+                    Unknown solution `${test.solution}`.
+                    Available solutions: ${builtins.toJSON solutionNames}
+              '') checkerTestsWithUnknownSolution;
+            in
+            ''
+              Problem `${config.name}` has checker tests that reference missing solutions.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: Every validator test must define exactly one input source.
+        validatorTestsWithInvalidInputSource = lib.filterAttrs (
+          name: test: !(hasExactlyOne test.inputFile test.generator)
+        ) config.validator.tests;
+        validatorTestInputSourceAssertion = {
+          assertion = validatorTestsWithInvalidInputSource == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Validator test `${name}`:
+                    Expected exactly one of `inputFile` or `generator`.
+                    ${inputSourceDescription test}
+              '') validatorTestsWithInvalidInputSource;
+            in
+            ''
+              Problem `${config.name}` has validator tests with invalid input sources.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: All validator test generator references must exist.
+        validatorTestsWithUnknownGenerator = lib.filterAttrs (
+          name: test: test.generator != null && !(builtins.hasAttr test.generator config.generators)
+        ) config.validator.tests;
+        validatorTestGeneratorReferenceAssertion = {
+          assertion = validatorTestsWithUnknownGenerator == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (name: test: ''
+                - Validator test `${name}`:
+                    Unknown generator `${test.generator}`.
+                    Available generators: ${builtins.toJSON generatorNames}
+              '') validatorTestsWithUnknownGenerator;
+            in
+            ''
+              Problem `${config.name}` has validator tests that reference missing generators.
+              Details:
+              ${report}
+            '';
+        };
+
+        # Assertion: Exactly one solution must be marked as the main correct solution.
+        mainCorrectSolutions = lib.filterAttrs (
+          name: solution: solution.mainCorrectSolution
+        ) config.solutions;
+        mainCorrectSolutionAssertion = {
+          assertion = builtins.length (builtins.attrNames mainCorrectSolutions) == 1;
+          message = ''
+            Problem `${config.name}` must have exactly one solution with `mainCorrectSolution = true`.
+            Found ${toString (builtins.length (builtins.attrNames mainCorrectSolutions))}: ${builtins.toJSON (builtins.attrNames mainCorrectSolutions)}
+          '';
+        };
+
+        # Assertion: Solution subtask prediction keys must be valid subtask indexes.
+        solutionsWithInvalidSubtaskPredictionIndexes = lib.mapAttrs (
+          solName: sol:
+          builtins.filter (pred: !(subtaskPredictionIndexIsValid pred)) (
+            lib.attrsToList sol.subtaskPredictions
+          )
+        ) config.solutions;
+        failingSubtaskPredictionIndexes = lib.filterAttrs (
+          solName: invalidIndexes: invalidIndexes != [ ]
+        ) solutionsWithInvalidSubtaskPredictionIndexes;
+        subtaskPredictionIndexAssertion = {
+          assertion = failingSubtaskPredictionIndexes == { };
+          message =
+            let
+              report = lib.concatMapAttrsStringSep "\n" (solName: invalidIndexes: ''
+                - Solution `${solName}` has invalid subtask prediction indexes: ${
+                  builtins.toJSON (map (pred: pred.name) invalidIndexes)
+                }
+                  ${subtaskIndexRangeDescription}
+              '') failingSubtaskPredictionIndexes;
+            in
+            ''
+              Problem `${config.name}` has invalid solution subtask prediction indexes.
+              Details:
+              ${report}
+            '';
+        };
+
+      in
+      [
+        testCaseInputSourceAssertion
+        testCaseGeneratorReferenceAssertion
+        checkerTestInputSourceAssertion
+        checkerTestOutputSourceAssertion
+        checkerTestGeneratorReferenceAssertion
+        checkerTestSolutionReferenceAssertion
+        validatorTestInputSourceAssertion
+        validatorTestGeneratorReferenceAssertion
+        mainCorrectSolutionAssertion
+        subtaskPredictionIndexAssertion
+      ];
+
+    runtimeAssertions =
+      let
+        inherit (config.assertionHelpers)
+          getTestCaseName
+          getSubtaskName
+          subtaskPredictionIndexIsValid
+          ;
 
         # Assertion: All test cases must pass validation.
         failingValidationCases = builtins.filter (tc: tc.inputValidation.status != "valid") (
@@ -202,9 +514,7 @@
                 index = lib.toIntBase10 pred.name;
                 predictionFunc = pred.value;
               in
-              if index < 0 || index >= (builtins.length results) then
-                true # Prediction for non-existent subtask is a mismatch.
-              else
+              if subtaskPredictionIndexIsValid pred then
                 let
                   subtaskResult = builtins.elemAt results index;
                   actualScore = subtaskResult.rawScore;
@@ -215,6 +525,8 @@
                   };
                 in
                 !predictionHolds
+              else
+                false
             ) predictionList;
           in
           {

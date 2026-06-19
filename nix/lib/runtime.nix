@@ -81,6 +81,11 @@ let
     wasm = serializeArtifact (program.wasm or null);
   };
 
+  checkStaticProblemConfig =
+    problemConfig:
+    pkgs.lib.asserts.checkAssertWarn problemConfig.staticAssertions problemConfig.warnings
+      problemConfig;
+
   problemMetadata =
     problemConfig:
     {
@@ -88,23 +93,24 @@ let
       includeTests ? true,
     }:
     let
+      checkedProblemConfig = checkStaticProblemConfig problemConfig;
       selectedSolutions = builtins.filter (solution: builtins.elem solution.name solutionNames) (
-        builtins.attrValues problemConfig.solutions
+        builtins.attrValues checkedProblemConfig.solutions
       );
     in
     {
-      name = problemConfig.name;
-      tickLimit = problemConfig.tickLimit;
-      memoryLimit = problemConfig.memoryLimit;
-      fullScore = problemConfig.fullScore;
-      checker = serializeProgram problemConfig.checker;
-      validator = serializeProgram problemConfig.validator;
-      generators = builtins.mapAttrs (_: serializeProgram) problemConfig.generators;
-      mainCorrectSolution = problemConfig.mainCorrectSolution.name;
+      name = checkedProblemConfig.name;
+      tickLimit = checkedProblemConfig.tickLimit;
+      memoryLimit = checkedProblemConfig.memoryLimit;
+      fullScore = checkedProblemConfig.fullScore;
+      checker = serializeProgram checkedProblemConfig.checker;
+      validator = serializeProgram checkedProblemConfig.validator;
+      generators = builtins.mapAttrs (_: serializeProgram) checkedProblemConfig.generators;
+      mainCorrectSolution = checkedProblemConfig.mainCorrectSolution.name;
       judger = {
-        prepareSolutionRunner = runnerPath problemConfig.judger.prepareSolution;
-        generateOutputsRunner = runnerPath problemConfig.judger.generateOutputs;
-        judgeRunner = runnerPath problemConfig.judger.judge;
+        prepareSolutionRunner = runnerPath checkedProblemConfig.judger.prepareSolution;
+        generateOutputsRunner = runnerPath checkedProblemConfig.judger.generateOutputs;
+        judgeRunner = runnerPath checkedProblemConfig.judger.judge;
       };
       testCases = map (tc: {
         inherit (tc)
@@ -117,10 +123,10 @@ let
         inputFile = if tc.inputFile == null then null else toString tc.inputFile;
         generator = tc.generator;
         arguments = tc.arguments;
-      }) (builtins.attrValues problemConfig.testCases);
+      }) (builtins.attrValues checkedProblemConfig.testCases);
       subtasks = map (st: {
         inherit (st) fullScore scoringMethod traits;
-      }) problemConfig.subtasks;
+      }) checkedProblemConfig.subtasks;
       solutions = map (solution: {
         inherit (solution)
           name
@@ -141,7 +147,7 @@ let
               ;
             inputFile = if test.inputFile == null then null else toString test.inputFile;
             outputPath = if test.outputFile == null then null else toString test.outputFile;
-          }) (builtins.attrValues problemConfig.checker.tests)
+          }) (builtins.attrValues checkedProblemConfig.checker.tests)
         else
           [ ];
       validatorTests =
@@ -153,7 +159,7 @@ let
               arguments
               ;
             inputFile = if test.inputFile == null then null else toString test.inputFile;
-          }) (builtins.attrValues problemConfig.validator.tests)
+          }) (builtins.attrValues checkedProblemConfig.validator.tests)
         else
           [ ];
     };
@@ -213,7 +219,7 @@ let
     in
     problemMetadata evaluated.config {
       solutionNames = [
-        problemConfig.mainCorrectSolution.name
+        (checkStaticProblemConfig problemConfig).mainCorrectSolution.name
         "__hullAdHoc"
       ];
       includeTests = false;

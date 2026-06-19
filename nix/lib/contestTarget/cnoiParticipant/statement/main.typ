@@ -458,7 +458,10 @@
       ),
       [*\#*],
       [*#titlecase(translation.score)*],
-      ..problem.traits.keys().map(x => text(size: 0.8em, x.clusters().join(sym.zws))),
+      ..problem
+        .traits
+        .keys()
+        .map(x => text(size: 0.8em, x.clusters().join(sym.zws))),
       ..problem
         .subtasks
         .enumerate()
@@ -570,7 +573,10 @@
 
 #for (problem-id, problem) in hull.problems.enumerate() {
   current-problem-title.update(
-    titlecase(problem.display-name.at(language)) + " (" + raw(problem.name) + ")",
+    titlecase(problem.display-name.at(language))
+      + " ("
+      + raw(problem.name)
+      + ")",
   )
 
   if problem-id == 0 {

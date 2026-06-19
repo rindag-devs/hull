@@ -294,9 +294,11 @@
   #grid(
     columns: (auto, auto),
     inset: 0% + 3pt,
-    [#titlecase(translation.tick-limit):], translation.ticks(problem.tick-limit),
+    [#titlecase(translation.tick-limit):],
+    translation.ticks(problem.tick-limit),
 
-    [#titlecase(translation.memory-limit):], translation.bytes(problem.memory-limit),
+    [#titlecase(translation.memory-limit):],
+    translation.bytes(problem.memory-limit),
   )
 
   #line(length: 100%)
