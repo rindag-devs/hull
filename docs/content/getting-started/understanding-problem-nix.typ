@@ -156,7 +156,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
 
 == Documents & Targets
 
-Documents and targets:
+Documents describe generated files such as statements and reports. Targets describe how Hull packages the analyzed problem.
 
 ```nix
 {
@@ -173,11 +173,15 @@ Documents and targets:
 
   targets = {
     default = hull.problemTarget.common;
-    hydro = hull.problemTarget.hydro { /* Hydro-specific options */ };
-    uoj = hull.problemTarget.uoj { /* UOJ-specific options */ };
+    hydro = hull.problemTarget.hydro.batch {
+      statements.en = "statement.en.pdf";
+    };
+    uoj = hull.problemTarget.uoj.batch { };
   };
 }
 ```
 
 - `documents`: generated files such as statements or reports.
 - `targets`: packaging formats. `default` is used by `hull build`.
+- Some targets are direct targets, such as `hull.problemTarget.common`.
+- Judge-format target families require an explicit branch constructor, such as `hull.problemTarget.hydro.batch`, `hull.problemTarget.uoj.stdioInteraction`, or `hull.problemTarget.cms.answerOnly`.

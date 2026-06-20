@@ -94,7 +94,7 @@ fn prepare_solutions(
   solutions: &[SolutionSpec],
 ) -> Result<Vec<PreparedSolutionEntry>> {
   solutions
-    .iter()
+    .par_iter()
     .map(|solution| {
       let prepared = run_prepare_solution(problem, solution, workspace)
         .with_context(|| prepare_solution_failure_context(&problem.name, &solution.name))?;

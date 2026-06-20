@@ -39,16 +39,27 @@ pub fn collect_problem_realize_builds(problem: &ProblemSpec) -> Vec<BuildCommand
 
 /// Returns deduplicated Nix builds needed to realize runtime artifacts.
 pub fn collect_problems_realize_builds(problems: &[ProblemSpec]) -> Vec<BuildCommand> {
-  let mut builds = Vec::new();
+  let mut installables = Vec::new();
   for problem in problems {
-    collect_problem_artifact_builds(&mut builds, problem);
+    collect_problem_artifact_builds(&mut installables, problem);
   }
-  dedup_builds(builds)
+  let installables = dedup_installables(installables);
+  if installables.is_empty() {
+    Vec::new()
+  } else {
+    vec![
+      installables
+        .iter()
+        .fold(BuildCommand::new().no_link(true), |build, installable| {
+          build.installable(installable)
+        }),
+    ]
+  }
 }
 
-fn collect_problem_artifact_builds(builds: &mut Vec<BuildCommand>, problem: &ProblemSpec) {
+fn collect_problem_artifact_builds(installables: &mut Vec<String>, problem: &ProblemSpec) {
   collect_artifact_builds(
-    builds,
+    installables,
     [
       problem.validator.wasm.as_ref(),
       problem.checker.wasm.as_ref(),
@@ -59,35 +70,38 @@ fn collect_problem_artifact_builds(builds: &mut Vec<BuildCommand>, problem: &Pro
   );
 
   for generator in problem.generators.values() {
-    collect_artifact_build(builds, generator.wasm.as_ref());
+    collect_artifact_build(installables, generator.wasm.as_ref());
   }
 }
 
 fn collect_artifact_builds<'a>(
-  builds: &mut Vec<BuildCommand>,
+  installables: &mut Vec<String>,
   artifacts: impl IntoIterator<Item = Option<&'a ArtifactSpec>>,
 ) {
   for artifact in artifacts {
-    collect_artifact_build(builds, artifact);
+    collect_artifact_build(installables, artifact);
   }
 }
 
-fn collect_artifact_build(builds: &mut Vec<BuildCommand>, artifact: Option<&ArtifactSpec>) {
+fn collect_artifact_build(installables: &mut Vec<String>, artifact: Option<&ArtifactSpec>) {
   let Some(artifact) = artifact else {
     return;
   };
-  if let Some(build) = artifact_build_command(artifact) {
-    builds.push(build);
+  if let Some(installable) = artifact_installable_for_build(artifact) {
+    installables.push(installable);
   }
 }
 
 fn artifact_build_command(artifact: &ArtifactSpec) -> Option<BuildCommand> {
+  artifact_installable_for_build(artifact)
+    .map(|installable| BuildCommand::new().no_link(true).installable(&installable))
+}
+
+fn artifact_installable_for_build(artifact: &ArtifactSpec) -> Option<String> {
   if Path::new(&artifact.path).exists() {
     return None;
   }
-
-  let installable = artifact_installable(artifact)?;
-  Some(BuildCommand::new().no_link(true).installable(&installable))
+  artifact_installable(artifact)
 }
 
 fn artifact_installable(artifact: &ArtifactSpec) -> Option<String> {
@@ -100,13 +114,12 @@ fn artifact_installable(artifact: &ArtifactSpec) -> Option<String> {
     .map(|parent| parent.to_string_lossy().into_owned())
 }
 
-fn dedup_builds(builds: Vec<BuildCommand>) -> Vec<BuildCommand> {
+fn dedup_installables(installables: Vec<String>) -> Vec<String> {
   let mut seen = std::collections::BTreeSet::new();
   let mut unique = Vec::new();
-  for build in builds {
-    let command = build.build_command_key();
-    if seen.insert(command.clone()) {
-      unique.push(build);
+  for installable in installables {
+    if seen.insert(installable.clone()) {
+      unique.push(installable);
     }
   }
   unique

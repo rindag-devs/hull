@@ -102,24 +102,13 @@
         infinityRead = "cpp";
       };
     };
-    hydro = hull.problemTarget.hydro {
-      type = "stdioInteraction";
-    };
-    uoj = hull.problemTarget.uoj {
-      type = "stdioInteraction";
-    };
-    qoj = hull.problemTarget.uoj {
-      type = "stdioInteraction";
+    hydro = hull.problemTarget.hydro.stdioInteraction { };
+    uoj = hull.problemTarget.uoj.stdioInteraction { };
+    qoj = hull.problemTarget.uoj.stdioInteraction {
       twoStepInteraction = true;
     };
-    cms = hull.problemTarget.cms {
-      type = "stdioInteraction";
-    };
-    domjudge = hull.problemTarget.domjudge {
-      type = "stdioInteraction";
-    };
-    luogu = hull.problemTarget.luogu {
-      type = "stdioInteraction";
-    };
+    cms = hull.problemTarget.cms.stdioInteraction { };
+    domjudge = hull.problemTarget.domjudge.stdioInteraction { };
+    luogu = hull.problemTarget.luogu.stdioInteraction { };
   };
 }

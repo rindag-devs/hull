@@ -44,292 +44,299 @@
   This allows us to effectively run a C++ 20 compliant program within Luogu's
   C++ 14 constrained environment.
 */
-{
-  # The problem type.
-  # Since Hull's judger is customizable, you need to manually map it.
-  #
-  # Available options are:
-  #
-  # - batch, for traditional problems or grader interactive problem
-  # - stdioInteraction
-  # - answerOnly
-  #
-  # WARNING: If this is an interactive or answer-only problem, you will need to manually set the
-  # corresponding tag on Luogu to judge it normally.
-  type ? "batch",
-
-  # Score scaling factor. Hull uses a 0.0-1.0 scale, while Luogu uses integers 0-100.
-  scoreScale ? 100.0,
-
-  # Conversion rate from Hull's ticks to Luogu's milliseconds.
-  # 1ms = 1e7 ticks is a common value for wasmtime.
-  ticksPerMs ? 1.0e7,
-
-  # Whether to patch CPLib programs to use luogu-specific initializers, i.e. Testlib.
-  patchCplibProgram ? true,
-
-  # The name of the test case output that will be used as the output of the UOJ test case.
-  outputName ? if type == "stdioInteraction" then null else "output",
-
-  # Grader source file, should be in C++.
-  graderSrc ? null,
-
-  # This command needs to compile `program.code` into `program`, which is a static-linked exetuable
-  # for `x86_64-unknown-linux-musl`.
-  programCompileCommand ?
-    includes:
-    let
-      includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
-    in
-    "$CXX -x c++ program.code -o program -std=c++23 -O3 ${includeDirCmd}",
-}:
-
-{
-  _type = "hullProblemTarget";
-
-  __functor =
-    self:
+let
+  mkLuoguTarget =
     {
-      testCases,
-      checker,
-      validator,
-      subtasks,
-      includes,
-      ...
-    }@problem:
+      mode,
 
-    let
-      testCaseNames = builtins.sort builtins.lessThan (builtins.attrNames testCases);
+      # Score scaling factor. Hull uses a 0.0-1.0 scale, while Luogu uses integers 0-100.
+      scoreScale ? 100.0,
 
-      testCaseIndexes = builtins.listToAttrs (
-        lib.imap1 (idx: name: {
-          inherit name;
-          value = idx;
-        }) testCaseNames
-      );
+      # Conversion rate from Hull's ticks to Luogu's milliseconds.
+      # 1ms = 1e7 ticks is a common value for wasmtime.
+      ticksPerMs ? 1.0e7,
 
-      configYamlContent = builtins.listToAttrs (
-        lib.imap1 (
-          idx: tcName:
-          let
-            tc = testCases.${tcName};
-          in
-          {
-            name = (toString idx) + ".in";
-            value = {
-              timeLimit = builtins.floor (tc.tickLimit / ticksPerMs);
-              memoryLimit = tc.memoryLimit / 1024;
-              score = 100;
-              subtaskId = 0;
-              isPretest =
-                (builtins.elem "sample" tc.groups)
-                || (builtins.elem "sampleLarge" tc.groups)
-                || (builtins.elem "pretest" tc.groups);
-            };
-          }
-        ) testCaseNames
-      );
+      # Whether to patch CPLib programs to use luogu-specific initializers, i.e. Testlib.
+      patchCplibProgram ? true,
 
-      copyTestCasesCommand = lib.concatImapStringsSep "\n" (
-        idx: tcName:
+      # The name of the test case output that will be used as the output of the UOJ test case.
+      outputName ? if mode == "stdioInteraction" then null else "output",
+
+      # Grader source file, should be in C++.
+      graderSrc ? null,
+
+      # This command needs to compile `program.code` into `program`, which is a static-linked exetuable
+      # for `x86_64-unknown-linux-musl`.
+      programCompileCommand ?
+        includes:
         let
-          tc = testCases.${tcName};
+          includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
         in
-        ''
-          cp ${tc.data.input} $data_dir/${toString idx}.in
-          ${
-            if outputName != null then "cp ${tc.data.outputs}/${outputName}" else "touch"
-          } $data_dir/${toString idx}.ans
-        ''
-      ) testCaseNames;
+        "$CXX -x c++ program.code -o program -std=c++23 -O3 ${includeDirCmd}",
+    }:
 
-      # Compile a C++ source file into a static-linked executable.
-      # This is the first step of the Luogu C++ standard workaround.
-      compileProgram =
+    {
+      _type = "hullProblemTarget";
+
+      __functor =
+        self:
         {
-          programSrc,
-          mode, # "checker" or "interactor" or "validator"
-        }:
+          testCases,
+          checker,
+          validator,
+          subtasks,
+          includes,
+          ...
+        }@problem:
+
         let
-          patchedSrc =
-            if !patchCplibProgram then
-              programSrc
-            else
-              hull.patch (
-                {
-                  problemName = problem.name;
-                  src = programSrc;
-                }
-                // (
-                  if mode == "checker" then
-                    {
-                      checker = "::cplib_initializers::testlib::checker::Initializer(false)";
-                      extraIncludes = [ "\"${cplibInitializers}/include/testlib/checker.hpp\"" ];
-                    }
-                  else if mode == "checkerGraderInteraction" then
-                    {
-                      checker = "::cplib_initializers::luogu::checker_grader_interaction::Initializer()";
-                      extraIncludes = [ "\"${cplibInitializers}/include/luogu/checker_grader_interaction.hpp\"" ];
-                    }
-                  else if mode == "interactor" then
-                    {
-                      interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
-                      extraIncludes = [ "\"${cplibInitializers}/include/testlib/interactor.hpp\"" ];
-                    }
-                  else if mode == "validator" then
-                    {
-                      interactor = "::cplib_initializers::testlib::validator::Initializer()";
-                      extraIncludes = [ "\"${cplibInitializers}/include/testlib/validator.hpp\"" ];
-                    }
-                  else
-                    throw "Invalid mode `${mode}`"
-                )
-              );
-        in
-        hull.problemTarget.utils.compileNative {
-          problemName = problem.name;
-          programName = mode;
-          src = patchedSrc;
-          stdenv = pkgs.pkgsCross.musl64.pkgsStatic.stdenv;
-          compileCommand = programCompileCommand includes;
-        };
+          modeConfig =
+            {
+              batch = {
+                checkerMode = if graderSrc != null then "checkerGraderInteraction" else "checker";
+                extraRequiredTags = [ ];
+              };
+              stdioInteraction = {
+                checkerMode = "interactor";
+                extraRequiredTags = [ "交互题" ];
+              };
+              answerOnly = {
+                checkerMode = "checker";
+                extraRequiredTags = [ "提交答案" ];
+              };
+            }
+            .${mode};
 
-      # Wrap a binary into a C program by embedding it as a compressed,
-      # base64-encoded string. This is the build-time part of the Luogu C++
-      # standard workaround.
-      wrapProgram =
-        wrapperName: binary:
-        pkgs.runCommandLocal "hull-luoguWrappedProgram-${problem.name}-${wrapperName}.cpp"
-          {
-            nativeBuildInputs = [
-              pkgs.lz4
-              pkgs.xxd
-            ];
-          }
-          ''
-            binary_path=${binary}/bin/program
-            raw_size=$(wc -c $binary_path | cut -d' ' -f1)
-            lz4 --best -z -f $binary_path binary-lz4.bin
-            lz4_size=$(wc -c binary-lz4.bin | cut -d' ' -f1)
-            base64 binary-lz4.bin -w0 > b64-content.txt
-            awk \
-              -v raw_size="$raw_size" \
-              -v lz4_size="$lz4_size" \
-              '
-              BEGIN {
-                getline b64 < "b64-content.txt"
-              }
-              {
-                sub(/\/\* HULL_RAW_SIZE \*\//, raw_size);
-                sub(/\/\* HULL_LZ4_SIZE \*\//, lz4_size);
-                sub(/HULL_B64_STR/, b64);
-                print;
-              }
-              ' ${./wrapper.c} > $out
-          '';
+          testCaseNames = builtins.sort builtins.lessThan (builtins.attrNames testCases);
 
-      wrappedChecker = wrapProgram "checker" (compileProgram {
-        programSrc = checker.src;
-        mode =
-          if type == "stdioInteraction" then
-            "interactor"
-          else if graderSrc != null then
-            "checkerGraderInteraction"
-          else
-            "checker";
-      });
+          testCaseIndexes = builtins.listToAttrs (
+            lib.imap1 (idx: name: {
+              inherit name;
+              value = idx;
+            }) testCaseNames
+          );
 
-      wrappedValidator = wrapProgram "validator" (compileProgram {
-        programSrc = validator.src;
-        mode = "validator";
-      });
-
-      scoringScriptContent = ''
-        @final_status = AC;
-        @total_score = 0;
-        @final_time = 0;
-        @final_memory = 0;
-      ''
-      + (lib.concatMapStringsSep "\n" (idx: ''
-        if @status${toString idx} != AC; then
-          @final_status = UNAC;
-        fi
-        if @time${toString idx} > @final_time; then
-          @final_time = @time${toString idx};
-        fi
-        if @memory${toString idx} > @final_memory; then
-          @final_memory = @memory${toString idx};
-        fi
-      '') (lib.range 1 (builtins.length testCaseNames)))
-      + (lib.concatLines (
-        lib.imap0 (
-          stIdx: st:
-          let
-            stScore = builtins.floor (st.fullScore * scoreScale);
-          in
-          if st.scoringMethod == "min" then
-            ''
-              @hull_st${toString stIdx}_score = ${toString stScore};
-              ${lib.concatMapStringsSep "\n" (
-                tc:
-                let
-                  tcIdx = testCaseIndexes.${toString tc.name};
-                in
-                ''
-                  @hull_tmp = @score${toString tcIdx} * ${toString stScore} / 100;
-                  if @hull_tmp < @hull_st${toString stIdx}_score; then
-                    @hull_st${toString stIdx}_score = @hull_tmp;
-                  fi
-                ''
-              ) st.testCases}
-              @total_score = @total_score + @hull_st${toString stIdx}_score;
-            ''
-          else
-            lib.concatMapStringsSep "\n" (
-              tc:
+          configYamlContent = builtins.listToAttrs (
+            lib.imap1 (
+              idx: tcName:
               let
-                tcIdx = testCaseIndexes.${tc.name};
+                tc = testCases.${tcName};
               in
-              ''
-                @hull_tmp = @score${toString tcIdx} * ${toString stScore} / ${
-                  toString (100 * (builtins.length st.testCases))
+              {
+                name = (toString idx) + ".in";
+                value = {
+                  timeLimit = builtins.floor (tc.tickLimit / ticksPerMs);
+                  memoryLimit = tc.memoryLimit / 1024;
+                  score = 100;
+                  subtaskId = 0;
+                  isPretest =
+                    (builtins.elem "sample" tc.groups)
+                    || (builtins.elem "sampleLarge" tc.groups)
+                    || (builtins.elem "pretest" tc.groups);
                 };
-                @total_score = @total_score + @hull_tmp;
+              }
+            ) testCaseNames
+          );
+
+          copyTestCasesCommand = lib.concatImapStringsSep "\n" (
+            idx: tcName:
+            let
+              tc = testCases.${tcName};
+            in
+            ''
+              cp ${tc.data.input} $data_dir/${toString idx}.in
+              ${
+                if outputName != null then "cp ${tc.data.outputs}/${outputName}" else "touch"
+              } $data_dir/${toString idx}.ans
+            ''
+          ) testCaseNames;
+
+          # Compile a C++ source file into a static-linked executable.
+          # This is the first step of the Luogu C++ standard workaround.
+          compileProgram =
+            {
+              programSrc,
+              mode, # "checker" or "interactor" or "validator"
+            }:
+            let
+              patchedSrc =
+                if !patchCplibProgram then
+                  programSrc
+                else
+                  hull.patch (
+                    {
+                      problemName = problem.name;
+                      src = programSrc;
+                    }
+                    // (
+                      if mode == "checker" then
+                        {
+                          checker = "::cplib_initializers::testlib::checker::Initializer(false)";
+                          extraIncludes = [ "\"${cplibInitializers}/include/testlib/checker.hpp\"" ];
+                        }
+                      else if mode == "checkerGraderInteraction" then
+                        {
+                          checker = "::cplib_initializers::luogu::checker_grader_interaction::Initializer()";
+                          extraIncludes = [ "\"${cplibInitializers}/include/luogu/checker_grader_interaction.hpp\"" ];
+                        }
+                      else if mode == "interactor" then
+                        {
+                          interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
+                          extraIncludes = [ "\"${cplibInitializers}/include/testlib/interactor.hpp\"" ];
+                        }
+                      else if mode == "validator" then
+                        {
+                          validator = "::cplib_initializers::testlib::validator::Initializer()";
+                          extraIncludes = [ "\"${cplibInitializers}/include/testlib/validator.hpp\"" ];
+                        }
+                      else
+                        throw "Invalid mode `${mode}`"
+                    )
+                  );
+            in
+            hull.problemTarget.utils.compileNative {
+              problemName = problem.name;
+              programName = mode;
+              src = patchedSrc;
+              stdenv = pkgs.pkgsCross.musl64.pkgsStatic.stdenv;
+              compileCommand = programCompileCommand includes;
+            };
+
+          # Wrap a binary into a C program by embedding it as a compressed,
+          # base64-encoded string. This is the build-time part of the Luogu C++
+          # standard workaround.
+          wrapProgram =
+            wrapperName: binary:
+            pkgs.runCommandLocal "hull-luoguWrappedProgram-${problem.name}-${wrapperName}.cpp"
+              {
+                nativeBuildInputs = [
+                  pkgs.lz4
+                  pkgs.xxd
+                ];
+              }
               ''
-            ) st.testCases
-        ) subtasks
-      ));
+                binary_path=${binary}/bin/program
+                raw_size=$(wc -c $binary_path | cut -d' ' -f1)
+                lz4 --best -z -f $binary_path binary-lz4.bin
+                lz4_size=$(wc -c binary-lz4.bin | cut -d' ' -f1)
+                base64 binary-lz4.bin -w0 > b64-content.txt
+                awk \
+                  -v raw_size="$raw_size" \
+                  -v lz4_size="$lz4_size" \
+                  '
+                  BEGIN {
+                    getline b64 < "b64-content.txt"
+                  }
+                  {
+                    sub(/\/\* HULL_RAW_SIZE \*\//, raw_size);
+                    sub(/\/\* HULL_LZ4_SIZE \*\//, lz4_size);
+                    sub(/HULL_B64_STR/, b64);
+                    print;
+                  }
+                  ' ${./wrapper.c} > $out
+              '';
 
-      requiredTags = [
-        "Special Judge"
-        "O2优化" # O2 Optimization
-      ]
-      ++ (lib.optional (type == "stdioInteraction") "交互题") # Interactive Problem
-      ++ (lib.optional (type == "answerOnly") "提交答案"); # Answer Only
+          wrappedChecker = wrapProgram "checker" (compileProgram {
+            programSrc = checker.src;
+            mode = modeConfig.checkerMode;
+          });
 
-    in
-    pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-luogu"
-      { nativeBuildInputs = [ pkgs._7zz ]; }
-      ''
-        mkdir $out
-        data_dir=$(mktemp -d)
-        cleanup() {
-          rm -rf "$data_dir"
-        }
-        trap cleanup EXIT
+          wrappedValidator = wrapProgram "validator" (compileProgram {
+            programSrc = validator.src;
+            mode = "validator";
+          });
 
-        echo ${lib.escapeShellArg (builtins.toJSON configYamlContent)} > $data_dir/config.yml
+          scoringScriptContent = ''
+            @final_status = AC;
+            @total_score = 0;
+            @final_time = 0;
+            @final_memory = 0;
+          ''
+          + (lib.concatMapStringsSep "\n" (idx: ''
+            if @status${toString idx} != AC; then
+              @final_status = UNAC;
+            fi
+            if @time${toString idx} > @final_time; then
+              @final_time = @time${toString idx};
+            fi
+            if @memory${toString idx} > @final_memory; then
+              @final_memory = @memory${toString idx};
+            fi
+          '') (lib.range 1 (builtins.length testCaseNames)))
+          + (lib.concatLines (
+            lib.imap0 (
+              stIdx: st:
+              let
+                stScore = builtins.floor (st.fullScore * scoreScale);
+              in
+              if st.scoringMethod == "min" then
+                ''
+                  @hull_st${toString stIdx}_score = ${toString stScore};
+                  ${lib.concatMapStringsSep "\n" (
+                    tc:
+                    let
+                      tcIdx = testCaseIndexes.${toString tc.name};
+                    in
+                    ''
+                      @hull_tmp = @score${toString tcIdx} * ${toString stScore} / 100;
+                      if @hull_tmp < @hull_st${toString stIdx}_score; then
+                        @hull_st${toString stIdx}_score = @hull_tmp;
+                      fi
+                    ''
+                  ) st.testCases}
+                  @total_score = @total_score + @hull_st${toString stIdx}_score;
+                ''
+              else
+                lib.concatMapStringsSep "\n" (
+                  tc:
+                  let
+                    tcIdx = testCaseIndexes.${tc.name};
+                  in
+                  ''
+                    @hull_tmp = @score${toString tcIdx} * ${toString stScore} / ${
+                      toString (100 * (builtins.length st.testCases))
+                    };
+                    @total_score = @total_score + @hull_tmp;
+                  ''
+                ) st.testCases
+            ) subtasks
+          ));
 
-        cp ${wrappedChecker} $data_dir/checker.cpp
-        cp ${wrappedValidator} $data_dir/validator.cpp
-        ${if graderSrc != null then "cp ${graderSrc}" else "touch"} $data_dir/interactive_lib.cpp
+          requiredTags = [
+            "Special Judge"
+            "O2优化" # O2 Optimization
+          ]
+          ++ modeConfig.extraRequiredTags;
 
-        ${copyTestCasesCommand}
+        in
+        pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-luogu"
+          { nativeBuildInputs = [ pkgs._7zz ]; }
+          ''
+            mkdir $out
+            data_dir=$(mktemp -d)
+            cleanup() {
+              rm -rf "$data_dir"
+            }
+            trap cleanup EXIT
 
-        # Luogu's zip size limit is 50 MiB, so max compression stays enabled.
-        (cd "$data_dir" && 7zz a -tzip -mx=9 -mmt=on "$out/data.zip" .)
+            echo ${lib.escapeShellArg (builtins.toJSON configYamlContent)} > $data_dir/config.yml
 
-        echo ${lib.escapeShellArg scoringScriptContent} > $out/scoring-script.txt
-        echo ${lib.escapeShellArg (builtins.toJSON requiredTags)} > $out/required-tags.json
-      '';
+            cp ${wrappedChecker} $data_dir/checker.cpp
+            cp ${wrappedValidator} $data_dir/validator.cpp
+            ${if graderSrc != null then "cp ${graderSrc}" else "touch"} $data_dir/interactive_lib.cpp
+
+            ${copyTestCasesCommand}
+
+            # Luogu's zip size limit is 50 MiB, so max compression stays enabled.
+            (cd "$data_dir" && 7zz a -tzip -mx=9 -mmt=on "$out/data.zip" .)
+
+            echo ${lib.escapeShellArg scoringScriptContent} > $out/scoring-script.txt
+            echo ${lib.escapeShellArg (builtins.toJSON requiredTags)} > $out/required-tags.json
+          '';
+    };
+in
+{
+  batch = args: mkLuoguTarget (args // { mode = "batch"; });
+  stdioInteraction = args: mkLuoguTarget (args // { mode = "stdioInteraction"; });
+  answerOnly = args: mkLuoguTarget (args // { mode = "answerOnly"; });
 }

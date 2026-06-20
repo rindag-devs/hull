@@ -87,17 +87,9 @@
         formatError = "txt";
       };
     };
-    hydro = hull.problemTarget.hydro {
-      type = "answerOnly";
-    };
-    uoj = hull.problemTarget.uoj {
-      type = "answerOnly";
-    };
-    cms = hull.problemTarget.cms {
-      type = "answerOnly";
-    };
-    luogu = hull.problemTarget.luogu {
-      type = "answerOnly";
-    };
+    hydro = hull.problemTarget.hydro.answerOnly { };
+    uoj = hull.problemTarget.uoj.answerOnly { };
+    cms = hull.problemTarget.cms.answerOnly { };
+    luogu = hull.problemTarget.luogu.answerOnly { };
   };
 }

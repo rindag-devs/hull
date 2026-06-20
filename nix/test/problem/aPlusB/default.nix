@@ -221,7 +221,7 @@
 
   targets = {
     default = hull.problemTarget.common;
-    hydro = hull.problemTarget.hydro {
+    hydro = hull.problemTarget.hydro.batch {
       statements = {
         en = "statement.en.pdf";
         zh = "statement.zh.pdf";
@@ -233,33 +233,33 @@
         zh = "statement.zh.pdf";
       };
     };
-    lemon = hull.problemTarget.lemon {
+    lemon = hull.problemTarget.lemon.batch {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
     lemonCustom = hull.problemTarget.lemonCustom {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
-    uoj = hull.problemTarget.uoj { };
+    uoj = hull.problemTarget.uoj.batch { };
     uojCustom = hull.problemTarget.uojCustom { };
     uojCustomAarch64 = hull.problemTarget.uojCustom {
       targetSystem = "aarch64-linux";
     };
-    uojOld = hull.problemTarget.uoj {
+    uojOld = hull.problemTarget.uoj.batch {
       oldJudgerWrapper = true;
       checkerSuffix = ".cpp";
       validatorSuffix = ".cpp";
       stdSuffix = ".cpp";
     };
-    cms = hull.problemTarget.cms {
+    cms = hull.problemTarget.cms.batch {
       statements = {
         english = "statement.en.pdf";
         chinese = "statement.zh.pdf";
       };
     };
-    domjudge = hull.problemTarget.domjudge {
+    domjudge = hull.problemTarget.domjudge.batch {
       statement = "statement.en.pdf";
     };
-    luogu = hull.problemTarget.luogu { };
+    luogu = hull.problemTarget.luogu.batch { };
 
     minimal =
       (
