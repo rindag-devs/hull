@@ -269,11 +269,24 @@
         mkdir -p "$tmpdir/hull-bundle/nix/store"
 
         while IFS= read -r store_path; do
-          cp -a --no-preserve=ownership "$store_path" "$tmpdir/hull-bundle/nix/store/"
+          cp -R -P --no-preserve=ownership,mode "$store_path" "$tmpdir/hull-bundle/nix/store/"
         done < ${targetClosure}/store-paths
+        store_dir="$tmpdir/hull-bundle/nix/store"
+        while IFS= read -r -d ''' link_path; do
+          target=$(readlink "$link_path")
+          case "$target" in
+            /nix/store/*)
+              bundled_target="$store_dir/''${target#/nix/store/}"
+              if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
+                relative_target=$(realpath --relative-to="$(dirname "$link_path")" "$bundled_target")
+                rm "$link_path"
+                ln -s "$relative_target" "$link_path"
+              fi
+              ;;
+          esac
+        done < <(find "$store_dir" -type l -print0)
 
-        cp -r ${judgeBundleData}/. "$tmpdir/hull-bundle/"
-        chmod -R u+rwX "$tmpdir/hull-bundle"
+        cp -R -P --no-preserve=ownership,mode ${judgeBundleData}/. "$tmpdir/hull-bundle/"
         tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
         rm -rf "$tmpdir/hull-bundle/nix/store"
         rmdir "$tmpdir/hull-bundle/nix"

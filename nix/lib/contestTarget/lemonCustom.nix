@@ -52,16 +52,14 @@
           if [ "$entryName" = "_hull" ]; then
             continue
           fi
-          cp -r "$dataEntry" "$tmpdir/data/"
-          chmod -R u+w "$tmpdir/data/$entryName" 2>/dev/null || true
+          cp -R -P --no-preserve=ownership,mode "$dataEntry" "$tmpdir/data/"
         done
 
         for contestantDir in "$problemOutput"/source/*; do
           if [ -d "$contestantDir" ]; then
             contestantName=$(basename "$contestantDir")
             mkdir -p "$tmpdir/source/$contestantName"
-            cp -r "$contestantDir"/* "$tmpdir/source/$contestantName/"
-            chmod -R u+w "$tmpdir/source/$contestantName" 2>/dev/null || true
+            cp -R -P --no-preserve=ownership,mode "$contestantDir"/* "$tmpdir/source/$contestantName/"
           fi
         done
       done
@@ -76,21 +74,33 @@
           for storeEntry in "$problemOutput"/data/_hull/nix/store/*; do
             entryName=$(basename "$storeEntry")
             if [ ! -e "$tmpdir/data/_hull/nix/store/$entryName" ]; then
-              cp -a --no-preserve=ownership "$storeEntry" "$tmpdir/data/_hull/nix/store/"
-              chmod -R u+w "$tmpdir/data/_hull/nix/store/$entryName" 2>/dev/null || true
+              cp -R -P --no-preserve=ownership,mode "$storeEntry" "$tmpdir/data/_hull/nix/store/"
             fi
           done
         fi
       done
+      store_dir="$tmpdir/data/_hull/nix/store"
+      while IFS= read -r -d ''' link_path; do
+        target=$(readlink "$link_path")
+        case "$target" in
+          /nix/store/*)
+            bundled_target="$store_dir/''${target#/nix/store/}"
+            if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
+              relative_target=$(realpath --relative-to="$(dirname "$link_path")" "$bundled_target")
+              rm "$link_path"
+              ln -s "$relative_target" "$link_path"
+            fi
+            ;;
+        esac
+      done < <(find "$store_dir" -type l -print0)
       if [ -n "$first_problem_output" ] && [ -d "$first_problem_output/data/_hull" ]; then
         for hullEntry in "$first_problem_output"/data/_hull/*; do
           entryName=$(basename "$hullEntry")
           if [ "$entryName" = "nix" ]; then
             continue
           fi
-          cp -a --no-preserve=ownership "$hullEntry" "$tmpdir/data/_hull/"
+          cp -R -P --no-preserve=ownership,mode "$hullEntry" "$tmpdir/data/_hull/"
         done
-        chmod -R u+w "$tmpdir/data/_hull" 2>/dev/null || true
       fi
 
       ${lib.getExe pkgs.jq} -cn \

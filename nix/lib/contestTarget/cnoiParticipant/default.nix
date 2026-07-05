@@ -321,8 +321,22 @@
       selfEvalCommand = lib.optionalString enableSelfEval ''
         mkdir -p $out/.selfeval-bundle/nix/store
         while IFS= read -r store_path; do
-          cp -a --no-preserve=ownership "$store_path" $out/.selfeval-bundle/nix/store/
+          cp -R -P --no-preserve=ownership,mode "$store_path" $out/.selfeval-bundle/nix/store/
         done < ${selfEvalClosure}/store-paths
+        store_dir="$out/.selfeval-bundle/nix/store"
+        while IFS= read -r -d ''' link_path; do
+          target=$(readlink "$link_path")
+          case "$target" in
+            /nix/store/*)
+              bundled_target="$store_dir/''${target#/nix/store/}"
+              if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
+                relative_target=$(realpath --relative-to="$(dirname "$link_path")" "$bundled_target")
+                rm "$link_path"
+                ln -s "$relative_target" "$link_path"
+              fi
+              ;;
+          esac
+        done < <(find "$store_dir" -type l -print0)
         cp ${selfEvalLauncher} $out/selfeval
         chmod +x $out/selfeval
       '';
@@ -341,8 +355,7 @@
           statementSrc = pkgs.runCommandLocal "hull-cnoiParticipantStatementSrc-${contest.name}" { } ''
             mkdir $out
             cp ${./statement/main.typ} $out/main.typ
-            cp -r ${./statement/translation} $out/translation
-            chmod -R u+w $out/translation
+            cp -R -P --no-preserve=ownership,mode ${./statement/translation} $out/translation
             ${lib.concatMapAttrsStringSep "\n" (
               displayLanguage: path: "install -Dm644 ${path} $out/translation/${displayLanguage}.typ"
             ) statementExtraTranslations}

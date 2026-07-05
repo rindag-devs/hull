@@ -269,9 +269,22 @@
 
             mkdir -p "$tmpdir/nix/store"
             while IFS= read -r store_path; do
-              cp -a --no-preserve=ownership "$store_path" "$tmpdir/nix/store/"
-              chmod -R u+w "$tmpdir/nix/store/$(basename "$store_path")" 2>/dev/null || true
+              cp -R -P --no-preserve=ownership,mode "$store_path" "$tmpdir/nix/store/"
             done < ${targetClosure}/store-paths
+            store_dir="$tmpdir/nix/store"
+            while IFS= read -r -d ''' link_path; do
+              target=$(readlink "$link_path")
+              case "$target" in
+                /nix/store/*)
+                  bundled_target="$store_dir/''${target#/nix/store/}"
+                  if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
+                    relative_target=$(realpath --relative-to="$(dirname "$link_path")" "$bundled_target")
+                    rm "$link_path"
+                    ln -s "$relative_target" "$link_path"
+                  fi
+                  ;;
+              esac
+            done < <(find "$store_dir" -type l -print0)
 
             tar -C "$tmpdir" -cJf "$out" nix
           '';
