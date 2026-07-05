@@ -38,13 +38,11 @@ in
     libstdcxx = pkgs.callPackage ./libstdcxx {
       inherit compiler-rt libc;
     };
-    sysroot = pkgs.symlinkJoin {
-      name = "wasm32-wasi-wasip1-sysroot";
-      paths = [
-        libc
-        libstdcxx
-      ];
-    };
+    sysroot = pkgs.runCommandLocal "wasm32-wasi-wasip1-sysroot" { } ''
+      mkdir -p $out
+      cp -R -L --no-preserve=ownership,mode ${libc}/. $out/
+      cp -R -L --no-preserve=ownership,mode ${libstdcxx}/. $out/
+    '';
     clang = pkgs.callPackage ./clang.nix {
       inherit compiler-rt sysroot;
     };

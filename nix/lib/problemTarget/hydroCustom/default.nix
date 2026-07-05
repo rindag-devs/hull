@@ -269,21 +269,33 @@
 
             mkdir -p "$tmpdir/nix/store"
             while IFS= read -r store_path; do
-              cp -R -P --no-preserve=ownership,mode "$store_path" "$tmpdir/nix/store/"
+              cp -R -P --no-preserve=ownership "$store_path" "$tmpdir/nix/store/"
+              chmod -R u+w "$tmpdir/nix/store/$(basename "$store_path")" 2>/dev/null || true
             done < ${targetClosure}/store-paths
             store_dir="$tmpdir/nix/store"
             while IFS= read -r -d ''' link_path; do
               target=$(readlink "$link_path")
               case "$target" in
+                /*|../*|*/../*) ;;
+                *) continue ;;
+              esac
+              case "$target" in
                 /nix/store/*)
                   bundled_target="$store_dir/''${target#/nix/store/}"
-                  if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
-                    relative_target=$(realpath --relative-to="$(dirname "$link_path")" "$bundled_target")
-                    rm "$link_path"
-                    ln -s "$relative_target" "$link_path"
-                  fi
+                  ;;
+                *)
+                  bundled_target=$(realpath -m "$(dirname "$link_path")/$target")
+                  case "$bundled_target" in
+                    "$store_dir"/*) ;;
+                    *) continue ;;
+                  esac
                   ;;
               esac
+              if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
+                rm "$link_path"
+                cp -R -L --no-preserve=ownership "$bundled_target" "$link_path"
+                chmod -R u+w "$link_path" 2>/dev/null || true
+              fi
             done < <(find "$store_dir" -type l -print0)
 
             tar -C "$tmpdir" -cJf "$out" nix

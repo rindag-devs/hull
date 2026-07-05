@@ -321,21 +321,33 @@
       selfEvalCommand = lib.optionalString enableSelfEval ''
         mkdir -p $out/.selfeval-bundle/nix/store
         while IFS= read -r store_path; do
-          cp -R -P --no-preserve=ownership,mode "$store_path" $out/.selfeval-bundle/nix/store/
+          cp -R -P --no-preserve=ownership "$store_path" $out/.selfeval-bundle/nix/store/
+          chmod -R u+w "$out/.selfeval-bundle/nix/store/$(basename "$store_path")" 2>/dev/null || true
         done < ${selfEvalClosure}/store-paths
         store_dir="$out/.selfeval-bundle/nix/store"
         while IFS= read -r -d ''' link_path; do
           target=$(readlink "$link_path")
           case "$target" in
+            /*|../*|*/../*) ;;
+            *) continue ;;
+          esac
+          case "$target" in
             /nix/store/*)
               bundled_target="$store_dir/''${target#/nix/store/}"
-              if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
-                relative_target=$(realpath --relative-to="$(dirname "$link_path")" "$bundled_target")
-                rm "$link_path"
-                ln -s "$relative_target" "$link_path"
-              fi
               ;;
+            *)
+              bundled_target=$(realpath -m "$(dirname "$link_path")/$target")
+              case "$bundled_target" in
+                "$store_dir"/*) ;;
+                *) continue ;;
+              esac
+            ;;
           esac
+          if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
+            rm "$link_path"
+            cp -R -L --no-preserve=ownership "$bundled_target" "$link_path"
+            chmod -R u+w "$link_path" 2>/dev/null || true
+          fi
         done < <(find "$store_dir" -type l -print0)
         cp ${selfEvalLauncher} $out/selfeval
         chmod +x $out/selfeval
@@ -355,7 +367,8 @@
           statementSrc = pkgs.runCommandLocal "hull-cnoiParticipantStatementSrc-${contest.name}" { } ''
             mkdir $out
             cp ${./statement/main.typ} $out/main.typ
-            cp -R -P --no-preserve=ownership,mode ${./statement/translation} $out/translation
+            cp -R -P --no-preserve=ownership ${./statement/translation} $out/translation
+            chmod -R u+w $out/translation
             ${lib.concatMapAttrsStringSep "\n" (
               displayLanguage: path: "install -Dm644 ${path} $out/translation/${displayLanguage}.typ"
             ) statementExtraTranslations}

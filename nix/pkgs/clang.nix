@@ -59,6 +59,6 @@ pkgs.runCommandLocal "wasm32-wasi-wasip1-clang-${llvmPackages.clang.version}" { 
       "$@"
   ''} "$out/bin/wasm32-wasi-wasip1-clang++"
 
-  ln -s ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include "$out/resource-dir/include"
-  ln -s ${compiler-rt}/lib "$out/resource-dir/lib"
+  cp -R -L --no-preserve=ownership,mode ${llvmPackages.clang-unwrapped.lib}/lib/clang/${lib.versions.major llvmPackages.clang.version}/include "$out/resource-dir/include"
+  cp -R -L --no-preserve=ownership,mode ${compiler-rt}/lib "$out/resource-dir/lib"
 ''
