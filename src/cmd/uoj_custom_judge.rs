@@ -538,6 +538,7 @@ fn write_result(
     .map(|report| report.tick)
     .max()
     .unwrap_or(0);
+  let encoded_total_tick = encode_uoj_top_level_time_tick(total_tick);
   let top_level_score = if round_top_level_score {
     total_score.round().to_string()
   } else {
@@ -548,10 +549,30 @@ fn write_result(
     result_path.join("result.txt"),
     format!(
       "score {}\ntime {}\nmemory {}\ndetails\n{}",
-      top_level_score, total_tick, max_memory, details
+      top_level_score, encoded_total_tick, max_memory, details
     ),
   )
   .with_context(|| format!("Failed to write UOJ result to {}", result_path.display()))
+}
+
+fn encode_uoj_top_level_time_tick(tick: u64) -> u32 {
+  const EXPONENT_BITS: u32 = 6;
+  const MANTISSA_BITS: u32 = 31 - EXPONENT_BITS;
+  const MANTISSA_MASK: u64 = (1u64 << MANTISSA_BITS) - 1;
+  const UOJ_MAX_TIME: u32 = i32::MAX as u32;
+
+  if tick == 0 {
+    return 0;
+  }
+
+  let exponent = u64::BITS - 1 - tick.leading_zeros();
+  let mantissa = if exponent <= MANTISSA_BITS {
+    (tick << (MANTISSA_BITS - exponent)) & MANTISSA_MASK
+  } else {
+    (tick >> (exponent - MANTISSA_BITS)) & MANTISSA_MASK
+  };
+  let encoded = ((exponent as u64) << MANTISSA_BITS) | mantissa;
+  encoded.saturating_add(1).min(UOJ_MAX_TIME as u64) as u32
 }
 
 fn load_normal_test_cases(
@@ -1160,6 +1181,51 @@ mod tests {
       fs::read_to_string(result_path.join("result.txt")).expect("read result"),
       "score 0\ntime 12\nmemory 34\ndetails\n<tests><test num=\"0\" score=\"100\" info=\"Success\" time=\"12\" memory=\"34\"><res></res></test></tests>"
     );
+  }
+
+  #[test]
+  fn encodes_uoj_top_level_time_tick_into_signed_int_range() {
+    assert_eq!(encode_uoj_top_level_time_tick(0), 0);
+    assert_eq!(encode_uoj_top_level_time_tick(1), 1);
+    assert_eq!(encode_uoj_top_level_time_tick(u64::MAX), i32::MAX as u32);
+
+    let encoded_large_tick = encode_uoj_top_level_time_tick(10_000_000_000);
+    assert!(encoded_large_tick > 0);
+    assert!(encoded_large_tick <= i32::MAX as u32);
+  }
+
+  #[test]
+  fn uoj_top_level_time_tick_encoding_is_monotonic() {
+    let mut previous_tick = 0;
+    let mut previous_encoded = encode_uoj_top_level_time_tick(previous_tick);
+
+    for exponent in 0..u64::BITS {
+      let base = 1u64 << exponent;
+      let step = (base >> 8).max(1);
+      let samples = [
+        base.saturating_sub(1),
+        base,
+        base.saturating_add(step),
+        base.saturating_add(step.saturating_mul(127)),
+        base.saturating_add(step.saturating_mul(255)),
+      ];
+
+      for tick in samples {
+        if tick < previous_tick {
+          continue;
+        }
+        let encoded = encode_uoj_top_level_time_tick(tick);
+        assert!(
+          previous_encoded <= encoded,
+          "{previous_tick} encoded as {previous_encoded}, but {tick} encoded as {encoded}"
+        );
+        previous_tick = tick;
+        previous_encoded = encoded;
+      }
+    }
+
+    let encoded_max = encode_uoj_top_level_time_tick(u64::MAX);
+    assert!(previous_encoded <= encoded_max);
   }
 
   #[test]
