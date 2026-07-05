@@ -48,6 +48,35 @@ sync_inner_status() {
   fi
 }
 
+process_is_zombie() {
+  state=$(ps -o stat= -p "$1" 2>/dev/null || true)
+  case "$state" in
+    Z*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+copy_inner_results() {
+  if [ -d "$inner_result_dir" ]; then
+    cp -f "$inner_result_dir"/* "$result_path"/ 2>/dev/null || true
+    if [ -f "$inner_result_dir/std_output.txt" ]; then
+      cp -f "$inner_result_dir/std_output.txt" "$work_path/std_output.txt" 2>/dev/null || true
+    fi
+  fi
+}
+
+judge_pid=
+sync_pid=
+cleanup() {
+  if [ -n "$sync_pid" ]; then
+    kill "$sync_pid" 2>/dev/null || true
+  fi
+  if [ -n "$judge_pid" ]; then
+    kill "$judge_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup INT TERM HUP
+
 "$runtime_nix_dir/store@NIX_USER_CHROOT_STORE_SUFFIX@" \
   -m "$self_dir:$self_dest" \
   -m "$work_path:$work_dest" \
@@ -60,15 +89,23 @@ sync_inner_status() {
 judge_pid="$!"
 sync_inner_status "$judge_pid" &
 sync_pid="$!"
-wait "$judge_pid"
-status="$?"
-wait "$sync_pid" 2>/dev/null || true
-if [ -d "$inner_result_dir" ]; then
-  cp -f "$inner_result_dir"/* "$result_path"/ 2>/dev/null || true
-  if [ -f "$inner_result_dir/std_output.txt" ]; then
-    cp -f "$inner_result_dir/std_output.txt" "$work_path/std_output.txt" 2>/dev/null || true
+status=0
+while kill -0 "$judge_pid" 2>/dev/null; do
+  if [ -f "$inner_result_dir/result.txt" ] || process_is_zombie "$judge_pid"; then
+    break
   fi
+  sleep 0.1
+done
+if [ ! -f "$inner_result_dir/result.txt" ]; then
+  set +e
+  wait "$judge_pid"
+  status="$?"
+  set -e
 fi
+kill "$sync_pid" 2>/dev/null || true
+kill "$judge_pid" 2>/dev/null || true
+trap - INT TERM HUP
+copy_inner_results
 if [ -f "$result_path/result.txt" ]; then
   exit 0
 fi
