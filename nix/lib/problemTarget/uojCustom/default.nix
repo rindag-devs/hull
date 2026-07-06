@@ -57,6 +57,9 @@
     "C++23" = "cpp.23.s64m";
     "C++26" = "cpp.26.s64m";
   },
+
+  # A map of name to file path. These files will be placed in `download/`.
+  extraDownloadFiles ? { },
 }:
 
 {
@@ -70,6 +73,7 @@
       generators,
       solutions,
       testCases,
+      samples,
       ...
     }@problem:
     let
@@ -148,7 +152,7 @@
 
       mkOfficialDataArchive =
         tc:
-        pkgs.runCommandLocal "hull-uojCustom-official-data-${problem.name}-${tc.name}.tar" { } ''
+        pkgs.runCommandLocal "hull-uojCustom-officialData-${problem.name}-${tc.name}.tar" { } ''
             tmpdir=$(mktemp -d)
             cleanup() {
               rm -rf "$tmpdir"
@@ -171,7 +175,7 @@
         cp ${pkgs.writeText "hull-uojCustom-${problem.name}.json" (builtins.toJSON metadata)} \
           $out/problem.json
         cp ${
-          pkgs.writeText "hull-uojCustom-language-config-${problem.name}.json" (
+          pkgs.writeText "hull-uojCustom-languageConfig-${problem.name}.json" (
             builtins.toJSON {
               uojToHullLanguageMap = uojToHullLanguageMap;
             }
@@ -245,6 +249,38 @@
         judger_output_limit 2047
       '';
 
+      mkCopyCommands =
+        destDir: files:
+        lib.concatMapAttrsStringSep "\n" (
+          destPath: srcPath:
+          let
+            destParentDir = builtins.dirOf destPath;
+          in
+          ''
+            mkdir -p ${destDir}/${lib.escapeShellArg destParentDir}
+            cp -f ${srcPath} ${destDir}/${lib.escapeShellArg destPath}
+          ''
+        ) files;
+
+      samplesCommand = lib.concatStringsSep "\n" (
+        map (tc: ''
+          cp ${tc.data.input} $tmpdir/download/sample_${tc.name}.in
+          outputs=()
+          for output_path in ${tc.data.outputs}/*; do
+            [ -f "$output_path" ] || continue
+            outputs+=("$output_path")
+          done
+          if [ "''${#outputs[@]}" -eq 1 ]; then
+            cp "''${outputs[0]}" "$tmpdir/download/sample_${tc.name}.out"
+          else
+            for output_path in "''${outputs[@]}"; do
+              output_name=$(basename "$output_path")
+              cp "$output_path" "$tmpdir/download/sample_${tc.name}_''${output_name}.out"
+            done
+          fi
+        '') samples
+      );
+
       judgerShellScript = pkgs.replaceVarsWith {
         src = ./judger.sh.in;
         replacements = {
@@ -313,6 +349,16 @@
           docName: doc:
           lib.optionalString doc.participantVisibility "cp ${doc.path} $tmpdir/download/document_${docName}"
         ) documents}
+
+        ${samplesCommand}
+
+        ${hull.problemTarget.utils.participantProgramsCommand {
+          inherit problem;
+          dest = "$tmpdir/download";
+          flattened = true;
+        }}
+
+        ${mkCopyCommands "$tmpdir/download" extraDownloadFiles}
 
         ${
           if zipped then

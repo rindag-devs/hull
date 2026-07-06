@@ -259,6 +259,9 @@
         };
 
       libForSystem = system: (mkPerSystem system).hull;
+      packagesForSystem =
+        system:
+        nixpkgs.lib.filterAttrs (_: value: nixpkgs.lib.isDerivation value) ((mkPerSystem system).hullPkgs);
       targetHullPkgsForSystem =
         buildSystem: targetSystem: (mkPerSystem buildSystem).targetHullPkgsForSystem targetSystem;
       targetPkgsForSystem =
@@ -277,7 +280,8 @@
         targetHullForSystem
         ;
       lib = forEachSystem libForSystem;
-      packages = forEachSystem (system: (mkPerSystem system).hullPkgs);
+      packages = forEachSystem packagesForSystem;
+      legacyPackages = forEachSystem (system: (mkPerSystem system).hullPkgs);
       formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
       hullProblems = forEachSystem (system: (mkPerSystem system).hullProblems);
       hullContests = forEachSystem (system: (mkPerSystem system).hullContests);
