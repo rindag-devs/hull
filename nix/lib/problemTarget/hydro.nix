@@ -223,18 +223,14 @@ let
           patchedChecker =
             if !patchCplibProgram then
               checker.src
-            else if mode == "stdioInteraction" then
-              hull.patch {
-                problemName = problem.name;
-                src = checker.src;
-              }
-              // modeConfig.checkerPatch
             else
-              hull.patch {
-                problemName = problem.name;
-                src = checker.src;
-              }
-              // modeConfig.checkerPatch;
+              hull.patch (
+                {
+                  problemName = problem.name;
+                  src = checker.src;
+                }
+                // modeConfig.checkerPatch
+              );
 
           patchedValidator =
             if !patchCplibProgram then

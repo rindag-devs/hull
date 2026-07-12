@@ -2,4 +2,5 @@
 **/result
 **/result-*
 .vscode
+.mimocode
 docs/public
