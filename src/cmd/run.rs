@@ -132,7 +132,7 @@ pub fn run(opts: &RunOpts) -> Result<()> {
   info!("Precompiling program");
   let cwasm_path = cache_native_module(&wasm_path)?;
   let cwasm_bytes = fs::read(&cwasm_path)
-    .with_context(|| format!("Failed to read executable artifact from {}", &cwasm_path))?;
+    .with_context(|| format!("Failed to read executable artifact from {}", cwasm_path))?;
 
   let stdin: Box<dyn WasiFile> = Box::new(ReadPipe::new(std::io::stdin()));
   let stdout: Box<dyn WasiFile> = Box::new(WritePipe::new(std::io::stdout()));
