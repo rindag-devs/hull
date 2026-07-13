@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <format>
 #include <optional>
 #include <ranges>
 #include <string>
@@ -56,25 +57,20 @@ struct TestCaseInput {
     in.read(cplib::var::eoln);
 
     if (in.get_trace_level() >= cplib::trace::Level::FULL) {
-      using jV = cplib::json::Value;
-      using jM = cplib::json::Map;
       in.attach_tag(
           "hull/graph",
-          jV(jM{{"name", jV(std::format("graph_{}", tc_idx))},
-                {"nodes", jV(std::views::iota(1, n + 1) | std::views::transform([](std::int32_t x) {
-                               return jV(std::to_string(x));
-                             }) |
-                             std::ranges::to<std::vector>())},
-                {"edges", jV(edges | std::views::transform([](const auto &e) {
-                               return jV(jM{
-                                   {"u", jV(std::to_string(e.u))},
-                                   {"v", jV(std::to_string(e.v))},
-                                   {"w", jV(std::to_string(e.w))},
-                                   {"directed", jV(false)},
-                               });
-                             }) |
-                             std::ranges::to<std::vector>())}}));
-      in.attach_tag("hull/case", jV(tc_idx));
+          cplib::json::Map{
+              {"name", std::format("graph_{}", tc_idx)},
+              {"nodes", std::views::iota(1, n + 1) |
+                            std::views::transform(
+                                [](std::int32_t x) -> std::string { return std::to_string(x); })},
+              {"edges", edges | std::views::transform([](const auto &e) -> cplib::json::Map {
+                          return {{"u", std::to_string(e.u)},
+                                  {"v", std::to_string(e.v)},
+                                  {"w", std::to_string(e.w)},
+                                  {"directed", false}};
+                        })}});
+      in.attach_tag("hull/case", tc_idx);
     }
 
     return {.idx = tc_idx, .n = n, .m = m, .edges = std::move(edges)};
@@ -158,9 +154,10 @@ struct Output {
 };
 
 inline auto traits(const Input &input) -> std::vector<cplib::validator::Trait> {
-  return {{"w_eq_1", [&input]() {
-             return std::ranges::all_of(input.test_cases, [](const auto &test_case) {
-               return std::ranges::all_of(test_case.edges, [](const auto &e) { return e.w == 1; });
+  return {{"w_eq_1", [&input]() -> bool {
+             return std::ranges::all_of(input.test_cases, [](const auto &test_case) -> auto {
+               return std::ranges::all_of(test_case.edges,
+                                          [](const auto &e) -> auto { return e.w == 1; });
              });
            }}};
 }
