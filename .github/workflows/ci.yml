@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout repository
@@ -25,3 +25,6 @@ jobs:
 
       - name: Build all test problems
         run: nix develop .#default --command just all-problems
+
+      - name: Integration tests
+        run: nix develop .#default --command just integration

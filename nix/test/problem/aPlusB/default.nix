@@ -227,10 +227,35 @@
         zh = "statement.zh.pdf";
       };
     };
+    hydroX86_64 = hull.problemTarget.hydro {
+      targetSystem = "x86_64-linux";
+      statements = {
+        en = "statement.en.pdf";
+        zh = "statement.zh.pdf";
+      };
+    };
+    hydroAarch64 = hull.problemTarget.hydro {
+      targetSystem = "aarch64-linux";
+      statements = {
+        en = "statement.en.pdf";
+        zh = "statement.zh.pdf";
+      };
+    };
     lemon = hull.problemTarget.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
+    lemonX86_64 = hull.problemTarget.lemon {
+      targetSystem = "x86_64-linux";
+      solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
+    };
+    lemonAarch64 = hull.problemTarget.lemon {
+      targetSystem = "aarch64-linux";
+      solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
+    };
     uoj = hull.problemTarget.uoj { };
+    uojX86_64 = hull.problemTarget.uoj {
+      targetSystem = "x86_64-linux";
+    };
     uojAarch64 = hull.problemTarget.uoj {
       targetSystem = "aarch64-linux";
     };

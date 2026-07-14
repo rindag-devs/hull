@@ -163,6 +163,7 @@
               pkgs.libarchive
               pkgs.pkg-config
               pkgs.nix-output-monitor
+              pkgs.shfmt
               pkgs.typstyle
               hullPkgs.wasm32-wasi-wasip1.clang
             ];
