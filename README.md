@@ -20,7 +20,7 @@ Visit the [documentation home page][docs] to learn more.
 - Declarative problem and contest configuration in Nix.
 - Reproducible compilation and runtime analysis.
 - Built-in support for validators, checkers, generators, and solution checks.
-- Packagers for common judge formats, including custom UOJ and participant bundles.
+- Packagers for judge systems and participant bundles.
 - Typst-based document generation.
 
 ## License

@@ -524,7 +524,7 @@ mod tests {
   }
 
   #[test]
-  fn native_module_temp_names_unique() {
+  fn temp_names_unique() {
     let cache_key = "cache-key";
     let handles = (0..32)
       .map(|_| {
@@ -549,7 +549,7 @@ mod tests {
   }
 
   #[test]
-  fn store_add_batches_respect_count_and_byte_limits() {
+  fn store_add_limits() {
     let short_paths = (0..(STORE_ADD_BATCH_SIZE + 1))
       .map(|index| format!("/tmp/hull/{index}"))
       .collect::<Vec<_>>();
@@ -651,7 +651,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_builds_all_artifacts() {
+  fn collect_all_artifacts() {
     let problem = problem_with_artifacts();
     let commands = collect_command_args(&problem);
 
@@ -664,7 +664,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_builds_deduplicates() {
+  fn collect_deduplicates() {
     let problem = problem_with_artifacts();
     let commands = collect_command_args(&problem);
 
@@ -676,7 +676,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_builds_deduplicates_across_problems() {
+  fn collect_problem_dedup() {
     let first = problem_with_artifacts();
     let mut second = problem_with_artifacts();
     second.name = "second".to_string();
@@ -693,7 +693,7 @@ mod tests {
   }
 
   #[test]
-  fn collect_builds_parent_fallback() {
+  fn collect_parent_fallback() {
     let mut problem = problem_with_artifacts();
     problem.validator.wasm = Some(artifact("/tmp/hull/validator/output.wasm", None));
     let commands = collect_command_args(&problem);

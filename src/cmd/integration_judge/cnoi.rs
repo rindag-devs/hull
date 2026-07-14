@@ -32,7 +32,8 @@ use crate::runtime::types::{
 use crate::runtime::workspace::RuntimeWorkspace;
 
 #[derive(Parser)]
-pub struct CnoiSelfEvalOpts {
+/// Arguments for CNOI participant bundle integration.
+pub struct CnoiOpts {
   /// Participant root directory containing one subdirectory per problem.
   pub participant_root: String,
 
@@ -73,7 +74,8 @@ struct InputValidation {
   traits: BTreeMap<String, bool>,
 }
 
-pub fn run(opts: &CnoiSelfEvalOpts) -> Result<()> {
+/// Runs CNOI participant bundle integration.
+pub fn run(opts: &CnoiOpts) -> Result<()> {
   let participant_root = PathBuf::from(&opts.participant_root)
     .canonicalize()
     .with_context(|| format!("Failed to find participant root {}", opts.participant_root))?;
@@ -211,7 +213,7 @@ fn evaluate_problem(
     test_cases: Vec::new(),
     subtasks: problem.subtasks.clone(),
     solutions: vec![SolutionSpec {
-      name: "cnoi_self_eval".to_string(),
+      name: "cnoi".to_string(),
       src: local_source_path.to_string_lossy().into_owned(),
       main_correct_solution: false,
       participant_visibility: true,

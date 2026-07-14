@@ -236,7 +236,7 @@ pub struct BundleProblemSpec {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-/// Exported judging metadata consumed by `hull uoj-custom-judge` and `bundle-judge`.
+/// Exported judging metadata consumed by `hull integration-judge uoj` and `bundle-judge`.
 pub struct BundleJudgeProblemSpec {
   pub name: String,
   pub tick_limit: u64,
@@ -516,7 +516,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn judge_report_rejects_unknown_status() {
+  fn judge_status_json() {
     let err = serde_json::from_str::<JudgeReport>(
       r#"{
         "status": "mysterious_failure",
@@ -532,7 +532,7 @@ mod tests {
   }
 
   #[test]
-  fn validator_report_rejects_unknown_status() {
+  fn validator_status_json() {
     let err = serde_json::from_str::<ValidationReport>(
       r#"{
         "status": "maybe_valid",
@@ -545,7 +545,7 @@ mod tests {
   }
 
   #[test]
-  fn checker_report_rejects_unknown_status() {
+  fn checker_status_json() {
     let err = serde_json::from_str::<CheckerReport>(
       r#"{
         "status": "maybe_accepted",

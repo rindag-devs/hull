@@ -102,29 +102,29 @@
 
   targets = {
     default = hull.problemTarget.common;
-    hydro = hull.problemTarget.hydro.batch {
+    hydroLegacy = hull.problemTarget.legacy.hydro.batch {
       graderSrc = ./grader.17.cpp;
       testDataExtraFiles."add.h" = ./include/add.h;
       userExtraFiles = [ "add.h" ];
     };
-    lemon = hull.problemTarget.lemon.batch {
+    lemonLegacy = hull.problemTarget.legacy.lemon.batch {
       graderSrc = ./grader.17.cpp;
       interactionLib = ./include/add.h;
       interactionLibName = "add.h";
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
-    lemonCustom = hull.problemTarget.lemonCustom {
+    lemon = hull.problemTarget.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
-    uoj = hull.problemTarget.uoj.batch {
+    uojLegacy = hull.problemTarget.legacy.uoj.batch {
       graderSrcs.cpp = ./grader.17.cpp;
       extraRequireFiles."add.h" = ./include/add.h;
     };
-    cms = hull.problemTarget.cms.batch {
+    cmsLegacy = hull.problemTarget.legacy.cms.batch {
       graderSrcs.cpp = ./grader.17.cpp;
       extraSolFiles."add.h" = ./include/add.h;
     };
-    luogu = hull.problemTarget.luogu.batch {
+    luoguLegacy = hull.problemTarget.legacy.luogu.batch {
       graderSrc = hull.patch {
         problemName = config.name;
         src = ./grader.17.cpp;

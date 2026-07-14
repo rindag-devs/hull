@@ -1277,7 +1277,7 @@ mod tests {
   }
 
   #[test]
-  fn judge_failure_context_fields() {
+  fn judge_failure_message() {
     let message = judge_failure_context("aplusb", "wa", "sample-1");
     assert!(message.contains("problem `aplusb`"));
     assert!(message.contains("solution `wa`"));
@@ -1285,7 +1285,7 @@ mod tests {
   }
 
   #[test]
-  fn generate_outputs_failure_context_fields() {
+  fn output_failure_context() {
     let message = generate_outputs_failure_context("wind", "std", "3");
     assert!(message.contains("problem `wind`"));
     assert!(message.contains("solution `std`"));
@@ -1293,7 +1293,7 @@ mod tests {
   }
 
   #[test]
-  fn valid_input_passes_fail_fast() {
+  fn valid_input_ok() {
     let report = ValidationReport {
       status: ValidationStatus::Valid,
       message: String::new(),
@@ -1306,7 +1306,7 @@ mod tests {
   }
 
   #[test]
-  fn invalid_input_fails_fast() {
+  fn invalid_input_error() {
     let report = ValidationReport {
       status: ValidationStatus::Invalid,
       message: "out of range".to_string(),
@@ -1323,7 +1323,7 @@ mod tests {
   }
 
   #[test]
-  fn subtask_results_min() {
+  fn subtask_min() {
     let problem = problem_with_subtasks(ScoringMethod::Min);
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report(JudgeStatus::Accepted, 1.0)),
@@ -1348,7 +1348,7 @@ mod tests {
   }
 
   #[test]
-  fn subtask_results_sum_average() {
+  fn subtask_sum_average() {
     let problem = problem_with_subtasks(ScoringMethod::Sum);
     let reports = BTreeMap::from([
       ("a".to_string(), judge_report(JudgeStatus::Accepted, 1.0)),
@@ -1369,7 +1369,7 @@ mod tests {
   }
 
   #[test]
-  fn subtask_results_ignore_missing() {
+  fn subtask_ignore_missing() {
     let problem = problem_with_subtasks(ScoringMethod::Min);
     let reports = BTreeMap::from([("a".to_string(), judge_report(JudgeStatus::Accepted, 1.0))]);
     let traits = BTreeMap::from([
@@ -1384,7 +1384,7 @@ mod tests {
   }
 
   #[test]
-  fn subtasks_match_trait_subset() {
+  fn subtask_trait_subset() {
     let mut problem = problem_with_subtasks(ScoringMethod::Min);
     problem.subtasks = vec![SubtaskSpec {
       full_score: 1.0,

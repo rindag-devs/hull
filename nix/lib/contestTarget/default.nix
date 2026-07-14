@@ -45,7 +45,9 @@
     inherit lib pkgs;
   };
 
-  lemonCustom = import ./lemonCustom.nix {
-    inherit lib pkgs;
+  legacy = {
+    lemon = import ./legacy/lemon.nix {
+      inherit lib pkgs;
+    };
   };
 }

@@ -166,7 +166,7 @@
 
   targets = {
     default = hull.problemTarget.common;
-    lemonCustom = hull.problemTarget.lemonCustom {
+    lemon = hull.problemTarget.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
   };

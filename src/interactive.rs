@@ -1414,7 +1414,7 @@ mod tests {
   }
 
   #[test]
-  fn item_guard_internal_error() {
+  fn item_guard_error() {
     let progress = ProblemProgressHandle::disabled();
     let handle = progress.register_group(TaskKind::Solution, "std", ["case1"], Some(0.0));
 
@@ -1430,7 +1430,7 @@ mod tests {
   }
 
   #[test]
-  fn problem_dashboard_keeps_all_rows_for_table_viewport() {
+  fn dashboard_all_rows() {
     let mut state = InteractiveState {
       enabled: false,
       suspended: false,
@@ -1458,14 +1458,14 @@ mod tests {
   }
 
   #[test]
-  fn viewport_height_has_minimum_but_no_maximum() {
+  fn viewport_height_bounds() {
     assert_eq!(viewport_height_for_terminal_rows(20), MIN_VIEWPORT_HEIGHT);
     assert_eq!(viewport_height_for_terminal_rows(100), 35);
     assert_eq!(viewport_height_for_terminal_rows(200), 70);
   }
 
   #[test]
-  fn suspend_guard_restores() {
+  fn suspend_restores() {
     let _lock = suspend_test_lock();
     reset_suspend_depth();
     let guard = suspend_live_render();
@@ -1475,7 +1475,7 @@ mod tests {
   }
 
   #[test]
-  fn suspend_guard_supports_nesting() {
+  fn suspend_nesting() {
     let _lock = suspend_test_lock();
     reset_suspend_depth();
     let outer = suspend_live_render();

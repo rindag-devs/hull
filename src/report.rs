@@ -26,7 +26,7 @@ use crate::runtime::types::{
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
-/// Serializable CLI judging summary shared by `judge` and `cnoi-self-eval`.
+/// Serializable CLI judging summary shared by `judge` and `integration-judge cnoi`.
 pub struct JudgeCliReport {
   pub score: f64,
   pub full_score: f64,

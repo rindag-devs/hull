@@ -15,474 +15,365 @@
 
 {
   lib,
-  hull,
   pkgs,
-  cplib,
-  cplibInitializers,
-  x86_64-linux-gnu217-cross,
+  hull,
+  hullPkgs,
+  targetHullPkgsForSystem,
+  targetPkgsForSystem,
+  targetHullForSystem,
 }:
 
-let
-  mkUojTarget =
+{
+  # System used to build the bundled runtime tools.
+  # Defaults to cross-machine compatible Linux x86_64 for UOJ deployment.
+  targetSystem ? "x86_64-linux",
+
+  # Whether to emit a single zip archive or an unpacked directory tree.
+  zipped ? true,
+
+  # Number of testcase judging threads used by the bundled UOJ target.
+  # 0 means auto-detect based on available_parallelism().
+  judgerThreads ? 0,
+
+  # Whether the top-level score in result.txt should be rounded to an integer.
+  roundTopLevelScore ? false,
+
+  # Mapping from UOJ language names to Hull language identifiers.
+  # null means the UOJ language is explicitly unsupported by the bundled UOJ target.
+  uojToHullLanguageMap ? {
+    "C" = "c.23.s64m";
+    "C89" = "c.89.s64m";
+    "C99" = "c.99.s64m";
+    "C11" = "c.11.s64m";
+    "C17" = "c.17.s64m";
+    "C23" = "c.23.s64m";
+    "C++" = "cpp.26.s64m";
+    "C++98" = "cpp.98.s64m";
+    "C++03" = "cpp.03.s64m";
+    "C++11" = "cpp.11.s64m";
+    "C++14" = "cpp.14.s64m";
+    "C++17" = "cpp.17.s64m";
+    "C++20" = "cpp.20.s64m";
+    "C++23" = "cpp.23.s64m";
+    "C++26" = "cpp.26.s64m";
+  },
+
+  # A map of name to file path. These files will be placed in `download/`.
+  extraDownloadFiles ? { },
+}:
+
+{
+  _type = "hullProblemTarget";
+  __functor =
+    self:
     {
-      mode,
-
-      # Whether to enable Codeforces Polygon style two step interaction.
-      twoStepInteraction ? false,
-
-      # Score scaling factor. Hull uses a 0.0-1.0 scale, while UOJ uses integers.
-      scoreScale ? 100.0,
-
-      # Whether to package the output as a zip file.
-      zipped ? true,
-
-      # Conversion rate from Hull's ticks to UOJ's milliseconds.
-      ticksPerMs ? 1.0e7,
-
-      # Grader source codes for function-style interaction problems.
-      # Attr set of { c, cpp, pas } to file paths.
-      graderSrcs ? null,
-
-      # The name of the test case output that will be used as the output of the UOJ test case.
-      outputName ? if mode == "stdioInteraction" then null else "output",
-
-      # A map of name to file path. These files will be placed in `require/`.
-      extraRequireFiles ? { },
-
-      # A map of name to file path. These files will be placed in `download/`.
-      extraDownloadFiles ? { },
-
-      # Whether to patch CPLib programs, i.e. replace the default initializer.
-      patchCplibProgram ? true,
-
-      # File suffix for checker or interactor.
-      # UOJ determines the language by file suffix.
-      # See https://github.com/vfleaking/uoj/blob/517134629ba066c45c7d8637cfc98b75acb560da/web/app/models/UOJLang.php#L32
-      checkerSuffix ? "20.cpp",
-
-      # File suffix for validator.
-      validatorSuffix ? "20.cpp",
-
-      # File suffix for main correct solution.
-      stdSuffix ? "20.cpp",
-
-      # Enable integer mode for score. Usually applies to UOJ community edition.
-      integerScore ? false,
-
-      # Enable integer mode for time limit. Usually applies to UOJ community edition.
-      integerTimeLimit ? false,
-
-      # Build checker/interactor/validator locally as x86_64-linux-gnu2.17 shared
-      # libraries, then wrap them into portable C++ payloads for old UOJ versions.
-      # This does not affect `std`.
-      oldJudgerWrapper ? false,
-    }:
-
-    {
-      _type = "hullProblemTarget";
-      __functor =
-        self:
-        {
-          testCases,
-          subtasks,
-          solutions,
-          checker,
-          validator,
-          documents,
-          generators,
-          samples,
-          includes,
-          mainCorrectSolution,
-          ...
-        }@problem:
-        let
-          modeConfig =
-            {
-              batch = {
-                problemConfLines = [ ];
-                checkerPatchKind = "checker";
-                needChecker = true;
-                needInteractor = false;
-              };
-              stdioInteraction = {
-                problemConfLines = [ "interaction_mode on" ];
-                checkerPatchKind = "checkerTwoStep";
-                needChecker = twoStepInteraction;
-                needInteractor = true;
-              };
-              answerOnly = {
-                problemConfLines = [ "submit_answer on" ];
-                checkerPatchKind = "checker";
-                needChecker = true;
-                needInteractor = false;
-              };
-            }
-            .${mode};
-
-          # Transform Hull subtasks to UOJ subtasks.
-          # UOJ's 'min' mode is the only one used. Hull's 'sum' mode is simulated by
-          # creating a separate UOJ subtask for each test case.
-          uojSubtasks =
-            let
-              subtasksWithIndex = lib.imap0 (index: st: { inherit index st; }) subtasks;
-            in
-            lib.concatMap (
-              { index, st }:
-              if st.scoringMethod == "sum" then
-                let
-                  numTestCases = builtins.length st.testCases;
-                  scorePerCase = if numTestCases > 0 then st.fullScore / numTestCases else 0;
-                  scaledScore = scorePerCase * scoreScale;
-                in
-                map (tc: {
-                  score = if integerScore then builtins.floor scaledScore else scaledScore;
-                  testCases = [ tc ];
-                }) st.testCases
-              else
-                [
-                  {
-                    score =
-                      let
-                        scaledScore = st.fullScore * scoreScale;
-                      in
-                      if integerScore then builtins.floor scaledScore else scaledScore;
-                    testCases = st.testCases;
-                  }
-                ]
-            ) subtasksWithIndex;
-
-          # Create a flat list of UOJ test points.
-          # This renumbers and duplicates Hull test cases to fit UOJ's linear structure.
-          uojTestPoints =
-            let
-              indexedSubtasks = lib.imap0 (i: st: st // { uojSubtaskIndex = i; }) uojSubtasks;
-              points = lib.concatMap (
-                st:
-                map (tc: {
-                  inherit (st) uojSubtaskIndex;
-                  hullTestCase = tc;
-                }) st.testCases
-              ) indexedSubtasks;
-            in
-            lib.imap0 (i: p: p // { uojPointIndex = i + 1; }) points;
-
-          # Generate the content for problem.conf
-          problemConfContent =
-            let
-              nSampleTests = builtins.length samples;
-
-              subtaskEnds = builtins.foldl' (
-                accList: st:
-                accList ++ [ ((if accList == [ ] then 0 else lib.last accList) + (builtins.length st.testCases)) ]
-              ) [ ] uojSubtasks;
-
-              subtaskEndLines = lib.concatStringsSep "\n" (
-                lib.imap1 (i: end: "subtask_end_${toString i} ${toString end}") subtaskEnds
-              );
-              subtaskScoreLines = lib.concatStringsSep "\n" (
-                lib.imap1 (i: st: "subtask_score_${toString i} ${toString st.score}") uojSubtasks
-              );
-
-              subtaskTypeLines = lib.concatStringsSep "\n" (
-                map (i: "subtask_type_${toString i} min") (lib.range 1 (builtins.length uojSubtasks))
-              );
-            in
-            ''
-              use_builtin_judger on
-              chk_run_type compiler
-              ${lib.optionalString (!integerScore) "score_type real-6"}
-              ${lib.optionalString (graderSrcs != null) "with_implementer on"}
-              ${lib.concatStringsSep "\n" modeConfig.problemConfLines}
-              n_tests ${toString (builtins.length uojTestPoints)}
-              n_ex_tests ${toString nSampleTests}
-              n_sample_tests ${toString nSampleTests}
-              n_subtasks ${toString (builtins.length uojSubtasks)}
-              input_pre ${problem.name}
-              input_suf in
-              output_pre ${problem.name}
-              output_suf out
-              time_limit ${
-                let
-                  timeSec = problem.tickLimit / ticksPerMs / 1000;
-                in
-                toString (if integerTimeLimit then builtins.floor timeSec else timeSec)
-              }
-              memory_limit ${toString (builtins.floor (problem.memoryLimit / (1024 * 1024)))}
-              ${subtaskEndLines}
-              ${subtaskScoreLines}
-              ${subtaskTypeLines}
-            '';
-
-          patchedSrc = {
-            checker =
-              if modeConfig.checkerPatchKind == "checkerTwoStep" then
-                hull.patch {
-                  problemName = problem.name;
-                  src = "${cplibInitializers}/include/testlib/checker_two_step.cpp";
-                  includeReplacements = [
-                    [
-                      "^testlib/checker\\.hpp$"
-                      "testlib_checker.hpp"
-                    ]
-                    [
-                      "^"
-                      "require/"
-                    ]
-                  ];
-                }
-              else if !patchCplibProgram then
-                checker.src
-              else
-                hull.patch {
-                  problemName = problem.name;
-                  src = checker.src;
-                  checker = "::cplib_initializers::testlib::checker::Initializer(false)";
-                  extraIncludes = [ "\"require/testlib_checker.hpp\"" ];
-                  includeReplacements = [
-                    [
-                      "^"
-                      "require/"
-                    ]
-                  ];
-                };
-
-            interactor =
-              if !patchCplibProgram then
-                checker.src
-              else if twoStepInteraction then
-                hull.patch {
-                  problemName = problem.name;
-                  src = checker.src;
-                  interactor = "::cplib_initializers::testlib::interactor_two_step::Initializer()";
-                  extraIncludes = [ "\"require/testlib_interactor_two_step.hpp\"" ];
-                  includeReplacements = [
-                    [
-                      "^"
-                      "require/"
-                    ]
-                  ];
-                }
-              else
-                hull.patch {
-                  problemName = problem.name;
-                  src = checker.src;
-                  interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
-                  extraIncludes = [ "\"require/testlib_interactor.hpp\"" ];
-                  includeReplacements = [
-                    [
-                      "^"
-                      "require/"
-                    ]
-                  ];
-                };
-
-            validator =
-              if !patchCplibProgram then
-                validator.src
-              else
-                hull.patch {
-                  problemName = problem.name;
-                  src = validator.src;
-                  validator = "::cplib_initializers::testlib::validator::Initializer()";
-                  extraIncludes = [ "\"require/testlib_validator.hpp\"" ];
-                  includeReplacements = [
-                    [
-                      "^"
-                      "require/"
-                    ]
-                  ];
-                };
-          };
-
-          # Helper function to create shell commands for copying files with subdirectories.
-          mkCopyCommands =
-            destDir: files:
-            lib.concatMapAttrsStringSep "\n" (
-              destPath: srcPath:
-              let
-                destParentDir = builtins.dirOf destPath;
-              in
-              ''
-                mkdir -p ${destDir}/${lib.escapeShellArg destParentDir}
-                cp -f ${srcPath} ${destDir}/${lib.escapeShellArg destPath}
-              ''
-            ) files;
-
-          needChecker = modeConfig.needChecker;
-          needInteractor = modeConfig.needInteractor;
-
-          crossClang = x86_64-linux-gnu217-cross.packages.${pkgs.stdenv.hostPlatform.system}.clang;
-
-          wrapJudgerProgram =
-            programName: src:
-            pkgs.runCommandLocal "hull-uojWrappedProgram-${problem.name}-${programName}.cpp"
-              {
-                nativeBuildInputs = [
-                  crossClang
-                  pkgs.lz4
-                ];
-              }
-              ''
-                mkdir -p require
-                cp ${cplib}/cplib.hpp require/cplib.hpp
-                cp ${cplibInitializers}/include/testlib/checker.hpp require/testlib_checker.hpp
-                cp ${cplibInitializers}/include/testlib/interactor.hpp require/testlib_interactor.hpp
-                cp ${cplibInitializers}/include/testlib/interactor_two_step.hpp require/testlib_interactor_two_step.hpp
-                cp ${cplibInitializers}/include/testlib/validator.hpp require/testlib_validator.hpp
-                ${mkCopyCommands "require" extraRequireFiles}
-
-                cp ${src} program.code
-                x86_64-unknown-linux-gnu2.17-clang++ \
-                  -x c++ \
-                  program.code \
-                  -o program.so \
-                  -shared \
-                  -fPIC \
-                  -std=c++23 \
-                  -O3 \
-                  -fno-exceptions \
-                  -static-libstdc++ \
-                  -static-libgcc
-
-                raw_size=$(wc -c program.so | cut -d' ' -f1)
-                lz4 --best -z -f program.so program-lz4.bin
-                lz4_size=$(wc -c program-lz4.bin | cut -d' ' -f1)
-                base64 -w0 program-lz4.bin > b64-content.txt
-
-                awk \
-                  -v raw_size="$raw_size" \
-                  -v lz4_size="$lz4_size" \
-                  '
-                  BEGIN {
-                    getline b64 < "b64-content.txt"
-                  }
-                  {
-                    sub(/\/\* HULL_RAW_SIZE \*\//, raw_size);
-                    sub(/\/\* HULL_LZ4_SIZE \*\//, lz4_size);
-                    sub(/HULL_B64_STR/, b64);
-                    print;
-                  }
-                  ' ${./wrapper.c} > $out
-              '';
-
-          judgerSrc = {
-            checker =
-              if oldJudgerWrapper then wrapJudgerProgram "checker" patchedSrc.checker else patchedSrc.checker;
-            interactor =
-              if oldJudgerWrapper then
-                wrapJudgerProgram "interactor" patchedSrc.interactor
-              else
-                patchedSrc.interactor;
-            validator =
-              if oldJudgerWrapper then
-                wrapJudgerProgram "validator" patchedSrc.validator
-              else
-                patchedSrc.validator;
-          };
-
-        in
-        pkgs.runCommandLocal
-          ("hull-problemTargetOutput-${problem.name}-uoj" + (lib.optionalString zipped ".zip"))
-          {
-            nativeBuildInputs = [ pkgs._7zz ];
+      documents,
+      checker,
+      validator,
+      generators,
+      solutions,
+      testCases,
+      samples,
+      ...
+    }@problem:
+    let
+      targetHullPkgs = targetHullPkgsForSystem targetSystem;
+      targetPkgs = targetPkgsForSystem targetSystem;
+      targetHull = targetHullForSystem targetSystem;
+      nixUserChroot = targetHullPkgs.nix-user-chroot;
+      retargetRunner =
+        runner:
+        if runner ? retarget then
+          runner.retarget {
+            inherit targetPkgs targetHullPkgs targetHull;
           }
-          ''
+        else
+          runner;
+      targetJudger = {
+        prepareSolution = retargetRunner problem.judger.prepareSolution;
+        generateOutputs = retargetRunner problem.judger.generateOutputs;
+        judge = retargetRunner problem.judger.judge;
+      };
+      allTestCases = builtins.attrValues testCases;
+
+      metadata = {
+        name = problem.name;
+        tickLimit = problem.tickLimit;
+        memoryLimit = problem.memoryLimit;
+        fullScore = problem.fullScore;
+        checker = {
+          src = null;
+          wasm = {
+            path = builtins.unsafeDiscardStringContext (toString problem.checker.wasm);
+            drvPath = null;
+          };
+        };
+        validator = {
+          src = null;
+          wasm = {
+            path = builtins.unsafeDiscardStringContext (toString problem.validator.wasm);
+            drvPath = null;
+          };
+        };
+        judger = {
+          prepareSolutionRunner = {
+            path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.prepareSolution);
+            drvPath = null;
+          };
+          generateOutputsRunner = {
+            path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.generateOutputs);
+            drvPath = null;
+          };
+          judgeRunner = {
+            path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.judge);
+            drvPath = null;
+          };
+        };
+        mainCorrectSolution = problem.mainCorrectSolution.name;
+        testCases = map (tc: {
+          name = tc.name;
+          tickLimit = tc.tickLimit;
+          memoryLimit = tc.memoryLimit;
+          groups = tc.groups;
+          traitHints = tc.traitHints;
+        }) allTestCases;
+        subtasks = map (st: {
+          fullScore = st.fullScore;
+          scoringMethod = st.scoringMethod;
+          traits = st.traits;
+        }) problem.subtasks;
+        solutions = map (solution: {
+          name = solution.name;
+          src = "solutions/${baseNameOf (toString solution.src)}";
+          mainCorrectSolution = solution.mainCorrectSolution;
+          participantVisibility = solution.participantVisibility;
+        }) (builtins.attrValues problem.solutions);
+      };
+
+      mkOfficialDataArchive =
+        tc:
+        pkgs.runCommandLocal "hull-uoj-officialData-${problem.name}-${tc.name}.tar" { } ''
             tmpdir=$(mktemp -d)
             cleanup() {
               rm -rf "$tmpdir"
             }
             trap cleanup EXIT
 
-            # Create directory structure
-            mkdir -p $tmpdir/download
-            mkdir -p $tmpdir/require
+          mkdir -p "$tmpdir/outputs"
+          cp ${
+            pkgs.writeText "${tc.name}-official-data-metadata.json" (
+              builtins.toJSON { testCaseName = tc.name; }
+            )
+          } "$tmpdir/official-data-metadata.json"
+          cp ${pkgs.writeText "${tc.name}-input-validation.json" (builtins.toJSON tc.inputValidation)} "$tmpdir/validation.json"
+          cp -r ${tc.data.outputs}/. "$tmpdir/outputs/"
+          tar -C "$tmpdir" -cf "$out" official-data-metadata.json validation.json outputs
+        '';
 
-            # Write problem.conf
-            echo ${lib.escapeShellArg problemConfContent} > $tmpdir/problem.conf
+      judgeBundleData = pkgs.runCommandLocal "hull-uoj-data-${problem.name}" { } ''
+        mkdir -p $out/data $out/solutions
+        cp ${pkgs.writeText "hull-uoj-${problem.name}.json" (builtins.toJSON metadata)} \
+          $out/problem.json
+        cp ${
+          pkgs.writeText "hull-uoj-languageConfig-${problem.name}.json" (
+            builtins.toJSON {
+              uojToHullLanguageMap = uojToHullLanguageMap;
+            }
+          )
+        } $out/uoj-language-config.json
+        ${lib.concatMapStringsSep "\n" (
+          tc:
+          let
+            pathPrefix = "$out/data/${tc.name}";
+          in
+          ''
+            mkdir -p ${pathPrefix}
+            cp ${tc.data.input} ${pathPrefix}/input
+            cp ${mkOfficialDataArchive tc} ${pathPrefix}/official-data.tar
+          ''
+        ) allTestCases}
+        ${lib.concatMapStringsSep "\n" (solution: ''
+          cp ${solution.src} $out/solutions/${baseNameOf (toString solution.src)}
+        '') (builtins.attrValues problem.solutions)}
+      '';
 
-            # Copy test data, renumbering as needed
-            ${lib.concatMapStringsSep "\n" (p: ''
-              cp ${p.hullTestCase.data.input} $tmpdir/${problem.name}${toString p.uojPointIndex}.in
-              ${
-                let
-                  outputPath = "$tmpdir/${problem.name}${toString p.uojPointIndex}.out";
-                in
-                if outputName == null then
-                  "touch ${outputPath}"
-                else
-                  "cp ${p.hullTestCase.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
-              }
-            '') uojTestPoints}
+      nixUserChrootStorePath = builtins.unsafeDiscardStringContext (toString nixUserChroot);
+      nixUserChrootRelative = "/nix/store/${baseNameOf nixUserChrootStorePath}/bin/nix-user-chroot";
+      judgeRunner = targetPkgs.writeShellScriptBin "hull-uoj-integration-judge-runner-${problem.name}" ''
+        bundle_root="$1"
+        submission_file="$2"
+        submission_language="$3"
+        uoj_work_path="$4"
+        uoj_result_path="$5"
+        uoj_data_path="$6"
+        exec ${lib.getExe targetHullPkgs.default} integration-judge uoj \
+          --bundle-root "$bundle_root" \
+          --metadata-path "problem.json" \
+          --submission-file "$submission_file" \
+          --submission-language "$submission_language" \
+          --uoj-work-path "$uoj_work_path" \
+          --uoj-result-path "$uoj_result_path" \
+          --uoj-data-path "$uoj_data_path" \
+          ${lib.optionalString roundTopLevelScore "--round-top-level-score"} \
+          --threads ${toString judgerThreads}
+      '';
 
-            # Copy sample data
-            ${hull.problemTarget.utils.samplesCommand {
-              inherit problem outputName;
-              dest = "$tmpdir";
-              naming =
-                { index, ... }:
-                {
-                  input = "ex_${problem.name}${toString (index + 1)}.in";
-                  output = "ex_${problem.name}${toString (index + 1)}.out";
-                };
-            }}
+      judgeRunnerStorePath = builtins.unsafeDiscardStringContext (toString judgeRunner);
+      judgeRunnerRelative = "/nix/store/${baseNameOf judgeRunnerStorePath}/bin/hull-uoj-integration-judge-runner-${problem.name}";
 
-            # Copy judger programs (checker, validator, interactor, std, graders)
-            cp ${judgerSrc.validator} $tmpdir/val${validatorSuffix}
-            ${lib.optionalString needChecker "cp ${judgerSrc.checker} $tmpdir/chk${checkerSuffix}"}
-            ${lib.optionalString needInteractor "cp ${judgerSrc.interactor} $tmpdir/interactor${checkerSuffix}"}
-            cp ${mainCorrectSolution.src} $tmpdir/std${stdSuffix}
-            ${lib.optionalString (graderSrcs != null) (
-              lib.concatMapAttrsStringSep "\n" (
-                lang: src: "cp ${src} $tmpdir/require/implementer.${lang}"
-              ) graderSrcs
-            )}
+      targetClosure = pkgs.closureInfo {
+        rootPaths = [
+          judgeRunner
+          targetHullPkgs.default
+          targetHullPkgs.wasm32-wasi-wasip1.clang
+          nixUserChroot
+          problem.checker.wasm
+          problem.validator.wasm
+          targetJudger.prepareSolution
+          targetJudger.generateOutputs
+          targetJudger.judge
+        ];
+      };
 
-            # Copy require files
-            cp ${cplib}/cplib.hpp $tmpdir/require/cplib.hpp
-            ${lib.optionalString needChecker "cp ${cplibInitializers}/include/testlib/checker.hpp $tmpdir/require/testlib_checker.hpp"}${
-              lib.optionalString needInteractor (
-                let
-                  fileName = if twoStepInteraction then "interactor_two_step.hpp" else "interactor.hpp";
-                in
-                "cp ${cplibInitializers}/include/testlib/${fileName} $tmpdir/require/testlib_${fileName}"
+      problemConf = ''
+        use_builtin_judger off
+        n_tests ${toString (builtins.length allTestCases)}
+        n_ex_tests 0
+        n_sample_tests 0
+        input_pre input
+        input_suf txt
+        output_pre output
+        output_suf txt
+        judger_time_limit 1048576
+        judger_memory_limit 1048576
+        judger_output_limit 2047
+      '';
+
+      mkCopyCommands =
+        destDir: files:
+        lib.concatMapAttrsStringSep "\n" (
+          destPath: srcPath:
+          let
+            destParentDir = builtins.dirOf destPath;
+          in
+          ''
+            mkdir -p ${destDir}/${lib.escapeShellArg destParentDir}
+            cp -f ${srcPath} ${destDir}/${lib.escapeShellArg destPath}
+          ''
+        ) files;
+
+      samplesCommand = lib.concatStringsSep "\n" (
+        map (tc: ''
+          cp ${tc.data.input} $tmpdir/download/sample_${tc.name}.in
+          outputs=()
+          for output_path in ${tc.data.outputs}/*; do
+            [ -f "$output_path" ] || continue
+            outputs+=("$output_path")
+          done
+          if [ "''${#outputs[@]}" -eq 1 ]; then
+            cp "''${outputs[0]}" "$tmpdir/download/sample_${tc.name}.out"
+          else
+            for output_path in "''${outputs[@]}"; do
+              output_name=$(basename "$output_path")
+              cp "$output_path" "$tmpdir/download/sample_${tc.name}_''${output_name}.out"
+            done
+          fi
+        '') samples
+      );
+
+      judgerShellScript = pkgs.replaceVarsWith {
+        src = ./judger.sh.in;
+        replacements = {
+          NIX_USER_CHROOT_STORE_SUFFIX = lib.removePrefix "/nix/store" nixUserChrootRelative;
+          CUSTOM_JUDGE_RUNNER_RELATIVE = judgeRunnerRelative;
+        };
+      };
+    in
+    pkgs.runCommandLocal
+      ("hull-problemTargetOutput-${problem.name}-uoj" + lib.optionalString zipped ".zip")
+      {
+        nativeBuildInputs = [ pkgs._7zz ];
+      }
+      ''
+        tmpdir=$(mktemp -d)
+        cleanup() {
+          rm -rf "$tmpdir"
+        }
+        trap cleanup EXIT
+
+        mkdir -p "$tmpdir/download"
+        mkdir -p "$tmpdir/hull-bundle/nix/store"
+
+        while IFS= read -r store_path; do
+          cp -R -P --no-preserve=ownership "$store_path" "$tmpdir/hull-bundle/nix/store/"
+          chmod -R u+w "$tmpdir/hull-bundle/nix/store/$(basename "$store_path")" 2>/dev/null || true
+        done < ${targetClosure}/store-paths
+        store_dir="$tmpdir/hull-bundle/nix/store"
+        while IFS= read -r -d ''' link_path; do
+          target=$(readlink "$link_path")
+          case "$target" in
+            /*|../*|*/../*) ;;
+            *) continue ;;
+          esac
+          case "$target" in
+            /nix/store/*)
+              bundled_target="$store_dir/''${target#/nix/store/}"
+              ;;
+            *)
+              bundled_target=$(realpath -m "$(dirname "$link_path")/$target")
+              case "$bundled_target" in
+                "$store_dir"/*) ;;
+                *) continue ;;
+              esac
+              ;;
+          esac
+          if [ -e "$bundled_target" ] || [ -L "$bundled_target" ]; then
+            rm "$link_path"
+            cp -R -L --no-preserve=ownership "$bundled_target" "$link_path"
+            chmod -R u+w "$link_path" 2>/dev/null || true
+          fi
+        done < <(find "$store_dir" -type l -print0)
+
+        cp -R -P --no-preserve=ownership ${judgeBundleData}/. "$tmpdir/hull-bundle/"
+        chmod -R u+rwX "$tmpdir/hull-bundle"
+        tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
+        rm -rf "$tmpdir/hull-bundle/nix/store"
+        rmdir "$tmpdir/hull-bundle/nix"
+        cp ${pkgs.writeText "problem.conf" problemConf} "$tmpdir/problem.conf"
+        cp ${./judger.mk} "$tmpdir/Makefile"
+        cp ${./judger.c} "$tmpdir/judger.c"
+        cp ${judgerShellScript} "$tmpdir/judger.sh"
+        cp ${./README.txt} "$tmpdir/README.txt"
+
+        ${lib.concatMapAttrsStringSep "\n" (
+          docName: doc:
+          lib.optionalString doc.participantVisibility "cp ${doc.path} $tmpdir/download/document_${docName}"
+        ) documents}
+
+        ${samplesCommand}
+
+        ${hull.problemTarget.utils.participantProgramsCommand {
+          inherit problem;
+          dest = "$tmpdir/download";
+          flattened = true;
+        }}
+
+        ${mkCopyCommands "$tmpdir/download" extraDownloadFiles}
+
+        ${
+          if zipped then
+            ''
+              (
+                cd "$tmpdir"
+                7zz a -tzip -mx=9 -mmt=on "$out" . -x!hull-bundle/nix-store.tar.xz
+                7zz a -tzip -mx=0 "$out" hull-bundle/nix-store.tar.xz
               )
-            }
-            cp ${cplibInitializers}/include/testlib/validator.hpp $tmpdir/require/testlib_validator.hpp
-            ${mkCopyCommands "$tmpdir/require" extraRequireFiles}
-
-            # Copy visible documents
-            ${lib.concatMapAttrsStringSep "\n" (
-              docName: doc:
-              lib.optionalString doc.participantVisibility "cp ${doc.path} $tmpdir/download/document_${docName}"
-            ) documents}
-
-            # Copy visible programs
-            ${hull.problemTarget.utils.participantProgramsCommand {
-              inherit problem;
-              dest = "$tmpdir/download";
-              flattened = true;
-            }}
-
-            # Copy downloadable files
-            ${mkCopyCommands "$tmpdir/download" extraDownloadFiles}
-
-            # Zip the result
-            ${
-              if zipped then
-                ''
-                  (cd "$tmpdir" && 7zz a -tzip -mx=9 -mmt=on "$out" .)
-                ''
-              else
-                ''
-                  mkdir $out
-                  cp -r "$tmpdir"/. $out/
-                ''
-            }
-          '';
-    };
-in
-{
-  batch = args: mkUojTarget (args // { mode = "batch"; });
-  stdioInteraction = args: mkUojTarget (args // { mode = "stdioInteraction"; });
-  answerOnly = args: mkUojTarget (args // { mode = "answerOnly"; });
+            ''
+          else
+            ''
+              mkdir "$out"
+              cp -r "$tmpdir"/. "$out/"
+            ''
+        }
+      '';
 }

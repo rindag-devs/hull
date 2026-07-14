@@ -125,17 +125,17 @@
 
   targets = {
     default = hull.problemTarget.common;
-    hydroCustom = hull.problemTarget.hydroCustom {
+    hydro = hull.problemTarget.hydro {
       statements = {
         en = "statement.en.pdf";
         zh = "statement.zh.pdf";
       };
     };
-    lemonCustom = hull.problemTarget.lemonCustom {
+    lemon = hull.problemTarget.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
-    uojCustom = hull.problemTarget.uojCustom { };
-    uojCustomAarch64 = hull.problemTarget.uojCustom {
+    uoj = hull.problemTarget.uoj { };
+    uojAarch64 = hull.problemTarget.uoj {
       targetSystem = "aarch64-linux";
     };
   };

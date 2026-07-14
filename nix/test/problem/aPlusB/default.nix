@@ -221,45 +221,45 @@
 
   targets = {
     default = hull.problemTarget.common;
-    hydro = hull.problemTarget.hydro.batch {
+    hydro = hull.problemTarget.hydro {
       statements = {
         en = "statement.en.pdf";
         zh = "statement.zh.pdf";
       };
     };
-    hydroCustom = hull.problemTarget.hydroCustom {
-      statements = {
-        en = "statement.en.pdf";
-        zh = "statement.zh.pdf";
-      };
-    };
-    lemon = hull.problemTarget.lemon.batch {
+    lemon = hull.problemTarget.lemon {
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
-    lemonCustom = hull.problemTarget.lemonCustom {
-      solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
-    };
-    uoj = hull.problemTarget.uoj.batch { };
-    uojCustom = hull.problemTarget.uojCustom { };
-    uojCustomAarch64 = hull.problemTarget.uojCustom {
+    uoj = hull.problemTarget.uoj { };
+    uojAarch64 = hull.problemTarget.uoj {
       targetSystem = "aarch64-linux";
     };
-    uojOld = hull.problemTarget.uoj.batch {
+    hydroLegacy = hull.problemTarget.legacy.hydro.batch {
+      statements = {
+        en = "statement.en.pdf";
+        zh = "statement.zh.pdf";
+      };
+    };
+    lemonLegacy = hull.problemTarget.legacy.lemon.batch {
+      solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
+    };
+    uojLegacy = hull.problemTarget.legacy.uoj.batch { };
+    uojLegacyOld = hull.problemTarget.legacy.uoj.batch {
       oldJudgerWrapper = true;
       checkerSuffix = ".cpp";
       validatorSuffix = ".cpp";
       stdSuffix = ".cpp";
     };
-    cms = hull.problemTarget.cms.batch {
+    cmsLegacy = hull.problemTarget.legacy.cms.batch {
       statements = {
         english = "statement.en.pdf";
         chinese = "statement.zh.pdf";
       };
     };
-    domjudge = hull.problemTarget.domjudge.batch {
+    domjudgeLegacy = hull.problemTarget.legacy.domjudge.batch {
       statement = "statement.en.pdf";
     };
-    luogu = hull.problemTarget.luogu.batch { };
+    luoguLegacy = hull.problemTarget.legacy.luogu.batch { };
 
     minimal =
       (
@@ -274,7 +274,7 @@
             pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-minimal" { } ''
               mkdir -p $out/data $out/solution
 
-              # Use the custom option from the `self` argument.
+              # Use the option from the `self` argument.
               cp ${problem.mainCorrectSolution.src} $out/solution/${self.solutionFileName}
 
               # ... (rest of the script is the same)

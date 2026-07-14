@@ -1,0 +1,488 @@
+/*
+  This file is part of Hull.
+
+  Hull is free software: you can redistribute it and/or modify it under the terms of the GNU
+  Lesser General Public License as published by the Free Software Foundation, either version 3 of
+  the License, or (at your option) any later version.
+
+  Hull is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+  the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser
+  General Public License for more details.
+
+  You should have received a copy of the GNU Lesser General Public License along with Hull. If
+  not, see <https://www.gnu.org/licenses/>.
+*/
+
+{
+  lib,
+  hull,
+  pkgs,
+  cplib,
+  cplibInitializers,
+  x86_64-linux-gnu217-cross,
+}:
+
+let
+  mkUojTarget =
+    {
+      mode,
+
+      # Whether to enable Codeforces Polygon style two step interaction.
+      twoStepInteraction ? false,
+
+      # Score scaling factor. Hull uses a 0.0-1.0 scale, while UOJ uses integers.
+      scoreScale ? 100.0,
+
+      # Whether to package the output as a zip file.
+      zipped ? true,
+
+      # Conversion rate from Hull's ticks to UOJ's milliseconds.
+      ticksPerMs ? 1.0e7,
+
+      # Grader source codes for function-style interaction problems.
+      # Attr set of { c, cpp, pas } to file paths.
+      graderSrcs ? null,
+
+      # The name of the test case output that will be used as the output of the UOJ test case.
+      outputName ? if mode == "stdioInteraction" then null else "output",
+
+      # A map of name to file path. These files will be placed in `require/`.
+      extraRequireFiles ? { },
+
+      # A map of name to file path. These files will be placed in `download/`.
+      extraDownloadFiles ? { },
+
+      # Whether to patch CPLib programs, i.e. replace the default initializer.
+      patchCplibProgram ? true,
+
+      # File suffix for checker or interactor.
+      # UOJ determines the language by file suffix.
+      # See https://github.com/vfleaking/uoj/blob/517134629ba066c45c7d8637cfc98b75acb560da/web/app/models/UOJLang.php#L32
+      checkerSuffix ? "20.cpp",
+
+      # File suffix for validator.
+      validatorSuffix ? "20.cpp",
+
+      # File suffix for main correct solution.
+      stdSuffix ? "20.cpp",
+
+      # Enable integer mode for score. Usually applies to UOJ community edition.
+      integerScore ? false,
+
+      # Enable integer mode for time limit. Usually applies to UOJ community edition.
+      integerTimeLimit ? false,
+
+      # Build checker/interactor/validator locally as x86_64-linux-gnu2.17 shared
+      # libraries, then wrap them into portable C++ payloads for old UOJ versions.
+      # This does not affect `std`.
+      oldJudgerWrapper ? false,
+    }:
+
+    {
+      _type = "hullProblemTarget";
+      __functor =
+        self:
+        {
+          testCases,
+          subtasks,
+          solutions,
+          checker,
+          validator,
+          documents,
+          generators,
+          samples,
+          includes,
+          mainCorrectSolution,
+          ...
+        }@problem:
+        let
+          modeConfig =
+            {
+              batch = {
+                problemConfLines = [ ];
+                checkerPatchKind = "checker";
+                needChecker = true;
+                needInteractor = false;
+              };
+              stdioInteraction = {
+                problemConfLines = [ "interaction_mode on" ];
+                checkerPatchKind = "checkerTwoStep";
+                needChecker = twoStepInteraction;
+                needInteractor = true;
+              };
+              answerOnly = {
+                problemConfLines = [ "submit_answer on" ];
+                checkerPatchKind = "checker";
+                needChecker = true;
+                needInteractor = false;
+              };
+            }
+            .${mode};
+
+          # Transform Hull subtasks to UOJ subtasks.
+          # UOJ's 'min' mode is the only one used. Hull's 'sum' mode is simulated by
+          # creating a separate UOJ subtask for each test case.
+          uojSubtasks =
+            let
+              subtasksWithIndex = lib.imap0 (index: st: { inherit index st; }) subtasks;
+            in
+            lib.concatMap (
+              { index, st }:
+              if st.scoringMethod == "sum" then
+                let
+                  numTestCases = builtins.length st.testCases;
+                  scorePerCase = if numTestCases > 0 then st.fullScore / numTestCases else 0;
+                  scaledScore = scorePerCase * scoreScale;
+                in
+                map (tc: {
+                  score = if integerScore then builtins.floor scaledScore else scaledScore;
+                  testCases = [ tc ];
+                }) st.testCases
+              else
+                [
+                  {
+                    score =
+                      let
+                        scaledScore = st.fullScore * scoreScale;
+                      in
+                      if integerScore then builtins.floor scaledScore else scaledScore;
+                    testCases = st.testCases;
+                  }
+                ]
+            ) subtasksWithIndex;
+
+          # Create a flat list of UOJ test points.
+          # This renumbers and duplicates Hull test cases to fit UOJ's linear structure.
+          uojTestPoints =
+            let
+              indexedSubtasks = lib.imap0 (i: st: st // { uojSubtaskIndex = i; }) uojSubtasks;
+              points = lib.concatMap (
+                st:
+                map (tc: {
+                  inherit (st) uojSubtaskIndex;
+                  hullTestCase = tc;
+                }) st.testCases
+              ) indexedSubtasks;
+            in
+            lib.imap0 (i: p: p // { uojPointIndex = i + 1; }) points;
+
+          # Generate the content for problem.conf
+          problemConfContent =
+            let
+              nSampleTests = builtins.length samples;
+
+              subtaskEnds = builtins.foldl' (
+                accList: st:
+                accList ++ [ ((if accList == [ ] then 0 else lib.last accList) + (builtins.length st.testCases)) ]
+              ) [ ] uojSubtasks;
+
+              subtaskEndLines = lib.concatStringsSep "\n" (
+                lib.imap1 (i: end: "subtask_end_${toString i} ${toString end}") subtaskEnds
+              );
+              subtaskScoreLines = lib.concatStringsSep "\n" (
+                lib.imap1 (i: st: "subtask_score_${toString i} ${toString st.score}") uojSubtasks
+              );
+
+              subtaskTypeLines = lib.concatStringsSep "\n" (
+                map (i: "subtask_type_${toString i} min") (lib.range 1 (builtins.length uojSubtasks))
+              );
+            in
+            ''
+              use_builtin_judger on
+              chk_run_type compiler
+              ${lib.optionalString (!integerScore) "score_type real-6"}
+              ${lib.optionalString (graderSrcs != null) "with_implementer on"}
+              ${lib.concatStringsSep "\n" modeConfig.problemConfLines}
+              n_tests ${toString (builtins.length uojTestPoints)}
+              n_ex_tests ${toString nSampleTests}
+              n_sample_tests ${toString nSampleTests}
+              n_subtasks ${toString (builtins.length uojSubtasks)}
+              input_pre ${problem.name}
+              input_suf in
+              output_pre ${problem.name}
+              output_suf out
+              time_limit ${
+                let
+                  timeSec = problem.tickLimit / ticksPerMs / 1000;
+                in
+                toString (if integerTimeLimit then builtins.floor timeSec else timeSec)
+              }
+              memory_limit ${toString (builtins.floor (problem.memoryLimit / (1024 * 1024)))}
+              ${subtaskEndLines}
+              ${subtaskScoreLines}
+              ${subtaskTypeLines}
+            '';
+
+          patchedSrc = {
+            checker =
+              if modeConfig.checkerPatchKind == "checkerTwoStep" then
+                hull.patch {
+                  problemName = problem.name;
+                  src = "${cplibInitializers}/include/testlib/checker_two_step.cpp";
+                  includeReplacements = [
+                    [
+                      "^testlib/checker\\.hpp$"
+                      "testlib_checker.hpp"
+                    ]
+                    [
+                      "^"
+                      "require/"
+                    ]
+                  ];
+                }
+              else if !patchCplibProgram then
+                checker.src
+              else
+                hull.patch {
+                  problemName = problem.name;
+                  src = checker.src;
+                  checker = "::cplib_initializers::testlib::checker::Initializer(false)";
+                  extraIncludes = [ "\"require/testlib_checker.hpp\"" ];
+                  includeReplacements = [
+                    [
+                      "^"
+                      "require/"
+                    ]
+                  ];
+                };
+
+            interactor =
+              if !patchCplibProgram then
+                checker.src
+              else if twoStepInteraction then
+                hull.patch {
+                  problemName = problem.name;
+                  src = checker.src;
+                  interactor = "::cplib_initializers::testlib::interactor_two_step::Initializer()";
+                  extraIncludes = [ "\"require/testlib_interactor_two_step.hpp\"" ];
+                  includeReplacements = [
+                    [
+                      "^"
+                      "require/"
+                    ]
+                  ];
+                }
+              else
+                hull.patch {
+                  problemName = problem.name;
+                  src = checker.src;
+                  interactor = "::cplib_initializers::testlib::interactor::Initializer(false)";
+                  extraIncludes = [ "\"require/testlib_interactor.hpp\"" ];
+                  includeReplacements = [
+                    [
+                      "^"
+                      "require/"
+                    ]
+                  ];
+                };
+
+            validator =
+              if !patchCplibProgram then
+                validator.src
+              else
+                hull.patch {
+                  problemName = problem.name;
+                  src = validator.src;
+                  validator = "::cplib_initializers::testlib::validator::Initializer()";
+                  extraIncludes = [ "\"require/testlib_validator.hpp\"" ];
+                  includeReplacements = [
+                    [
+                      "^"
+                      "require/"
+                    ]
+                  ];
+                };
+          };
+
+          # Helper function to create shell commands for copying files with subdirectories.
+          mkCopyCommands =
+            destDir: files:
+            lib.concatMapAttrsStringSep "\n" (
+              destPath: srcPath:
+              let
+                destParentDir = builtins.dirOf destPath;
+              in
+              ''
+                mkdir -p ${destDir}/${lib.escapeShellArg destParentDir}
+                cp -f ${srcPath} ${destDir}/${lib.escapeShellArg destPath}
+              ''
+            ) files;
+
+          needChecker = modeConfig.needChecker;
+          needInteractor = modeConfig.needInteractor;
+
+          crossClang = x86_64-linux-gnu217-cross.packages.${pkgs.stdenv.hostPlatform.system}.clang;
+
+          wrapJudgerProgram =
+            programName: src:
+            pkgs.runCommandLocal "hull-uojWrappedProgram-${problem.name}-${programName}.cpp"
+              {
+                nativeBuildInputs = [
+                  crossClang
+                  pkgs.lz4
+                ];
+              }
+              ''
+                mkdir -p require
+                cp ${cplib}/cplib.hpp require/cplib.hpp
+                cp ${cplibInitializers}/include/testlib/checker.hpp require/testlib_checker.hpp
+                cp ${cplibInitializers}/include/testlib/interactor.hpp require/testlib_interactor.hpp
+                cp ${cplibInitializers}/include/testlib/interactor_two_step.hpp require/testlib_interactor_two_step.hpp
+                cp ${cplibInitializers}/include/testlib/validator.hpp require/testlib_validator.hpp
+                ${mkCopyCommands "require" extraRequireFiles}
+
+                cp ${src} program.code
+                x86_64-unknown-linux-gnu2.17-clang++ \
+                  -x c++ \
+                  program.code \
+                  -o program.so \
+                  -shared \
+                  -fPIC \
+                  -std=c++23 \
+                  -O3 \
+                  -fno-exceptions \
+                  -static-libstdc++ \
+                  -static-libgcc
+
+                raw_size=$(wc -c program.so | cut -d' ' -f1)
+                lz4 --best -z -f program.so program-lz4.bin
+                lz4_size=$(wc -c program-lz4.bin | cut -d' ' -f1)
+                base64 -w0 program-lz4.bin > b64-content.txt
+
+                awk \
+                  -v raw_size="$raw_size" \
+                  -v lz4_size="$lz4_size" \
+                  '
+                  BEGIN {
+                    getline b64 < "b64-content.txt"
+                  }
+                  {
+                    sub(/\/\* HULL_RAW_SIZE \*\//, raw_size);
+                    sub(/\/\* HULL_LZ4_SIZE \*\//, lz4_size);
+                    sub(/HULL_B64_STR/, b64);
+                    print;
+                  }
+                  ' ${./wrapper.c} > $out
+              '';
+
+          judgerSrc = {
+            checker =
+              if oldJudgerWrapper then wrapJudgerProgram "checker" patchedSrc.checker else patchedSrc.checker;
+            interactor =
+              if oldJudgerWrapper then
+                wrapJudgerProgram "interactor" patchedSrc.interactor
+              else
+                patchedSrc.interactor;
+            validator =
+              if oldJudgerWrapper then
+                wrapJudgerProgram "validator" patchedSrc.validator
+              else
+                patchedSrc.validator;
+          };
+
+        in
+        pkgs.runCommandLocal
+          ("hull-problemTargetOutput-${problem.name}-uoj" + (lib.optionalString zipped ".zip"))
+          {
+            nativeBuildInputs = [ pkgs._7zz ];
+          }
+          ''
+            tmpdir=$(mktemp -d)
+            cleanup() {
+              rm -rf "$tmpdir"
+            }
+            trap cleanup EXIT
+
+            # Create directory structure
+            mkdir -p $tmpdir/download
+            mkdir -p $tmpdir/require
+
+            # Write problem.conf
+            echo ${lib.escapeShellArg problemConfContent} > $tmpdir/problem.conf
+
+            # Copy test data, renumbering as needed
+            ${lib.concatMapStringsSep "\n" (p: ''
+              cp ${p.hullTestCase.data.input} $tmpdir/${problem.name}${toString p.uojPointIndex}.in
+              ${
+                let
+                  outputPath = "$tmpdir/${problem.name}${toString p.uojPointIndex}.out";
+                in
+                if outputName == null then
+                  "touch ${outputPath}"
+                else
+                  "cp ${p.hullTestCase.data.outputs}/${lib.escapeShellArg outputName} ${outputPath}"
+              }
+            '') uojTestPoints}
+
+            # Copy sample data
+            ${hull.problemTarget.utils.samplesCommand {
+              inherit problem outputName;
+              dest = "$tmpdir";
+              naming =
+                { index, ... }:
+                {
+                  input = "ex_${problem.name}${toString (index + 1)}.in";
+                  output = "ex_${problem.name}${toString (index + 1)}.out";
+                };
+            }}
+
+            # Copy judger programs (checker, validator, interactor, std, graders)
+            cp ${judgerSrc.validator} $tmpdir/val${validatorSuffix}
+            ${lib.optionalString needChecker "cp ${judgerSrc.checker} $tmpdir/chk${checkerSuffix}"}
+            ${lib.optionalString needInteractor "cp ${judgerSrc.interactor} $tmpdir/interactor${checkerSuffix}"}
+            cp ${mainCorrectSolution.src} $tmpdir/std${stdSuffix}
+            ${lib.optionalString (graderSrcs != null) (
+              lib.concatMapAttrsStringSep "\n" (
+                lang: src: "cp ${src} $tmpdir/require/implementer.${lang}"
+              ) graderSrcs
+            )}
+
+            # Copy require files
+            cp ${cplib}/cplib.hpp $tmpdir/require/cplib.hpp
+            ${lib.optionalString needChecker "cp ${cplibInitializers}/include/testlib/checker.hpp $tmpdir/require/testlib_checker.hpp"}${
+              lib.optionalString needInteractor (
+                let
+                  fileName = if twoStepInteraction then "interactor_two_step.hpp" else "interactor.hpp";
+                in
+                "cp ${cplibInitializers}/include/testlib/${fileName} $tmpdir/require/testlib_${fileName}"
+              )
+            }
+            cp ${cplibInitializers}/include/testlib/validator.hpp $tmpdir/require/testlib_validator.hpp
+            ${mkCopyCommands "$tmpdir/require" extraRequireFiles}
+
+            # Copy visible documents
+            ${lib.concatMapAttrsStringSep "\n" (
+              docName: doc:
+              lib.optionalString doc.participantVisibility "cp ${doc.path} $tmpdir/download/document_${docName}"
+            ) documents}
+
+            # Copy visible programs
+            ${hull.problemTarget.utils.participantProgramsCommand {
+              inherit problem;
+              dest = "$tmpdir/download";
+              flattened = true;
+            }}
+
+            # Copy downloadable files
+            ${mkCopyCommands "$tmpdir/download" extraDownloadFiles}
+
+            # Zip the result
+            ${
+              if zipped then
+                ''
+                  (cd "$tmpdir" && 7zz a -tzip -mx=9 -mmt=on "$out" .)
+                ''
+              else
+                ''
+                  mkdir $out
+                  cp -r "$tmpdir"/. $out/
+                ''
+            }
+          '';
+    };
+in
+{
+  batch = args: mkUojTarget (args // { mode = "batch"; });
+  stdioInteraction = args: mkUojTarget (args // { mode = "stdioInteraction"; });
+  answerOnly = args: mkUojTarget (args // { mode = "answerOnly"; });
+}

@@ -16,10 +16,8 @@
 use clap::{Parser, Subcommand};
 
 use crate::cmd::{
-  build::BuildOpts, build_contest::BuildContestOpts, cnoi_self_eval::CnoiSelfEvalOpts,
-  hydro_custom_judge::HydroCustomJudgeOpts, judge::JudgeOpts,
-  lemon_custom_judge::LemonCustomJudgeOpts, patch::PatchOpts, run::RunOpts, run_wasm::RunWasmOpts,
-  stress::StressOpts, uoj_custom_judge::UojCustomJudgeOpts,
+  build::BuildOpts, build_contest::BuildContestOpts, integration_judge::IntegrationJudgeCommand,
+  judge::JudgeOpts, patch::PatchOpts, run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
 };
 use crate::interactive::InteractiveMode;
 
@@ -74,21 +72,19 @@ pub enum Command {
   )]
   RunWasm(RunWasmOpts),
   #[command(
-    about = "Judge participant samples offline from an exported bundle",
-    long_about = "Compile participant sources to WASM with the bundled toolchain, then judge contest samples serially with the bundled Hull runtime and exported judger artifacts."
+    about = "Run judge-system integration helpers",
+    long_about = "Run hidden helpers used by exported judge-system bundles and participant self-evaluation launchers."
   )]
-  CnoiSelfEval(CnoiSelfEvalOpts),
+  /// Runs judge-system integration helpers.
+  IntegrationJudge {
+    #[command(subcommand)]
+    command: IntegrationJudgeCommand,
+  },
   #[command(
     about = "Search for hacks with generated test cases",
     long_about = "Run a generator repeatedly, build one temporary test case per generated input, judge the selected solutions against the problem's main correct solution, and stop when a non-accepted result is found."
   )]
   Stress(StressOpts),
-  #[command(hide = true)]
-  HydroCustomJudge(HydroCustomJudgeOpts),
-  #[command(hide = true)]
-  LemonCustomJudge(LemonCustomJudgeOpts),
-  #[command(hide = true)]
-  UojCustomJudge(UojCustomJudgeOpts),
 }
 
 fn parse_interactive_mode(value: &str) -> Result<InteractiveMode, String> {
@@ -97,5 +93,122 @@ fn parse_interactive_mode(value: &str) -> Result<InteractiveMode, String> {
     "always" => Ok(InteractiveMode::Always),
     "never" => Ok(InteractiveMode::Never),
     _ => Err("interactive must be one of: auto, always, never".to_string()),
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn judge_cli() {
+    let uoj_opts = Opts::try_parse_from([
+      "hull",
+      "integration-judge",
+      "uoj",
+      "--bundle-root",
+      "/bundle",
+      "--metadata-path",
+      "metadata.json",
+      "--submission-file",
+      "main.cpp",
+      "--submission-language",
+      "C++20",
+      "--uoj-work-path",
+      "/work",
+      "--uoj-result-path",
+      "/result",
+      "--uoj-data-path",
+      "/data",
+      "--threads",
+      "1",
+    ])
+    .expect("integration judge uoj subcommand parses");
+
+    assert!(matches!(
+      uoj_opts.command,
+      Command::IntegrationJudge {
+        command: IntegrationJudgeCommand::Uoj(_)
+      }
+    ));
+
+    let cnoi_opts = Opts::try_parse_from([
+      "hull",
+      "integration-judge",
+      "cnoi",
+      "/participant",
+      "--bundle-root",
+      "/bundle",
+      "--package-root",
+      "/package",
+    ])
+    .expect("integration judge cnoi subcommand parses");
+
+    assert!(matches!(
+      cnoi_opts.command,
+      Command::IntegrationJudge {
+        command: IntegrationJudgeCommand::Cnoi(_)
+      }
+    ));
+
+    let hydro_opts = Opts::try_parse_from([
+      "hull",
+      "integration-judge",
+      "hydro",
+      "--bundle-root",
+      "/bundle",
+      "--metadata-path",
+      "metadata.json",
+      "--submission-file",
+      "main.cpp",
+      "--submission-language",
+      "cc.cc20",
+      "--language-map-path",
+      "language-map.json",
+      "--participant-solution-name",
+      "hydro",
+      "--threads",
+      "1",
+      "--stdout-report-path",
+      "/report",
+    ])
+    .expect("integration judge hydro subcommand parses");
+
+    assert!(matches!(
+      hydro_opts.command,
+      Command::IntegrationJudge {
+        command: IntegrationJudgeCommand::Hydro(_)
+      }
+    ));
+
+    let lemon_opts = Opts::try_parse_from([
+      "hull",
+      "integration-judge",
+      "lemon",
+      "--bundle-root",
+      "/bundle",
+      "--metadata-path",
+      "problem.json",
+      "--submission-file",
+      "main.cpp",
+      "--submission-language",
+      "HullBundle",
+      "--language-map-path",
+      "lemon-language-map.json",
+      "--participant-solution-name",
+      "lemon",
+      "--threads",
+      "1",
+      "--plain-output-path",
+      "/report",
+    ])
+    .expect("integration judge lemon subcommand parses");
+
+    assert!(matches!(
+      lemon_opts.command,
+      Command::IntegrationJudge {
+        command: IntegrationJudgeCommand::Lemon(_)
+      }
+    ));
   }
 }

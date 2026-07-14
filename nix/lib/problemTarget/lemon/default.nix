@@ -133,7 +133,7 @@
 
       mkOfficialDataArchive =
         tc:
-        pkgs.runCommandLocal "hull-lemonCustom-officialData-${problem.name}-${tc.name}.tar" { } ''
+        pkgs.runCommandLocal "hull-lemon-officialData-${problem.name}-${tc.name}.tar" { } ''
           tmpdir=$(mktemp -d)
           cleanup() {
             rm -rf "$tmpdir"
@@ -151,9 +151,9 @@
           tar -C "$tmpdir" -cf "$out" official-data-metadata.json validation.json outputs
         '';
 
-      judgeBundleData = pkgs.runCommandLocal "hull-lemonCustom-data-${problem.name}" { } ''
+      judgeBundleData = pkgs.runCommandLocal "hull-lemon-data-${problem.name}" { } ''
         mkdir -p $out/data/${problem.name} $out/solutions
-        cp ${pkgs.writeText "hull-lemonCustom-${problem.name}.json" (builtins.toJSON metadata)} \
+        cp ${pkgs.writeText "hull-lemon-${problem.name}.json" (builtins.toJSON metadata)} \
           $out/data/${problem.name}/problem.json
         cp ${
           pkgs.writeText "hull-lemon-language-map-${problem.name}.json" (
@@ -180,13 +180,13 @@
         '') (builtins.attrValues problem.solutions)}
       '';
 
-      customJudgeRunner = targetPkgs.writeShellScriptBin "hull-lemon-custom-judge-runner-${problem.name}" ''
-        exec ${lib.getExe targetHullPkgs.default} lemon-custom-judge "$@"
+      judgeRunner = targetPkgs.writeShellScriptBin "hull-lemon-integration-judge-runner-${problem.name}" ''
+        exec ${lib.getExe targetHullPkgs.default} integration-judge lemon "$@"
       '';
 
       targetClosure = pkgs.closureInfo {
         rootPaths = [
-          customJudgeRunner
+          judgeRunner
           targetHullPkgs.default
           targetHullPkgs.wasm32-wasi-wasip1.clang
           nixUserChroot
@@ -249,7 +249,7 @@
 
       nixUserChrootStorePath = builtins.unsafeDiscardStringContext (toString nixUserChroot);
       nixUserChrootRelative = "/nix/store/${baseNameOf nixUserChrootStorePath}/bin/nix-user-chroot";
-      bundleJudgeRunnerRelative = "/nix/store/${baseNameOf (builtins.unsafeDiscardStringContext (toString customJudgeRunner))}/bin/hull-lemon-custom-judge-runner-${problem.name}";
+      bundleJudgeRunnerRelative = "/nix/store/${baseNameOf (builtins.unsafeDiscardStringContext (toString judgeRunner))}/bin/hull-lemon-integration-judge-runner-${problem.name}";
 
       staticStdenv =
         (if targetSystem == builtins.currentSystem then pkgs else targetPkgs).pkgsStatic.stdenv;
@@ -265,7 +265,7 @@
       };
 
       compiledWatcher = staticStdenv.mkDerivation {
-        name = "hull-lemonCustomWatcher-${problem.name}";
+        name = "hull-lemonWatcher-${problem.name}";
         src = watcherSource;
         dontUnpack = true;
         nativeBuildInputs = [
@@ -290,7 +290,7 @@
       };
 
       lemonCompilerScript = pkgs.writeTextFile {
-        name = "hull-lemonCustom-compiler-${problem.name}";
+        name = "hull-lemon-compiler-${problem.name}";
         executable = true;
         text = ''
           #!/bin/sh
@@ -305,7 +305,7 @@
           base="''${src%.*}"
           problem_name=$(basename "$base")
           if [ ! -d "$data_root/$problem_name" ]; then
-            printf 'missing lemonCustom problem bundle: %s\n' "$data_root/$problem_name" >&2
+            printf 'missing lemon problem bundle: %s\n' "$data_root/$problem_name" >&2
             exit 1
           fi
           tmpdir=$(mktemp -d)
@@ -335,7 +335,7 @@
       };
 
       lemonSpecialJudgeScript = pkgs.writeTextFile {
-        name = "hull-lemonCustom-specialJudge-${problem.name}";
+        name = "hull-lemon-specialJudge-${problem.name}";
         executable = true;
         text = ''
           #!/bin/sh
@@ -385,7 +385,7 @@
           ) docs}
         '';
     in
-    pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-lemonCustom" { } ''
+    pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-lemon" { } ''
       mkdir -p $out/data/${problem.name} $out/data/_hull/nix/store $out/source
 
       while IFS= read -r store_path; do

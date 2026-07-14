@@ -22,26 +22,24 @@ Define targets in the `targets` attribute set of `problem.nix` or `contest.nix`.
     # The default target, built by `hull build`.
     default = hull.problemTarget.common;
 
-    # Batch export for Hydro-OJ.
-    hydro = hull.problemTarget.hydro.batch {
+    # Hull-runtime export for Hydro-OJ.
+    hydro = hull.problemTarget.hydro {
       statements.en = "statement.en.pdf";
     };
 
-    # Interactive export for UOJ.
-    uoj = hull.problemTarget.uoj.stdioInteraction {
-      twoStepInteraction = true;
-    };
+    # Hull-runtime export for UOJ.
+    uoj = hull.problemTarget.uoj { };
 
-    # Answer-only export for CMS.
-    cms = hull.problemTarget.cms.answerOnly { };
+    # Native CMS export.
+    cmsLegacy = hull.problemTarget.legacy.cms.answerOnly { };
   };
 }
 ```
 
 Problem targets use two API shapes:
 
-- Direct targets are already complete targets, such as `hull.problemTarget.common`, `hull.problemTarget.hydroCustom`, `hull.problemTarget.lemonCustom`, and `hull.problemTarget.uojCustom`.
-- Judge-format targets are target families. Select a judging branch first, then pass that branch's options: `hull.problemTarget.hydro.batch { ... }`, `hull.problemTarget.uoj.stdioInteraction { ... }`, and so on.
+- Direct targets are already complete targets, such as `hull.problemTarget.common`, `hull.problemTarget.hydro`, `hull.problemTarget.lemon`, and `hull.problemTarget.uoj`.
+- Legacy judge-format targets are target families under `hull.problemTarget.legacy`. Select a judging branch first, then pass that branch's options: `hull.problemTarget.legacy.hydro.batch { ... }`, `hull.problemTarget.legacy.uoj.stdioInteraction { ... }`, and so on.
 
 This makes the judging model part of the target path instead of a string option inside the target arguments.
 
@@ -51,7 +49,7 @@ The branch name describes the judging protocol, not the judge platform:
 - `stdioInteraction` means Hull exports a standard-input/standard-output interactive protocol.
 - `answerOnly` means Hull exports a submit-answer or output-only package.
 
-Platform-specific options remain arguments to the selected branch constructor. For example, UOJ's `twoStepInteraction` belongs on `hull.problemTarget.uoj.stdioInteraction { ... }`, while Lemon's `graderSrc` remains an option of `hull.problemTarget.lemon.batch { ... }`.
+Platform-specific options remain arguments to the selected legacy branch constructor. For example, UOJ's `twoStepInteraction` belongs on `hull.problemTarget.legacy.uoj.stdioInteraction { ... }`, while Lemon's `graderSrc` remains an option of `hull.problemTarget.legacy.lemon.batch { ... }`.
 
 == Built-in Problem Targets
 
@@ -74,9 +72,11 @@ Use it directly:
 targets.default = hull.problemTarget.common;
 ```
 
-=== Judge-Format Target Families
+=== Legacy Judge-Format Target Families
 
-These targets require a branch constructor. The common branches are:
+Legacy targets use the corresponding target platform's native judging flow instead of Hull's judging flow. They are useful when you need the platform to own the evaluation model directly, but they are not recommended unless that native flow is required.
+
+These targets require a branch constructor under `hull.problemTarget.legacy`. The common branches are:
 
 - `.batch`: traditional input/output problems, including function-style grader problems when the target accepts grader files.
 - `.stdioInteraction`: standard-input/standard-output interactive problems.
@@ -100,13 +100,13 @@ Use the constructor path shown by the matrix. There is no separate `type` option
 
 ==== `hydro`
 
-`hull.problemTarget.hydro.<branch>` packages one problem for #link("https://hydro.ac/")[Hydro-OJ].
+`hull.problemTarget.legacy.hydro.<branch>` packages one problem for #link("https://hydro.ac/")[Hydro-OJ] using Hydro's native judging flow.
 
 Supported branches:
 
-- `hull.problemTarget.hydro.batch { ... }`: emits Hydro `type = "default"`.
-- `hull.problemTarget.hydro.stdioInteraction { ... }`: emits Hydro `type = "interactive"` and maps the checker as an interactor.
-- `hull.problemTarget.hydro.answerOnly { ... }`: emits Hydro `type = "submit_answer"`.
+- `hull.problemTarget.legacy.hydro.batch { ... }`: emits Hydro `type = "default"`.
+- `hull.problemTarget.legacy.hydro.stdioInteraction { ... }`: emits Hydro `type = "interactive"` and maps the checker as an interactor.
+- `hull.problemTarget.legacy.hydro.answerOnly { ... }`: emits Hydro `type = "submit_answer"`.
 
 Important outputs:
 
@@ -118,7 +118,7 @@ Important outputs:
 Example:
 
 ```nix
-targets.hydro = hull.problemTarget.hydro.batch {
+targets.hydroLegacy = hull.problemTarget.legacy.hydro.batch {
   statements.en = "statement.en.pdf";
   allowedLanguages = [ "cc.cc20" "cc.cc20o2" ];
 };
@@ -126,13 +126,13 @@ targets.hydro = hull.problemTarget.hydro.batch {
 
 ==== `uoj`
 
-`hull.problemTarget.uoj.<branch>` packages one problem for #link("https://uoj.ac/")[Universal Online Judge].
+`hull.problemTarget.legacy.uoj.<branch>` packages one problem for #link("https://uoj.ac/")[Universal Online Judge] using UOJ's native judging flow.
 
 Supported branches:
 
-- `hull.problemTarget.uoj.batch { ... }`: traditional UOJ package, with optional implementer files through `graderSrcs`.
-- `hull.problemTarget.uoj.stdioInteraction { ... }`: enables `interaction_mode on`; accepts `twoStepInteraction`.
-- `hull.problemTarget.uoj.answerOnly { ... }`: enables `submit_answer on`.
+- `hull.problemTarget.legacy.uoj.batch { ... }`: traditional UOJ package, with optional implementer files through `graderSrcs`.
+- `hull.problemTarget.legacy.uoj.stdioInteraction { ... }`: enables `interaction_mode on`; accepts `twoStepInteraction`.
+- `hull.problemTarget.legacy.uoj.answerOnly { ... }`: enables `submit_answer on`.
 
 Important outputs:
 
@@ -144,7 +144,7 @@ Important outputs:
 Example:
 
 ```nix
-targets.uoj = hull.problemTarget.uoj.stdioInteraction {
+targets.uojLegacy = hull.problemTarget.legacy.uoj.stdioInteraction {
   twoStepInteraction = true;
   extraRequireFiles."protocol.h" = ./include/protocol.h;
 };
@@ -152,13 +152,13 @@ targets.uoj = hull.problemTarget.uoj.stdioInteraction {
 
 ==== `cms`
 
-`hull.problemTarget.cms.<branch>` packages one problem for CMS.
+`hull.problemTarget.legacy.cms.<branch>` packages one problem for CMS using CMS's native judging flow.
 
 Supported branches:
 
-- `hull.problemTarget.cms.batch { ... }`: emits a CMS Batch task, with optional grader files through `graderSrcs`.
-- `hull.problemTarget.cms.stdioInteraction { ... }`: emits a Communication-style package, installs the checker as `check/manager`, and installs grader files as stubs.
-- `hull.problemTarget.cms.answerOnly { ... }`: emits an OutputOnly task.
+- `hull.problemTarget.legacy.cms.batch { ... }`: emits a CMS Batch task, with optional grader files through `graderSrcs`.
+- `hull.problemTarget.legacy.cms.stdioInteraction { ... }`: emits a Communication-style package, installs the checker as `check/manager`, and installs grader files as stubs.
+- `hull.problemTarget.legacy.cms.answerOnly { ... }`: emits an OutputOnly task.
 
 Important outputs:
 
@@ -171,19 +171,19 @@ Important outputs:
 Example:
 
 ```nix
-targets.cms = hull.problemTarget.cms.answerOnly {
+targets.cmsLegacy = hull.problemTarget.legacy.cms.answerOnly {
   statements.english = "statement.en.pdf";
 };
 ```
 
 ==== `domjudge`
 
-`hull.problemTarget.domjudge.<branch>` packages one problem for DOMjudge.
+`hull.problemTarget.legacy.domjudge.<branch>` packages one problem for DOMjudge using DOMjudge's native judging flow.
 
 Supported branches:
 
-- `hull.problemTarget.domjudge.batch { ... }`: emits a custom validator/comparator package with `special_compare`.
-- `hull.problemTarget.domjudge.stdioInteraction { ... }`: emits an interactive package with `special_run` and interactive validation metadata.
+- `hull.problemTarget.legacy.domjudge.batch { ... }`: emits a custom validator/comparator package with `special_compare`.
+- `hull.problemTarget.legacy.domjudge.stdioInteraction { ... }`: emits an interactive package with `special_run` and interactive validation metadata.
 
 Important outputs:
 
@@ -196,20 +196,20 @@ Important outputs:
 Example:
 
 ```nix
-targets.domjudge = hull.problemTarget.domjudge.batch {
+targets.domjudgeLegacy = hull.problemTarget.legacy.domjudge.batch {
   statement = "statement.en.pdf";
 };
 ```
 
 ==== `luogu`
 
-`hull.problemTarget.luogu.<branch>` packages one problem for Luogu.
+`hull.problemTarget.legacy.luogu.<branch>` packages one problem for Luogu using Luogu's native judging flow.
 
 Supported branches:
 
-- `hull.problemTarget.luogu.batch { ... }`: traditional package, with optional `graderSrc` for grader-style interaction.
-- `hull.problemTarget.luogu.stdioInteraction { ... }`: wraps the checker as an interactor and adds the interactive required tag.
-- `hull.problemTarget.luogu.answerOnly { ... }`: emits answer-only metadata and required tags.
+- `hull.problemTarget.legacy.luogu.batch { ... }`: traditional package, with optional `graderSrc` for grader-style interaction.
+- `hull.problemTarget.legacy.luogu.stdioInteraction { ... }`: wraps the checker as an interactor and adds the interactive required tag.
+- `hull.problemTarget.legacy.luogu.answerOnly { ... }`: emits answer-only metadata and required tags.
 
 Important outputs:
 
@@ -222,19 +222,19 @@ Luogu compiles custom programs with an older C++ standard. This target precompil
 Example:
 
 ```nix
-targets.luogu = hull.problemTarget.luogu.batch {
+targets.luoguLegacy = hull.problemTarget.legacy.luogu.batch {
   graderSrc = ./grader.cpp;
 };
 ```
 
 ==== `lemon`
 
-`hull.problemTarget.lemon.<branch>` packages one problem for #link("https://github.com/Project-LemonLime/Project_LemonLime")[Project LemonLime].
+`hull.problemTarget.legacy.lemon.<branch>` packages one problem for #link("https://github.com/Project-LemonLime/Project_LemonLime")[Project LemonLime] using Lemon's native judging flow.
 
 Supported branches:
 
-- `hull.problemTarget.lemon.batch { ... }`: traditional package; if `graderSrc` is provided, the Lemon task type becomes grader interaction.
-- `hull.problemTarget.lemon.answerOnly { ... }`: exports Hull answer files through Lemon's batch-compatible package shape.
+- `hull.problemTarget.legacy.lemon.batch { ... }`: traditional package; if `graderSrc` is provided, the Lemon task type becomes grader interaction.
+- `hull.problemTarget.legacy.lemon.answerOnly { ... }`: exports Hull answer files through Lemon's batch-compatible package shape.
 
 Important outputs:
 
@@ -245,7 +245,7 @@ Important outputs:
 Example:
 
 ```nix
-targets.lemon = hull.problemTarget.lemon.batch {
+targets.lemonLegacy = hull.problemTarget.legacy.lemon.batch {
   graderSrc = ./grader.cpp;
   interactionLib = ./include/grader.h;
   interactionLibName = "grader.h";
@@ -253,28 +253,30 @@ targets.lemon = hull.problemTarget.lemon.batch {
 };
 ```
 
-=== Custom-Judging Bundle Targets
+=== Platform Targets
 
-These targets are direct targets, not branch constructors. They preserve Hull's custom runtime workflow instead of mapping the problem into one judge-native judging route.
+These targets are direct targets, not branch constructors. They preserve Hull's judging flow inside the target package instead of mapping the problem into one platform-native judging route.
 
-==== `hydroCustom`
+Prefer these platform targets for ordinary use. Use legacy targets only when a platform-native evaluation model is specifically required.
 
-`hull.problemTarget.hydroCustom { ... }` packages one problem as a custom Hydro bundle.
+==== `hydro`
+
+`hull.problemTarget.hydro { ... }` packages one problem as a Hydro bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, a static `proot`, custom judger runners, and problem data.
 - It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Hydro.
 - It requires judge resource limits and language settings that fit the bundled runtime.
 
-==== `lemonCustom`
+==== `lemon`
 
-`hull.problemTarget.lemonCustom { ... }` packages one problem as a custom Lemon bundle.
+`hull.problemTarget.lemon { ... }` packages one problem as a Lemon bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, custom judger runners, and problem data.
 - It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Lemon.
 
-==== `uojCustom`
+==== `uoj`
 
-`hull.problemTarget.uojCustom { ... }` packages one problem as a custom UOJ bundle.
+`hull.problemTarget.uoj { ... }` packages one problem as a UOJ bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, custom judger runners, and problem data.
 - It accepts `targetSystem`.
@@ -291,7 +293,7 @@ For example, each problem can define:
 ```nix
 targets = {
   default = hull.problemTarget.common;
-  lemon = hull.problemTarget.lemon.batch { };
+  lemon = hull.problemTarget.lemon { };
 };
 ```
 
@@ -329,21 +331,17 @@ result/
 
 === `lemon`
 
-`hull.contestTarget.lemon` merges per-problem Lemon outputs into one contest package.
+`hull.contestTarget.lemon` merges per-problem `lemon` outputs into one contest package.
 
-- It combines all individual `.cdf` files into a single, contest-wide `.cdf` file.
-- It merges all `data/` directories into one.
-- It merges all `source/` directories, preserving the contestant-based structure.
-
-This creates a complete contest package ready to be imported into Lemon.
-
-=== `lemonCustom`
-
-`hull.contestTarget.lemonCustom` merges per-problem `lemonCustom` outputs into one contest package.
-
-- It merges all per-problem custom Lemon bundles into one contest output.
-- It preserves the bundled Hull runtime and custom judging assets for each problem.
+- It merges all per-problem Lemon bundles into one contest output.
+- It preserves the bundled Hull runtime and judging assets for each problem.
 - It preserves the contestant-based source layout required by Lemon.
+
+=== `legacy.lemon`
+
+`hull.contestTarget.legacy.lemon` merges per-problem `lemonLegacy` outputs into one contest package using Lemon's native judging flow.
+
+Use it only when a contest package must rely on Lemon's native evaluation model. Prefer `hull.contestTarget.lemon` for ordinary Hull-managed judging.
 
 === `cnoiParticipant`
 
@@ -357,9 +355,9 @@ This creates a complete contest package ready to be imported into Lemon.
 - It accepts `targetSystem`.
 - The default `targetSystem` is `x86_64-linux`.
 
-== Writing a Custom Target
+== Writing a User-Defined Target
 
-Custom targets can be defined directly in `problem.nix` or `contest.nix`.
+User-defined targets can be defined directly in `problem.nix` or `contest.nix`.
 
 === The Target Interface
 
@@ -378,7 +376,7 @@ The structure of a target attribute set is as follows:
     The core logic of the target. This function is the "functor".
     It receives two arguments:
     1. `self`: A reference to the attribute set itself, allowing access
-       to any custom options you define for the target.
+       to any options you define for the target.
     2. `config`: The fully evaluated problem or contest configuration.
   */
   __functor = self: config:
@@ -387,14 +385,14 @@ The structure of a target attribute set is as follows:
       # ... shell script to build the package ...
     '';
 
-  # You can add your own custom options here.
-  # customOption = "defaultValue";
+  # You can add your own options here.
+  # optionName = "defaultValue";
 }
 ```
 
 The output of the derivation returned by `__functor` (`$out`) will be the final packaged directory.
 
-=== Custom Problem Target Example
+=== User-Defined Problem Target Example
 
 Let's create a simple problem target named `minimal`. This target will package only the test data and the source code of the main correct solution.
 
@@ -406,7 +404,7 @@ Let's create a simple problem target named `minimal`. This target will package o
   targets = {
     default = hull.problemTarget.common;
 
-    # Our custom target
+    # Our user-defined target
     minimal = {
       _type = "hullProblemTarget";
       __functor = self: problem:
@@ -454,7 +452,7 @@ The functor pattern allows you to create configurable targets. Let's modify our 
           pkgs.runCommandLocal "hull-problemTargetOutput-${problem.name}-minimal" { } ''
             mkdir -p $out/data $out/solution
 
-            # Use the custom option from the `self` argument.
+            # Use the option from the `self` argument.
             cp ${problem.mainCorrectSolution.src} $out/solution/${self.solutionFileName}
 
             # ... (rest of the script is the same)
@@ -472,13 +470,13 @@ The functor pattern allows you to create configurable targets. Let's modify our 
 }
 ```
 
-In this advanced example, we wrap the target definition in a function to accept arguments. The `solutionFileName` is passed into the attribute set and can be accessed via `self.solutionFileName` inside the `__functor`. This is the same construction pattern used by Hull's built-in branch constructors such as `hull.problemTarget.hydro.batch`.
+In this advanced example, we wrap the target definition in a function to accept arguments. The `solutionFileName` is passed into the attribute set and can be accessed via `self.solutionFileName` inside the `__functor`. This is the same construction pattern used by Hull's built-in branch constructors such as `hull.problemTarget.legacy.hydro.batch`.
 
-=== Custom Contest Target Example
+=== User-Defined Contest Target Example
 
 The principle for contest targets is identical, but the `config` object received by `__functor` is the contest configuration. It contains a list of problems under `config.problems`.
 
-Let's create a custom contest target that generates a simple `index.html` file listing all the problems.
+Let's create a user-defined contest target that generates a simple `index.html` file listing all the problems.
 
 ```nix
 # In contest.nix
@@ -488,7 +486,7 @@ Let's create a custom contest target that generates a simple `index.html` file l
   targets = {
     default = hull.contestTarget.common { problemTarget = "default"; };
 
-    # Our custom web target
+    # Our user-defined web target
     web = {
       _type = "hullContestTarget";
       __functor = self: contest:

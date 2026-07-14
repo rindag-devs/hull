@@ -40,40 +40,49 @@ use crate::runtime::types::{
 };
 use crate::runtime::workspace::RuntimeWorkspace;
 
-/// Runs the `uojCustom` compatibility judger inside a packaged UOJ problem.
+/// Runs Hull's compatibility judger inside a packaged UOJ problem.
 #[derive(Parser)]
-pub struct UojCustomJudgeOpts {
+pub struct UojOpts {
+  /// Root directory of the unpacked UOJ bundle.
   #[arg(long)]
   pub bundle_root: String,
 
+  /// Relative path to bundled Hull problem metadata JSON.
   #[arg(long)]
   pub metadata_path: String,
 
+  /// Path to the participant submission source file.
   #[arg(long)]
   pub submission_file: String,
 
+  /// UOJ language identifier of the participant submission.
   #[arg(long)]
   pub submission_language: String,
 
+  /// UOJ working directory for the submission.
   #[arg(long)]
   pub uoj_work_path: String,
 
+  /// Destination for the UOJ result file.
   #[arg(long)]
   pub uoj_result_path: String,
 
+  /// Directory containing UOJ problem data.
   #[arg(long)]
   pub uoj_data_path: String,
 
+  /// Whether to round the top-level score for UOJ.
   #[arg(long, default_value_t = false)]
   pub round_top_level_score: bool,
 
+  /// Number of internal testcase judging threads.
   #[arg(long)]
   pub threads: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UojCustomLanguageConfig {
+struct UojLanguageConfig {
   uoj_to_hull_language_map: HashMap<String, Option<String>>,
 }
 
@@ -113,8 +122,8 @@ struct TrivialTestSummary {
   max_memory: u64,
 }
 
-/// Executes one UOJ judging request using Hull's `uojCustom` runtime.
-pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
+/// Executes one UOJ judging request using Hull's bundled runtime.
+pub fn run(opts: &UojOpts) -> Result<()> {
   let result = run_impl(opts);
   if let Err(err) = &result {
     let message = format!("{err:#}");
@@ -123,7 +132,7 @@ pub fn run(opts: &UojCustomJudgeOpts) -> Result<()> {
   result
 }
 
-fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
+fn run_impl(opts: &UojOpts) -> Result<()> {
   let bundle_root = PathBuf::from(&opts.bundle_root);
   let result_path = PathBuf::from(&opts.uoj_result_path);
   let uoj_work_path = PathBuf::from(&opts.uoj_work_path);
@@ -161,8 +170,7 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
     &hull_language,
   )?;
 
-  let runtime_problem =
-    make_runtime_problem(&bundle_root, &problem, &participant_source, "uojCustom");
+  let runtime_problem = make_runtime_problem(&bundle_root, &problem, &participant_source, "uoj");
   let main_correct_solution = runtime_problem
     .solutions
     .iter()
@@ -177,9 +185,9 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
   let participant_solution = runtime_problem
     .solutions
     .iter()
-    .find(|solution| solution.name == "uojCustom")
+    .find(|solution| solution.name == "uoj")
     .cloned()
-    .context("uojCustom runtime problem must contain participant solution `uojCustom`")?;
+    .context("UOJ runtime problem must contain participant solution `uoj`")?;
 
   progress.write_message("Compiling submission")?;
   let prepared_solution =
@@ -242,7 +250,7 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
       let test_case = test_cases
         .iter()
         .find(|test_case| test_case.name == test_case_name)
-        .with_context(|| format!("Missing test case `{test_case_name}` in uojCustom scheduling"))?;
+        .with_context(|| format!("Missing test case `{test_case_name}` in UOJ scheduling"))?;
       judge_test_case_with_parts(
         &workspace,
         &runtime_problem,
@@ -271,7 +279,7 @@ fn run_impl(opts: &UojCustomJudgeOpts) -> Result<()> {
   )
 }
 
-/// Writes a `Judgment Failed` style UOJ result file for an internal `uojCustom`
+/// Writes a `Judgment Failed` style UOJ result file for an internal UOJ
 /// failure so the user can see the error without reading judge logs.
 fn write_internal_error_result(result_path: &Path, message: &str) -> Result<()> {
   let escaped = xml_escape(message);
@@ -317,15 +325,11 @@ fn format_prepare_solution_error(err: &anyhow::Error) -> String {
   message
 }
 
-fn load_language_config(bundle_root: &Path) -> Result<UojCustomLanguageConfig> {
-  let path = bundle_root.join("uoj-custom-language-config.json");
-  let content = fs::read_to_string(&path).with_context(|| {
-    format!(
-      "Failed to read uoj custom language config {}",
-      path.display()
-    )
-  })?;
-  serde_json::from_str(&content).context("Failed to parse uoj custom language config JSON")
+fn load_language_config(bundle_root: &Path) -> Result<UojLanguageConfig> {
+  let path = bundle_root.join("uoj-language-config.json");
+  let content = fs::read_to_string(&path)
+    .with_context(|| format!("Failed to read UOJ language config {}", path.display()))?;
+  serde_json::from_str(&content).context("Failed to parse UOJ language config JSON")
 }
 
 impl JudgeProgressTracker {
@@ -696,7 +700,7 @@ fn load_problem_conf(problem_conf_path: &Path) -> Result<ProblemConf> {
 }
 
 struct HackModeContext<'a> {
-  opts: &'a UojCustomJudgeOpts,
+  opts: &'a UojOpts,
   problem: &'a BundleJudgeProblemSpec,
   runtime_problem: &'a ProblemSpec,
   workspace: &'a RuntimeWorkspace,
@@ -1093,7 +1097,7 @@ mod tests {
   use std::fs;
 
   #[test]
-  fn keeps_participant_solution_distinct() {
+  fn solution_name() {
     let problem: BundleJudgeProblemSpec = serde_json::from_str(
       r#"{
         "name": "aplusb",
@@ -1126,22 +1130,22 @@ mod tests {
       Path::new("/bundle-root"),
       &problem,
       "/tmp/submission.c.89.s64m",
-      "uojCustom",
+      "uoj",
     );
 
     assert_eq!(runtime_solutions[0].name, "std");
-    assert_eq!(runtime_solutions[1].name, "uojCustom");
+    assert_eq!(runtime_solutions[1].name, "uoj");
 
     let participant_solution = runtime_solutions
       .iter()
-      .find(|solution| solution.name == "uojCustom")
+      .find(|solution| solution.name == "uoj")
       .expect("participant solution should exist");
     assert_eq!(participant_solution.src, "/tmp/submission.c.89.s64m");
     assert!(!participant_solution.main_correct_solution);
   }
 
   #[test]
-  fn formats_prepare_solution_error() {
+  fn prepare_error() {
     let err = anyhow!(
       "prepareSolution `/runner` failed.\nStdout:\n\nStderr:\nclass A{{}}; is invalid in C89"
     );
@@ -1152,7 +1156,7 @@ mod tests {
   }
 
   #[test]
-  fn writes_compile_error_result() {
+  fn compile_result() {
     let workspace = RuntimeWorkspace::new().expect("create workspace");
     let result_path = workspace.root().join("result");
 
@@ -1169,7 +1173,7 @@ mod tests {
   }
 
   #[test]
-  fn writes_custom_test() {
+  fn custom_result() {
     let workspace = RuntimeWorkspace::new().expect("create workspace");
     let result_path = workspace.root().join("result");
     fs::create_dir_all(&result_path).expect("create result dir");
@@ -1184,7 +1188,7 @@ mod tests {
   }
 
   #[test]
-  fn encodes_uoj_top_level_time_tick_into_signed_int_range() {
+  fn time_bounds() {
     assert_eq!(encode_uoj_top_level_time_tick(0), 0);
     assert_eq!(encode_uoj_top_level_time_tick(1), 1);
     assert_eq!(encode_uoj_top_level_time_tick(u64::MAX), i32::MAX as u32);
@@ -1195,7 +1199,7 @@ mod tests {
   }
 
   #[test]
-  fn uoj_top_level_time_tick_encoding_is_monotonic() {
+  fn time_order() {
     let mut previous_tick = 0;
     let mut previous_encoded = encode_uoj_top_level_time_tick(previous_tick);
 
@@ -1229,7 +1233,7 @@ mod tests {
   }
 
   #[test]
-  fn writes_custom_test_outputs() {
+  fn custom_outputs() {
     let workspace = RuntimeWorkspace::new().expect("create workspace");
     let result_path = workspace.root().join("result");
     let outputs_path = workspace.root().join("outputs");
@@ -1256,14 +1260,14 @@ mod tests {
   }
 
   #[test]
-  fn scales_output_budget() {
+  fn output_budget() {
     assert_eq!(custom_test_output_preview_limit(1), 12 * 1024);
     assert_eq!(custom_test_output_preview_limit(2), 6 * 1024);
     assert_eq!(custom_test_output_preview_limit(3), 4 * 1024);
   }
 
   #[test]
-  fn truncates_output_preview() {
+  fn output_preview() {
     assert_eq!(
       truncate_custom_test_output(b"abcdef", 3),
       "abc\n[3 bytes omitted]"
@@ -1271,7 +1275,7 @@ mod tests {
   }
 
   #[test]
-  fn maps_custom_test_info() {
+  fn custom_status() {
     assert_eq!(to_uoj_custom_test_info(&JudgeStatus::Accepted), "Success");
     assert_eq!(
       to_uoj_custom_test_info(&JudgeStatus::PartiallyCorrect),

@@ -173,15 +173,15 @@ Documents describe generated files such as statements and reports. Targets descr
 
   targets = {
     default = hull.problemTarget.common;
-    hydro = hull.problemTarget.hydro.batch {
+    hydro = hull.problemTarget.hydro {
       statements.en = "statement.en.pdf";
     };
-    uoj = hull.problemTarget.uoj.batch { };
+    uoj = hull.problemTarget.uoj { };
   };
 }
 ```
 
 - `documents`: generated files such as statements or reports.
 - `targets`: packaging formats. `default` is used by `hull build`.
-- Some targets are direct targets, such as `hull.problemTarget.common`.
-- Judge-format target families require an explicit branch constructor, such as `hull.problemTarget.hydro.batch`, `hull.problemTarget.uoj.stdioInteraction`, or `hull.problemTarget.cms.answerOnly`.
+- Some targets are direct targets, such as `hull.problemTarget.common`, `hull.problemTarget.hydro`, and `hull.problemTarget.uoj`.
+- Legacy judge-format target families require an explicit branch constructor, such as `hull.problemTarget.legacy.hydro.batch`, `hull.problemTarget.legacy.uoj.stdioInteraction`, or `hull.problemTarget.legacy.cms.answerOnly`.

@@ -18,8 +18,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use serde::Deserialize;
-use serde_json::Value;
 
 use crate::report::JudgeCliReport;
 use crate::runtime::analysis::aggregate_subtask_results;
@@ -31,48 +29,46 @@ use crate::runtime::custom_judge_scheduler::{
   ScheduledTestCase, SchedulerProgress, collect_runtime_traits, execute_scheduled_test_cases,
 };
 use crate::runtime::metadata::load_bundle_judge_problem_spec;
-use crate::runtime::types::{
-  BundleJudgeProblemSpec, JudgeReport, JudgeStatus, ProblemSpec, TestCaseSpec,
-};
+use crate::runtime::types::{BundleJudgeProblemSpec, JudgeReport, JudgeStatus};
 
 #[derive(Parser)]
-/// Hidden entry point that judges one bundled Hydro submission through Hull's scheduler.
-pub struct HydroCustomJudgeOpts {
-  /// Root directory of the unpacked Hydro custom bundle.
+/// Judges one bundled Lemon submission through Hull's own scheduler.
+pub struct LemonOpts {
+  /// Bundle root directory containing exported problem metadata and testcase assets.
   #[arg(long)]
   pub bundle_root: String,
 
-  /// Relative path to bundled Hull problem metadata JSON.
+  /// Metadata path relative to the bundle root.
   #[arg(long)]
   pub metadata_path: String,
 
-  /// Path to the participant submission source file.
+  /// Submission source file to be judged.
   #[arg(long)]
   pub submission_file: String,
 
-  /// Hydro language id of the participant submission.
+  /// Submission language identifier kept for CLI compatibility.
   #[arg(long)]
   pub submission_language: String,
 
-  /// Relative path to the Hydro-to-Hull language map JSON.
+  /// Relative path to the bundled Lemon-to-Hull language map.
   #[arg(long)]
   pub language_map_path: String,
 
-  /// Participant solution label shown in Hull reports.
+  /// Synthetic participant solution name inserted into the runtime problem.
   #[arg(long)]
   pub participant_solution_name: String,
 
-  /// Number of internal testcase judging threads. 0 means auto-detect.
+  /// Number of worker threads used by Hull's scheduler.
   #[arg(long)]
   pub threads: usize,
 
-  /// Output path for the plain report consumed by the Hydro checker.
+  /// Plain-text output path for watcher integrations and Lemon special judge.
   #[arg(long)]
-  pub stdout_report_path: String,
+  pub plain_output_path: String,
 }
 
 #[derive(Clone, Debug)]
-struct HydroBundleTestCase {
+struct LemonBundleTestCase {
   scheduled: ScheduledTestCase,
   input_path: PathBuf,
   official_data_path: PathBuf,
@@ -81,19 +77,29 @@ struct HydroBundleTestCase {
   groups: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct HydroLanguageMap {
-  hydro_to_hull_language_map: Value,
+struct LemonLanguageMap {
+  lemon_to_hull_language_map: BTreeMap<String, String>,
 }
 
-pub fn run(opts: &HydroCustomJudgeOpts) -> Result<()> {
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LemonBundleMetadata {
+  lemon_full_score: i64,
+}
+
+/// Executes one Lemon bundled judging request and writes a single aggregate judge report.
+pub fn run(opts: &LemonOpts) -> Result<()> {
   let bundle_root = PathBuf::from(&opts.bundle_root);
+  let plain_output_path = PathBuf::from(&opts.plain_output_path);
   let problem = load_bundle_judge_problem_spec(&bundle_root, &opts.metadata_path)?;
+  let lemon_metadata = load_lemon_bundle_metadata(&bundle_root, &opts.metadata_path)?;
+
   let hull_language = resolve_submission_hull_language(
     &bundle_root,
     &opts.language_map_path,
-    &opts.submission_language,
+    Path::new(&opts.submission_file),
   )?;
   let prepared = prepare_bundle_judge_context(
     &bundle_root,
@@ -103,7 +109,7 @@ pub fn run(opts: &HydroCustomJudgeOpts) -> Result<()> {
     &opts.participant_solution_name,
   )?;
 
-  let test_cases = load_hydro_bundle_test_cases(&bundle_root, &problem)?;
+  let test_cases = load_lemon_bundle_test_cases(&bundle_root, &problem)?;
   let scheduled_test_cases = test_cases
     .iter()
     .map(|test_case| test_case.scheduled.clone())
@@ -119,7 +125,7 @@ pub fn run(opts: &HydroCustomJudgeOpts) -> Result<()> {
       let test_case = test_cases
         .iter()
         .find(|test_case| test_case.scheduled.name == test_case_name)
-        .with_context(|| format!("Missing Hydro bundled testcase `{test_case_name}`"))?;
+        .with_context(|| format!("Missing Lemon bundled testcase `{test_case_name}`"))?;
       judge_test_case_with_parts(
         &prepared.workspace,
         &prepared.runtime_problem,
@@ -138,14 +144,14 @@ pub fn run(opts: &HydroCustomJudgeOpts) -> Result<()> {
     },
   )?;
 
-  let report = aggregate_hydro_report(&problem, &test_cases, &runtime_traits, &test_case_reports);
-  write_hydro_reports(Path::new(&opts.stdout_report_path), &report)
+  let report = aggregate_lemon_report(&problem, &test_cases, &runtime_traits, &test_case_reports);
+  write_lemon_report(&lemon_metadata, &plain_output_path, &report)
 }
 
-fn load_hydro_bundle_test_cases(
+fn load_lemon_bundle_test_cases(
   bundle_root: &Path,
   problem: &BundleJudgeProblemSpec,
-) -> Result<Vec<HydroBundleTestCase>> {
+) -> Result<Vec<LemonBundleTestCase>> {
   problem
     .test_cases
     .iter()
@@ -153,11 +159,11 @@ fn load_hydro_bundle_test_cases(
       let official_data_path = bundle_root.join(&test_case.name).join("official-data.tar");
       let loaded = load_official_data(&official_data_path, None).with_context(|| {
         format!(
-          "Failed to read bundled official data header for Hydro testcase {}",
+          "Failed to read bundled official data header for Lemon testcase {}",
           official_data_path.display()
         )
       })?;
-      Ok(HydroBundleTestCase {
+      Ok(LemonBundleTestCase {
         scheduled: ScheduledTestCase {
           name: test_case.name.clone(),
           traits: loaded.validation.traits,
@@ -172,13 +178,13 @@ fn load_hydro_bundle_test_cases(
     .collect()
 }
 
-fn aggregate_hydro_report(
+fn aggregate_lemon_report(
   problem: &BundleJudgeProblemSpec,
-  test_cases: &[HydroBundleTestCase],
+  test_cases: &[LemonBundleTestCase],
   runtime_traits: &BTreeMap<String, BTreeMap<String, bool>>,
   test_case_reports: &BTreeMap<String, JudgeReport>,
 ) -> JudgeReport {
-  let scoring_problem = ProblemSpec {
+  let scoring_problem = crate::runtime::types::ProblemSpec {
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
@@ -190,7 +196,7 @@ fn aggregate_hydro_report(
     judger: problem.judger.clone(),
     test_cases: test_cases
       .iter()
-      .map(|test_case| TestCaseSpec {
+      .map(|test_case| crate::runtime::types::TestCaseSpec {
         name: test_case.scheduled.name.clone(),
         input_file: None,
         tick_limit: test_case.tick_limit,
@@ -214,20 +220,6 @@ fn aggregate_hydro_report(
     &subtask_reports,
     test_case_reports,
   );
-  let failure_details = test_case_reports.values().find_map(|report| {
-    if report.status == JudgeStatus::Accepted {
-      return None;
-    }
-    let mut parts = Vec::new();
-    parts.push(format!("status: {}", report.status));
-    if !report.message.is_empty() {
-      parts.push(format!("message:\n{}", report.message));
-    }
-    if !report.outputs.is_empty() {
-      parts.push(format!("outputs:\n{}", report.outputs));
-    }
-    Some(parts.join("\n\n"))
-  });
   let total_score = subtask_reports
     .iter()
     .map(|report| report.scaled_score)
@@ -251,14 +243,7 @@ fn aggregate_hydro_report(
   JudgeReport {
     status: aggregate_top_level_status(test_case_reports),
     score,
-    message: match failure_details {
-      Some(details) => format!(
-        "{}\n\nFirst Failure Details:\n{}",
-        cli_report.render_human_readable(),
-        details
-      ),
-      None => cli_report.render_human_readable(),
-    },
+    message: cli_report.render_human_readable(),
     tick,
     memory,
     outputs: String::new(),
@@ -298,11 +283,15 @@ fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>)
   statuses[0]
 }
 
-fn write_hydro_reports(stdout_report_path: &Path, report: &JudgeReport) -> Result<()> {
-  if let Some(parent) = stdout_report_path.parent() {
+fn write_lemon_report(
+  lemon_metadata: &LemonBundleMetadata,
+  plain_output_path: &Path,
+  report: &JudgeReport,
+) -> Result<()> {
+  if let Some(parent) = plain_output_path.parent() {
     std::fs::create_dir_all(parent)?;
   }
-  let final_score = (report.score * 100.0).round().clamp(0.0, 100.0) as i64;
+  let final_score = (report.score * lemon_metadata.lemon_full_score as f64).round() as i64;
   let final_message = if report.message.is_empty() {
     report.status.to_string()
   } else {
@@ -312,51 +301,165 @@ fn write_hydro_reports(stdout_report_path: &Path, report: &JudgeReport) -> Resul
     "{}\n{}\n{}\n{}\n{}",
     report.tick, report.memory, final_score, report.status, final_message
   );
-  std::fs::write(stdout_report_path, plain_report).with_context(|| {
+  std::fs::write(plain_output_path, plain_report).with_context(|| {
     format!(
-      "Failed to write Hydro custom stdout report to {}",
-      stdout_report_path.display()
+      "Failed to write Lemon custom plain judge report to {}",
+      plain_output_path.display()
     )
   })
+}
+
+fn load_lemon_bundle_metadata(
+  bundle_root: &Path,
+  metadata_path: &str,
+) -> Result<LemonBundleMetadata> {
+  let metadata_file = bundle_root.join(metadata_path);
+  let content = std::fs::read_to_string(&metadata_file).with_context(|| {
+    format!(
+      "Failed to read Lemon bundle metadata {}",
+      metadata_file.display()
+    )
+  })?;
+  serde_json::from_str(&content).context("Failed to parse Lemon bundle metadata")
 }
 
 fn resolve_submission_hull_language(
   bundle_root: &Path,
   language_map_path: &str,
-  submission_language: &str,
+  submission_file: &Path,
 ) -> Result<String> {
+  let extension = submission_file
+    .extension()
+    .and_then(|ext| ext.to_str())
+    .with_context(|| {
+      format!(
+        "Submission file {} does not have a usable extension",
+        submission_file.display()
+      )
+    })?;
   let map_path = bundle_root.join(language_map_path);
   let content = std::fs::read_to_string(&map_path)
-    .with_context(|| format!("Failed to read Hydro language map {}", map_path.display()))?;
-  let map: HydroLanguageMap =
-    serde_json::from_str(&content).context("Failed to parse Hydro language map JSON")?;
-  let resolved = match &map.hydro_to_hull_language_map {
-    Value::Object(flat_map) => flat_map
-      .get(submission_language)
-      .and_then(Value::as_str)
-      .map(ToOwned::to_owned)
-      .or_else(|| {
-        submission_language
-          .split_once('.')
-          .and_then(|(_family, variant)| {
-            flat_map
-              .get(variant)
-              .and_then(Value::as_str)
-              .map(ToOwned::to_owned)
-          })
-      })
-      .or_else(|| {
-        flat_map
-          .get("default")
-          .and_then(Value::as_str)
-          .map(ToOwned::to_owned)
-      }),
-    _ => None,
-  };
-  resolved.with_context(|| {
-    format!(
-      "No Hull language mapping found for Hydro language `{}`",
-      submission_language
+    .with_context(|| format!("Failed to read Lemon language map {}", map_path.display()))?;
+  let map: LemonLanguageMap =
+    serde_json::from_str(&content).context("Failed to parse Lemon language map JSON")?;
+  map
+    .lemon_to_hull_language_map
+    .get(extension)
+    .cloned()
+    .with_context(|| format!("No Hull language mapping found for extension `{extension}`"))
+}
+
+#[cfg(test)]
+mod tests {
+  use std::fs;
+
+  use super::*;
+  use crate::runtime::bundle_judge::pack_official_data_tar;
+  use crate::runtime::types::{ValidationReport, ValidationStatus};
+
+  #[test]
+  fn bundle_root_layout() {
+    let root = std::env::temp_dir().join(format!(
+      "hull-lemon-custom-bundle-test-{}",
+      std::process::id()
+    ));
+    if root.exists() {
+      fs::remove_dir_all(&root).expect("reset temp root");
+    }
+    fs::create_dir_all(&root).expect("create temp root");
+
+    fs::write(
+      root.join("problem.json"),
+      serde_json::to_vec(&serde_json::json!({
+        "name": "sample",
+        "tickLimit": 1000,
+        "memoryLimit": 268435456,
+        "fullScore": 100.0,
+        "lemonFullScore": 100,
+        "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drvPath": null } },
+        "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drvPath": null } },
+        "judger": {
+          "prepareSolutionRunner": { "path": "/prepare", "drvPath": null },
+          "generateOutputsRunner": { "path": "/generate", "drvPath": null },
+          "judgeRunner": { "path": "/judge", "drvPath": null }
+        },
+        "mainCorrectSolution": "std",
+        "subtasks": [
+          { "fullScore": 100.0, "scoringMethod": "sum", "traits": {} }
+        ],
+        "solutions": [],
+        "testCases": [
+          {
+            "name": "hand1",
+            "tickLimit": 1000,
+            "memoryLimit": 268435456,
+            "groups": [],
+            "traitHints": {}
+          }
+        ]
+      }))
+      .expect("serialize problem metadata"),
     )
-  })
+    .expect("write problem metadata");
+    let problem: BundleJudgeProblemSpec = serde_json::from_value(serde_json::json!({
+      "name": "sample",
+      "tickLimit": 1000,
+      "memoryLimit": 268435456,
+      "fullScore": 100.0,
+      "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drvPath": null } },
+      "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drvPath": null } },
+      "judger": {
+        "prepareSolutionRunner": { "path": "/prepare", "drvPath": null },
+        "generateOutputsRunner": { "path": "/generate", "drvPath": null },
+        "judgeRunner": { "path": "/judge", "drvPath": null }
+      },
+      "mainCorrectSolution": "std",
+      "subtasks": [
+        { "fullScore": 100.0, "scoringMethod": "sum", "traits": {} }
+      ],
+      "solutions": [],
+      "testCases": [
+        {
+          "name": "hand1",
+          "tickLimit": 1000,
+          "memoryLimit": 268435456,
+          "groups": [],
+          "traitHints": {}
+        }
+      ]
+    }))
+    .expect("valid problem spec");
+
+    let case_root = root.join("hand1");
+    fs::create_dir_all(&case_root).expect("create testcase root");
+    fs::write(case_root.join("input"), b"1 2\n").expect("write input");
+
+    let outputs_dir = root.join("outputs");
+    fs::create_dir_all(&outputs_dir).expect("create outputs dir");
+    fs::write(outputs_dir.join("answer"), b"3\n").expect("write output");
+    pack_official_data_tar(
+      "hand1",
+      &ValidationReport {
+        status: ValidationStatus::Valid,
+        message: String::new(),
+        reader_trace_stacks: Vec::new(),
+        reader_trace_tree: serde_json::json!({}),
+        traits: BTreeMap::new(),
+      },
+      &outputs_dir,
+      &case_root.join("official-data.tar"),
+    )
+    .expect("pack official data");
+
+    let loaded = load_lemon_bundle_test_cases(&root, &problem).expect("load testcases");
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].scheduled.name, "hand1");
+    assert_eq!(loaded[0].input_path, case_root.join("input"));
+    assert_eq!(
+      loaded[0].official_data_path,
+      case_root.join("official-data.tar")
+    );
+
+    fs::remove_dir_all(&root).expect("cleanup temp root");
+  }
 }

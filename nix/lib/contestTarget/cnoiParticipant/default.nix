@@ -269,7 +269,7 @@
         package_root="$2"
         shift
         shift
-        exec ${lib.getExe targetHullPkgs.default} cnoi-self-eval --bundle-root "$bundle_root" --package-root "$package_root" "$@"
+        exec ${lib.getExe targetHullPkgs.default} integration-judge cnoi --bundle-root "$bundle_root" --package-root "$package_root" "$@"
       '';
 
       selfEvalTargets = [

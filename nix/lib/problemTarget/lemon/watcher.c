@@ -92,15 +92,14 @@ static int copy_archive_data(struct archive *reader, struct archive *writer) {
       return ARCHIVE_OK;
     }
     if (result != ARCHIVE_OK) {
+      fprintf(stderr, "archive data read failed: %s\n", archive_error_string(reader));
       return result;
     }
+    /* libarchive 3.x may return zero on a successful disk write. */
     written = archive_write_data_block(writer, buffer, size, offset);
     if (written < 0) {
+      fprintf(stderr, "archive data write failed: %s\n", archive_error_string(writer));
       return (int)written;
-    }
-    if ((size_t)written != size) {
-      archive_set_error(writer, EIO, "short archive write");
-      return ARCHIVE_FATAL;
     }
   }
 }
@@ -114,7 +113,7 @@ static int is_safe_archive_path(const char *path) {
 
   for (;;) {
     size_t len = strcspn(segment, "/");
-    if ((len == 1 && segment[0] == '.') || (len == 2 && segment[0] == '.' && segment[1] == '.')) {
+    if (len == 2 && segment[0] == '.' && segment[1] == '.') {
       return 0;
     }
     if (segment[len] == '\0') {
@@ -122,6 +121,42 @@ static int is_safe_archive_path(const char *path) {
     }
     segment += len + 1;
   }
+}
+
+static int is_safe_symlink_target(const char *path, const char *target) {
+  const char *segment;
+  size_t depth = 0;
+
+  if (target == NULL || target[0] == '\0' || target[0] == '/') {
+    return 0;
+  }
+
+  for (segment = path; *segment != '\0';) {
+    size_t len = strcspn(segment, "/");
+    if (segment[len] == '\0') {
+      break;
+    }
+    if (len != 0 && !(len == 1 && segment[0] == '.')) {
+      ++depth;
+    }
+    segment += len + 1;
+  }
+  for (segment = target; *segment != '\0';) {
+    size_t len = strcspn(segment, "/");
+    if (len == 2 && segment[0] == '.' && segment[1] == '.') {
+      if (depth == 0) {
+        return 0;
+      }
+      --depth;
+    } else if (len != 0 && !(len == 1 && segment[0] == '.')) {
+      ++depth;
+    }
+    if (segment[len] == '\0') {
+      break;
+    }
+    segment += len + 1;
+  }
+  return 1;
 }
 
 static int remove_path_entry(const char *path, const struct stat *st, int flag, struct FTW *ftw) {
@@ -146,11 +181,38 @@ static int extract_tar_archive(const char *archive_path, const char *dest_dir) {
   int result;
 
   if (reader == NULL || writer == NULL) {
+    if (writer != NULL) {
+      archive_write_free(writer);
+    }
+    if (reader != NULL) {
+      archive_read_free(reader);
+    }
     return -1;
   }
-  archive_read_support_filter_all(reader);
-  archive_read_support_format_tar(reader);
-  archive_write_disk_set_options(writer, ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM);
+  result = archive_read_support_filter_all(reader);
+  if (result != ARCHIVE_OK) {
+    fprintf(stderr, "archive filter setup failed: %s\n", archive_error_string(reader));
+    archive_write_free(writer);
+    archive_read_free(reader);
+    return -1;
+  }
+  result = archive_read_support_format_tar(reader);
+  if (result != ARCHIVE_OK) {
+    fprintf(stderr, "archive format setup failed: %s\n", archive_error_string(reader));
+    archive_write_free(writer);
+    archive_read_free(reader);
+    return -1;
+  }
+  /* Entry names become absolute output paths after is_safe_archive_path validates them. */
+  result = archive_write_disk_set_options(writer, ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM |
+                                                      ARCHIVE_EXTRACT_SECURE_NODOTDOT |
+                                                      ARCHIVE_EXTRACT_SECURE_SYMLINKS);
+  if (result != ARCHIVE_OK) {
+    fprintf(stderr, "archive writer setup failed: %s\n", archive_error_string(writer));
+    archive_write_free(writer);
+    archive_read_free(reader);
+    return -1;
+  }
 
   result = archive_read_open_filename(reader, archive_path, 10240);
   if (result != ARCHIVE_OK) {
@@ -176,7 +238,11 @@ static int extract_tar_archive(const char *archive_path, const char *dest_dir) {
     }
     entry_path = archive_entry_pathname(entry);
     filetype = archive_entry_filetype(entry);
-    if (!is_safe_archive_path(entry_path) || (filetype != AE_IFREG && filetype != AE_IFDIR)) {
+    /* libarchive reports tar hardlinks as regular files, so check their separate target. */
+    if (!is_safe_archive_path(entry_path) || archive_entry_hardlink(entry) != NULL ||
+        (filetype != AE_IFREG && filetype != AE_IFDIR && filetype != AE_IFLNK) ||
+        (filetype == AE_IFLNK &&
+         !is_safe_symlink_target(entry_path, archive_entry_symlink(entry)))) {
       fprintf(stderr, "unsafe archive entry: %s\n", entry_path == NULL ? "<null>" : entry_path);
       archive_write_free(writer);
       archive_read_free(reader);
@@ -195,12 +261,13 @@ static int extract_tar_archive(const char *archive_path, const char *dest_dir) {
       archive_read_free(reader);
       return -1;
     }
-    result = copy_archive_data(reader, writer);
-    if (result != ARCHIVE_OK) {
-      fprintf(stderr, "archive data copy failed: %s\n", archive_error_string(writer));
-      archive_write_free(writer);
-      archive_read_free(reader);
-      return -1;
+    if (filetype == AE_IFREG) {
+      result = copy_archive_data(reader, writer);
+      if (result != ARCHIVE_OK) {
+        archive_write_free(writer);
+        archive_read_free(reader);
+        return -1;
+      }
     }
     result = archive_write_finish_entry(writer);
     if (result != ARCHIVE_OK) {
@@ -211,8 +278,31 @@ static int extract_tar_archive(const char *archive_path, const char *dest_dir) {
     }
   }
 
-  archive_write_free(writer);
-  archive_read_free(reader);
+  result = archive_write_close(writer);
+  if (result != ARCHIVE_OK) {
+    fprintf(stderr, "archive close failed: %s\n", archive_error_string(writer));
+    archive_write_free(writer);
+    archive_read_free(reader);
+    return -1;
+  }
+  result = archive_read_close(reader);
+  if (result != ARCHIVE_OK) {
+    fprintf(stderr, "archive read close failed: %s\n", archive_error_string(reader));
+    archive_write_free(writer);
+    archive_read_free(reader);
+    return -1;
+  }
+  result = archive_write_free(writer);
+  if (result != ARCHIVE_OK) {
+    fprintf(stderr, "archive writer cleanup failed\n");
+    archive_read_free(reader);
+    return -1;
+  }
+  result = archive_read_free(reader);
+  if (result != ARCHIVE_OK) {
+    fprintf(stderr, "archive reader cleanup failed\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -293,9 +383,9 @@ int main(int argc, char **argv) {
           (int)sizeof(extract_root) ||
       make_path(bundle_root, sizeof(bundle_root), extract_root, "/bundle") != 0 ||
       make_path(runtime_nix_dir, sizeof(runtime_nix_dir), extract_root, "/runtime-nix") != 0 ||
-      snprintf(extract_mount, sizeof(extract_mount), "%s:%s", extract_root, "/bundle-host") >=
+      snprintf(extract_mount, sizeof(extract_mount), "%s:%s", extract_root, "bundle-host") >=
           (int)sizeof(extract_mount) ||
-      snprintf(bundle_mount, sizeof(bundle_mount), "%s:%s", bundle_root, "/bundle") >=
+      snprintf(bundle_mount, sizeof(bundle_mount), "%s:%s", bundle_root, "bundle") >=
           (int)sizeof(bundle_mount) ||
       make_path(problem_name_path, sizeof(problem_name_path), extract_root, "/problem-name") != 0 ||
       make_path(submission_name_path, sizeof(submission_name_path), extract_root,
@@ -370,7 +460,7 @@ int main(int argc, char **argv) {
   child_argv[17] = "--language-map-path";
   child_argv[18] = "lemon-language-map.json";
   child_argv[19] = "--participant-solution-name";
-  child_argv[20] = "lemonCustom";
+  child_argv[20] = "lemon";
   child_argv[21] = "--threads";
   child_argv[22] = "0";
   child_argv[23] = "--plain-output-path";

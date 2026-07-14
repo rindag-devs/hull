@@ -95,20 +95,20 @@
 
   targets = {
     default = hull.problemTarget.common;
-    lemonCustom = hull.problemTarget.lemonCustom {
+    lemon = hull.problemTarget.lemon {
       solutionExtNames = {
         std = "cpp";
         tooManyOp = "c";
         infinityRead = "cpp";
       };
     };
-    hydro = hull.problemTarget.hydro.stdioInteraction { };
-    uoj = hull.problemTarget.uoj.stdioInteraction { };
-    qoj = hull.problemTarget.uoj.stdioInteraction {
+    hydroLegacy = hull.problemTarget.legacy.hydro.stdioInteraction { };
+    uojLegacy = hull.problemTarget.legacy.uoj.stdioInteraction { };
+    qojLegacy = hull.problemTarget.legacy.uoj.stdioInteraction {
       twoStepInteraction = true;
     };
-    cms = hull.problemTarget.cms.stdioInteraction { };
-    domjudge = hull.problemTarget.domjudge.stdioInteraction { };
-    luogu = hull.problemTarget.luogu.stdioInteraction { };
+    cmsLegacy = hull.problemTarget.legacy.cms.stdioInteraction { };
+    domjudgeLegacy = hull.problemTarget.legacy.domjudge.stdioInteraction { };
+    luoguLegacy = hull.problemTarget.legacy.luogu.stdioInteraction { };
   };
 }

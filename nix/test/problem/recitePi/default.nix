@@ -80,16 +80,16 @@
 
   targets = {
     default = hull.problemTarget.common;
-    lemonCustom = hull.problemTarget.lemonCustom {
+    lemon = hull.problemTarget.lemon {
       solutionExtNames = {
         std = "txt";
         pc = "txt";
         formatError = "txt";
       };
     };
-    hydro = hull.problemTarget.hydro.answerOnly { };
-    uoj = hull.problemTarget.uoj.answerOnly { };
-    cms = hull.problemTarget.cms.answerOnly { };
-    luogu = hull.problemTarget.luogu.answerOnly { };
+    hydroLegacy = hull.problemTarget.legacy.hydro.answerOnly { };
+    uojLegacy = hull.problemTarget.legacy.uoj.answerOnly { };
+    cmsLegacy = hull.problemTarget.legacy.cms.answerOnly { };
+    luoguLegacy = hull.problemTarget.legacy.luogu.answerOnly { };
   };
 }

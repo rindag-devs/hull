@@ -28,13 +28,14 @@
 }:
 
 {
-  cms = import ./cms.nix {
+  hydro = import ./hydro {
     inherit
       lib
       hull
       pkgs
-      cplib
-      cplibInitializers
+      targetHullPkgsForSystem
+      targetPkgsForSystem
+      targetHullForSystem
       ;
   };
 
@@ -46,48 +47,7 @@
       ;
   };
 
-  domjudge = import ./domjudge.nix {
-    inherit
-      lib
-      hull
-      pkgs
-      cplib
-      cplibInitializers
-      ;
-  };
-
-  hydro = import ./hydro.nix {
-    inherit
-      lib
-      hull
-      pkgs
-      cplib
-      cplibInitializers
-      ;
-  };
-
-  hydroCustom = import ./hydroCustom {
-    inherit
-      lib
-      hull
-      pkgs
-      targetHullPkgsForSystem
-      targetPkgsForSystem
-      targetHullForSystem
-      ;
-  };
-
-  lemon = import ./lemon.nix {
-    inherit
-      lib
-      hull
-      pkgs
-      cplib
-      cplibInitializers
-      ;
-  };
-
-  lemonCustom = import ./lemonCustom {
+  lemon = import ./lemon {
     inherit
       lib
       hull
@@ -96,16 +56,6 @@
       targetHullPkgsForSystem
       targetPkgsForSystem
       targetHullForSystem
-      ;
-  };
-
-  luogu = import ./luogu {
-    inherit
-      lib
-      hull
-      pkgs
-      cplib
-      cplibInitializers
       ;
   };
 
@@ -114,22 +64,74 @@
       lib
       hull
       pkgs
-      cplib
-      cplibInitializers
-      x86_64-linux-gnu217-cross
-      ;
-  };
-
-  uojCustom = import ./uojCustom {
-    inherit
-      lib
-      hull
-      pkgs
       hullPkgs
       targetHullPkgsForSystem
       targetPkgsForSystem
       targetHullForSystem
       ;
+  };
+
+  legacy = {
+    cms = import ./legacy/cms.nix {
+      inherit
+        lib
+        hull
+        pkgs
+        cplib
+        cplibInitializers
+        ;
+    };
+
+    domjudge = import ./legacy/domjudge.nix {
+      inherit
+        lib
+        hull
+        pkgs
+        cplib
+        cplibInitializers
+        ;
+    };
+
+    hydro = import ./legacy/hydro.nix {
+      inherit
+        lib
+        hull
+        pkgs
+        cplib
+        cplibInitializers
+        ;
+    };
+
+    lemon = import ./legacy/lemon.nix {
+      inherit
+        lib
+        hull
+        pkgs
+        cplib
+        cplibInitializers
+        ;
+    };
+
+    luogu = import ./legacy/luogu {
+      inherit
+        lib
+        hull
+        pkgs
+        cplib
+        cplibInitializers
+        ;
+    };
+
+    uoj = import ./legacy/uoj {
+      inherit
+        lib
+        hull
+        pkgs
+        cplib
+        cplibInitializers
+        x86_64-linux-gnu217-cross
+        ;
+    };
   };
 
   utils =
