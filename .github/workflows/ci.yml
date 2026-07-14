@@ -26,5 +26,8 @@ jobs:
       - name: Build all test problems
         run: nix develop .#default --command just all-problems
 
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Integration tests
         run: nix develop .#default --command just integration
