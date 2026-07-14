@@ -161,8 +161,10 @@
               pkgs.git
               pkgs.just
               pkgs.libarchive
+              pkgs.jq
               pkgs.pkg-config
               pkgs.nix-output-monitor
+              pkgs._7zz
               pkgs.shfmt
               pkgs.typstyle
               hullPkgs.wasm32-wasi-wasip1.clang
