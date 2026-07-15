@@ -16,9 +16,9 @@
 use clap::{Parser, Subcommand};
 
 use crate::cmd::{
-  build::BuildOpts, build_contest::BuildContestOpts, integration_judge::IntegrationJudgeCommand,
-  judge::JudgeOpts, patch::PatchOpts, run::RunOpts, run_wasm::RunWasmOpts,
-  source_config::SourceConfigOpts, stress::StressOpts,
+  build::BuildOpts, build_contest::BuildContestOpts, compile::CompileOpts,
+  integration_judge::IntegrationJudgeCommand, judge::JudgeOpts, patch::PatchOpts, run::RunOpts,
+  run_wasm::RunWasmOpts, source_config::SourceConfigOpts, stress::StressOpts,
 };
 use crate::interactive::InteractiveMode;
 
@@ -52,6 +52,12 @@ pub enum Command {
     long_about = "Load one contest from the current flake, realize runtime artifacts for every problem in it, analyze each problem, and then package the selected contest target with `nix build`."
   )]
   BuildContest(BuildContestOpts),
+  #[command(
+    about = "Compile a source file to WASM",
+    long_about = "Compile one source file in the selected problem context to a WebAssembly executable and write it to a local file or standard output."
+  )]
+  /// Compiles one source file to a WebAssembly executable.
+  Compile(CompileOpts),
   #[command(
     about = "Judge one source file as an ad-hoc solution",
     long_about = "Treat the given source file as an extra solution for the selected problem, run the full problem analysis for it, and print either a human-readable or JSON judging report."
@@ -102,7 +108,66 @@ fn parse_interactive_mode(value: &str) -> Result<InteractiveMode, String> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::cmd::source_config::SourceLanguage;
+  use crate::cmd::{compile::CompileOpts, source_config::SourceLanguage};
+
+  #[test]
+  fn compile_cli() {
+    let opts = Opts::try_parse_from([
+      "hull",
+      "compile",
+      "-p",
+      "test.aPlusB",
+      "-l",
+      "cpp.20",
+      "-o",
+      "solution.wasm",
+      "solution.20.cpp",
+    ])
+    .expect("compile command parses");
+    assert!(matches!(
+      opts.command,
+      Command::Compile(CompileOpts {
+        output: Some(output),
+        source,
+      }) if output == "solution.wasm"
+        && source.problem == "test.aPlusB"
+        && source.language.as_deref() == Some("cpp.20")
+        && source.src_path == "solution.20.cpp"
+    ));
+
+    let stdout_opts = Opts::try_parse_from(["hull", "compile", "-o", "-", "solution.20.cpp"])
+      .expect("compile stdout command parses");
+    assert!(matches!(
+      stdout_opts.command,
+      Command::Compile(CompileOpts {
+        output: Some(output),
+        ..
+      }) if output == "-"
+    ));
+  }
+
+  #[test]
+  fn run_cli() {
+    let opts = Opts::try_parse_from([
+      "hull",
+      "run",
+      "-p",
+      "test.aPlusB",
+      "-l",
+      "cpp.20",
+      "solution.20.cpp",
+      "argument",
+    ])
+    .expect("run command parses");
+    assert!(matches!(
+      opts.command,
+      Command::Run(RunOpts { source, args, .. })
+        if source.problem == "test.aPlusB"
+          && source.language.as_deref() == Some("cpp.20")
+          && source.src_path == "solution.20.cpp"
+          && args == ["argument"]
+    ));
+  }
 
   #[test]
   fn source_config_cli() {

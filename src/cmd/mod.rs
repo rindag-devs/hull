@@ -15,6 +15,8 @@
 
 pub mod build;
 pub mod build_contest;
+/// Source compilation commands and shared options.
+pub mod compile;
 pub mod integration_judge;
 pub mod judge;
 pub mod patch;

@@ -51,6 +51,7 @@ fn main() -> Result<()> {
   match &opts.command {
     cli::Command::Build(opts) => cmd::build::run(opts),
     cli::Command::BuildContest(opts) => cmd::build_contest::run(opts),
+    cli::Command::Compile(opts) => cmd::compile::run(opts),
     cli::Command::IntegrationJudge { command } => cmd::integration_judge::run(command),
     cli::Command::Judge(opts) => cmd::judge::run(opts),
     cli::Command::Patch(opts) => cmd::patch::run(opts),

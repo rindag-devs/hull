@@ -13,7 +13,7 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::{fs, path::Path};
+use std::fs;
 
 use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs::Dir};
@@ -26,20 +26,17 @@ use wasi_common::{
 };
 
 use crate::{
-  nix::{BuildCommand, get_flake_url},
+  cmd::compile::{SourceCompileOpts, compile_source},
   runner,
   runtime::artifact::cache_native_module,
 };
 
+/// Options for compiling and running one source file.
 #[derive(Parser)]
 pub struct RunOpts {
-  /// Problem name that provides languages and includes for compilation.
-  #[arg(long, short, default_value = "default")]
-  pub problem: String,
-
-  /// Language name to compile with, e.g. `cpp.20`. Auto-detected if omitted.
-  #[arg(long, short)]
-  pub language: Option<String>,
+  /// Source and problem options used for compilation.
+  #[command(flatten)]
+  pub source: SourceCompileOpts,
 
   /// Override the runtime tick limit for the executed program.
   #[arg(long, short)]
@@ -53,77 +50,14 @@ pub struct RunOpts {
   #[arg(long)]
   pub show_status: bool,
 
-  /// Let `nix` fetch flake inputs with Git submodules enabled.
-  #[arg(long)]
-  pub submodules: bool,
-
-  /// Path to the source file to compile and run.
-  pub src_path: String,
-
   /// Arguments to pass to the executed program.
   #[arg(trailing_var_arg = true)]
   pub args: Vec<String>,
 }
 
+/// Compiles and runs one source file in Hull's WASM runtime.
 pub fn run(opts: &RunOpts) -> Result<()> {
-  // Get absolute path of source file
-  let src_path_abs = Path::new(&opts.src_path)
-    .canonicalize()
-    .with_context(|| format!("Failed to find source file: {}", opts.src_path))?;
-  let src_path_str = src_path_abs.to_str().with_context(|| {
-    format!(
-      "Path `{}` contains non-UTF-8 characters and cannot be processed.",
-      src_path_abs.display()
-    )
-  })?;
-
-  // Construct and run nix build command
-  let flake_url =
-    get_flake_url().context("Could not determine the flake URL for the current project")?;
-  let submodule_query = if opts.submodules { "?submodules=1" } else { "" };
-  let final_flake_ref = format!("{}{}", flake_url, submodule_query);
-
-  info!("Compiling source file: {}", opts.src_path);
-
-  let problem_name = &opts.problem;
-
-  let nix_expr = format!(
-    r#"
-      {{ srcPath, languageName }}:
-      let
-        flake = builtins.getFlake "{final_flake_ref}";
-        hullLib = (flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}};
-        pkgs = flake.inputs.nixpkgs.legacyPackages.${{builtins.currentSystem}};
-        problem = flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem_name}.config;
-
-        wasm = hullLib.compile.executable.drv {{
-          languages = problem.languages;
-          name = "hull-run-${{builtins.baseNameOf srcPath}}";
-          src = (/. + srcPath);
-          inherit languageName;
-          includes = problem.includes;
-          extraObjects = [];
-        }};
-      in
-      wasm
-    "#
-  );
-  let mut build_cmd = BuildCommand::new()
-    .impure(true) // For srcPath
-    .expr_stdin(&nix_expr)
-    .argstr("srcPath", src_path_str)
-    .argstr("problemName", &opts.problem);
-
-  build_cmd = match &opts.language {
-    Some(lang) => build_cmd.argstr("languageName", lang),
-    None => build_cmd.arg("languageName", "null"),
-  };
-
-  let wasm_path = build_cmd
-    .print_out_paths(true)
-    .no_link(true)
-    .run_and_capture_stdout()
-    .context("Failed to execute `nix build` for compilation")?;
+  let wasm_path = compile_source(&opts.source)?;
 
   info!("Precompiling program");
   let cwasm_path = cache_native_module(&wasm_path)?;

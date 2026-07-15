@@ -52,6 +52,36 @@ hull judge solution/std.20.cpp
 
 Use `--json` to print JSON instead of a table.
 
+== Compiling a Solution
+
+`hull compile` compiles one source file to a WebAssembly executable using the selected problem's languages and includes.
+
+```bash
+hull compile solution/std.20.cpp
+```
+
+The default output is `std.wasm` in the working directory. Use `-p` to select a problem, `-l` to select a language instead of detecting it from the source suffix, and `-o` to select another output path:
+
+```bash
+hull compile -p example -l cpp.20 -o solution.wasm solution/std.20.cpp
+```
+
+Use `-o -` to write the raw WASM module to standard output:
+
+```bash
+hull compile -o - solution/std.20.cpp > solution.wasm
+```
+
+== Running a Solution
+
+`hull run` uses the same problem, language, and source compilation options as `hull compile`, then executes the resulting WASM module in Hull's runner.
+
+```bash
+hull run -p example -l cpp.20 solution/std.20.cpp
+```
+
+Arguments after the source path are passed to the program. Prefix arguments that start with `-` with a `--` separator. Use `--tick-limit`, `--memory-limit`, and `--show-status` to control and inspect execution.
+
 == Stress Testing
 
 `hull stress` runs a generator repeatedly, builds temporary test cases, compares one or more solutions against the standard solution, and stops on the first non-accepted result.
