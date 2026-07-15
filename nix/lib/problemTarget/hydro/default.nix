@@ -44,6 +44,12 @@
   # Whether to emit a single zip archive or an unpacked directory tree.
   zipped ? true,
 
+  # XZ compression level used for tar.xz archives.
+  xzCompressionLevel ? 6,
+
+  # ZIP compression level used for the outer archive.
+  zipCompressionLevel ? 9,
+
   # Tick-to-millisecond conversion used for Hydro config.yaml.
   ticksPerMs ? 1.0e7,
 
@@ -101,6 +107,12 @@
   allowedLanguages ? null,
 }:
 
+assert lib.assertMsg (
+  builtins.isInt xzCompressionLevel && xzCompressionLevel >= 0 && xzCompressionLevel <= 9
+) "hydro xzCompressionLevel must be an integer from 0 to 9";
+assert lib.assertMsg (
+  builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
+) "hydro zipCompressionLevel must be an integer from 0 to 9";
 {
   _type = "hullProblemTarget";
   __functor =
@@ -242,7 +254,7 @@
           cp ${solution.src} "$tmpdir/bundle/solutions/${baseNameOf (toString solution.src)}"
         '') (builtins.attrValues problem.solutions)}
 
-        tar -C "$tmpdir" -cJf "$out" bundle
+        XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmpdir" -cJf "$out" bundle
       '';
 
       targetClosure = pkgs.closureInfo {
@@ -296,7 +308,7 @@
           fi
         done < <(find "$store_dir" -type l -print0)
 
-        tar -C "$tmpdir" -cJf "$out" nix
+        XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmpdir" -cJf "$out" nix
       '';
 
       problemYamlContent = {
@@ -480,7 +492,7 @@
             ''
               (
                 cd "$tmpdir"
-                7zz a -tzip -mx=9 -mmt=on "$out" . -x!testdata/hull-bundle.tar.xz -x!testdata/hull-runtime-store.tar.xz
+                7zz a -tzip -mx=${toString zipCompressionLevel} -mmt=on "$out" . -x!testdata/hull-bundle.tar.xz -x!testdata/hull-runtime-store.tar.xz
                 7zz a -tzip -mx=0 "$out" testdata/hull-bundle.tar.xz testdata/hull-runtime-store.tar.xz
               )
             ''

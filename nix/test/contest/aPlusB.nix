@@ -17,6 +17,8 @@
     cnoiParticipant = hull.contestTarget.cnoiParticipant {
       targetSystem = "x86_64-linux";
       archive = "zip";
+      xzCompressionLevel = 0;
+      zipCompressionLevel = 0;
       enableSelfEval = true;
       displayLanguages = [
         "en"
@@ -30,6 +32,8 @@
     cnoiParticipantAarch64 = hull.contestTarget.cnoiParticipant {
       targetSystem = "aarch64-linux";
       archive = "zip";
+      xzCompressionLevel = 0;
+      zipCompressionLevel = 0;
       enableSelfEval = true;
       displayLanguages = [
         "en"

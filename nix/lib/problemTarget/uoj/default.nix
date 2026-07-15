@@ -31,6 +31,12 @@
   # Whether to emit a single zip archive or an unpacked directory tree.
   zipped ? true,
 
+  # XZ compression level used for the bundled Nix store.
+  xzCompressionLevel ? 6,
+
+  # ZIP compression level used for the outer archive.
+  zipCompressionLevel ? 9,
+
   # Number of testcase judging threads used by the bundled UOJ target.
   # 0 means auto-detect based on available_parallelism().
   judgerThreads ? 0,
@@ -62,6 +68,12 @@
   extraDownloadFiles ? { },
 }:
 
+assert lib.assertMsg (
+  builtins.isInt xzCompressionLevel && xzCompressionLevel >= 0 && xzCompressionLevel <= 9
+) "uoj xzCompressionLevel must be an integer from 0 to 9";
+assert lib.assertMsg (
+  builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
+) "uoj zipCompressionLevel must be an integer from 0 to 9";
 {
   _type = "hullProblemTarget";
   __functor =
@@ -336,7 +348,7 @@
 
         cp -R -P --no-preserve=ownership ${judgeBundleData}/. "$tmpdir/hull-bundle/"
         chmod -R u+rwX "$tmpdir/hull-bundle"
-        tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
+        XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
         rm -rf "$tmpdir/hull-bundle/nix/store"
         rmdir "$tmpdir/hull-bundle/nix"
         cp ${pkgs.writeText "problem.conf" problemConf} "$tmpdir/problem.conf"
@@ -365,7 +377,7 @@
             ''
               (
                 cd "$tmpdir"
-                7zz a -tzip -mx=9 -mmt=on "$out" . -x!hull-bundle/nix-store.tar.xz
+                7zz a -tzip -mx=${toString zipCompressionLevel} -mmt=on "$out" . -x!hull-bundle/nix-store.tar.xz
                 7zz a -tzip -mx=0 "$out" hull-bundle/nix-store.tar.xz
               )
             ''

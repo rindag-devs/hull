@@ -26,8 +26,32 @@ jobs:
       - name: Build all test problems
         run: nix develop .#default --command just all-problems
 
+  integration:
+    name: Integration (${{ matrix.test }})
+    runs-on: ubuntu-26.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - hydro
+          - lemon
+          - uoj
+          - cnoi
+          - cross-hydro
+          - cross-lemon
+          - cross-uoj
+          - cross-cnoi
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Lix
+        uses: canidae-solutions/lix-quick-install-action@v4
+
       - name: Allow unprivileged user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
-      - name: Integration tests
-        run: nix develop .#default --command just integration
+      - name: Integration test
+        run: nix develop .#default --command just integration '${{ matrix.test }}'

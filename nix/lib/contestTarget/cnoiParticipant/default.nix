@@ -72,8 +72,20 @@
   # Packaging mode for the target output.
   # `null` outputs a directory, `"tar.xz"` creates a tar.xz archive, and `"zip"` creates a zip archive.
   archive ? null,
+
+  # XZ compression level used for tar.xz archives.
+  xzCompressionLevel ? 6,
+
+  # ZIP compression level used for zip archives.
+  zipCompressionLevel ? 9,
 }:
 
+assert lib.assertMsg (
+  builtins.isInt xzCompressionLevel && xzCompressionLevel >= 0 && xzCompressionLevel <= 9
+) "cnoiParticipant xzCompressionLevel must be an integer from 0 to 9";
+assert lib.assertMsg (
+  builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
+) "cnoiParticipant zipCompressionLevel must be an integer from 0 to 9";
 {
   _type = "hullContestTarget";
   __functor =
@@ -449,7 +461,7 @@
         cp -r --no-preserve=ownership ${outputDir}/. "$tmp_archive_dir/"
         chmod -R u+rwX,go+rX "$tmp_archive_dir"
         rm -rf "$out"
-        tar -C "$tmp_archive_dir" -cJf "$out" .
+        XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmp_archive_dir" -cJf "$out" .
       ''
     else if archiveMode == "zip" then
       pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.zip"
@@ -460,7 +472,7 @@
           cp -r --no-preserve=ownership ${outputDir}/. "$tmp_archive_dir/"
           chmod -R u+rwX,go+rX "$tmp_archive_dir"
           rm -rf "$out"
-          7zz a -tzip -mx=9 -mmt=on -snl "$out" "$tmp_archive_dir/."
+          7zz a -tzip -mx=${toString zipCompressionLevel} -mmt=on -snl "$out" "$tmp_archive_dir/."
         ''
     else
       outputDir;
