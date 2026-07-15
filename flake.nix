@@ -257,6 +257,7 @@
           };
 
           hullContests = {
+            test.aPlusBContest = hull.evalContest ./nix/test/contest/aPlusB.nix { };
             test.allProblems = hull.evalContest ./nix/test/contest/allProblems.nix { };
           };
         };

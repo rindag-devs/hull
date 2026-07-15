@@ -5,12 +5,16 @@ case $(uname -m) in
 x86_64)
   local_suffix=X86_64
   cross_suffix=Aarch64
+  local_cnoi_target=cnoiParticipant
+  cross_cnoi_target=cnoiParticipantAarch64
   local_machine='Advanced Micro Devices X86-64'
   cross_machine='AArch64'
   ;;
 aarch64)
   local_suffix=Aarch64
   cross_suffix=X86_64
+  local_cnoi_target=cnoiParticipantAarch64
+  cross_cnoi_target=cnoiParticipant
   local_machine='AArch64'
   cross_machine='Advanced Micro Devices X86-64'
   ;;
@@ -23,7 +27,7 @@ esac
 build_target() {
   root=$1
   target=$2
-  nix develop --command cargo run -- build -p test.aPlusB --target "$target" \
+  cargo run -- build -p test.aPlusB --target "$target" \
     --out-link "$root/artifact" --stop-on-failure
   test -L "$root/artifact"
   mkdir "$root/package"
@@ -32,6 +36,16 @@ build_target() {
   else
     7zz x -o"$root/package" "$root/artifact" >/dev/null
   fi
+}
+
+build_contest_target() {
+  root=$1
+  target=$2
+  cargo run -- build-contest -c test.aPlusBContest --target "$target" \
+    --out-link "$root/artifact" --stop-on-failure
+  test -L "$root/artifact"
+  mkdir "$root/package"
+  7zz x -o"$root/package" "$root/artifact" >/dev/null
 }
 
 run_test() {
@@ -133,7 +147,7 @@ test_hydro() {
   tar -C "$root/bundle" -xJf "$root/package/testdata/hull-bundle.tar.xz"
   mkdir "$root/work"
   cp "$root/bundle/bundle/solutions/std.20.cpp" "$root/work/foo.cpp"
-  hydro_language=$(nix develop --command jq -r '.hydroToHullLanguageMap | to_entries[] | select(.value == "cpp.20") | .key' \
+  hydro_language=$(jq -r '.hydroToHullLanguageMap | to_entries[] | select(.value == "cpp.20") | .key' \
     <"$root/bundle/bundle/hydro-language-map.json" | head -n 1)
   test -n "$hydro_language"
   (
@@ -189,6 +203,23 @@ test_uoj() {
   ! grep -q '^error ' "$root/result/result.txt"
 }
 
+test_cnoi() {
+  root=$1
+  build_contest_target "$root" "$local_cnoi_target"
+  require_executable "$root/package/selfeval"
+  require_machines "$root/package/.selfeval-bundle/nix/store" "$local_machine"
+
+  mkdir -p "$root/participant/aPlusB"
+  cp nix/test/problem/aPlusB/solution/std.20.cpp "$root/participant/aPlusB/aPlusB.cpp"
+  "$root/package/selfeval" "$root/participant" --json >"$root/report.json"
+  jq -e '
+    .score == .full_score and
+    (.problems | length == 1) and
+    .problems[0].name == "aPlusB" and
+    .problems[0].score == .problems[0].full_score
+  ' "$root/report.json" >/dev/null
+}
+
 test_cross_hydro() {
   root=$1
   build_target "$root" "hydro$cross_suffix"
@@ -211,14 +242,23 @@ test_cross_uoj() {
   require_archive_machines "$root/package/hull-bundle/nix-store.tar.xz" "$cross_machine" "$root"
 }
 
+test_cross_cnoi() {
+  root=$1
+  build_contest_target "$root" "$cross_cnoi_target"
+  require_executable "$root/package/selfeval"
+  require_machines "$root/package/.selfeval-bundle/nix/store" "$cross_machine"
+}
+
 run_named_test() {
   case $1 in
   hydro) run_test hydro test_hydro ;;
   lemon) run_test lemon test_lemon ;;
   uoj) run_test uoj test_uoj ;;
+  cnoi) run_test cnoi test_cnoi ;;
   cross-hydro) run_test cross-hydro test_cross_hydro ;;
   cross-lemon) run_test cross-lemon test_cross_lemon ;;
   cross-uoj) run_test cross-uoj test_cross_uoj ;;
+  cross-cnoi) run_test cross-cnoi test_cross_cnoi ;;
   *)
     printf 'unknown integration test: %s\n' "$1" >&2
     return 2
@@ -233,6 +273,6 @@ if [ "$#" -gt 0 ]; then
   exit 0
 fi
 
-for name in hydro lemon uoj cross-hydro cross-lemon cross-uoj; do
+for name in hydro lemon uoj cnoi cross-hydro cross-lemon cross-uoj cross-cnoi; do
   run_named_test "$name"
 done

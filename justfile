@@ -31,4 +31,4 @@ all-problems *extra_args:
   cargo run -- build-contest -c test.allProblems {{extra_args}}
 
 integration *tests:
-  nix develop --command scripts/integration_test.sh {{tests}}
+  scripts/integration_test.sh {{tests}}
