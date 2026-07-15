@@ -20,4 +20,5 @@ pub mod judge;
 pub mod patch;
 pub mod run;
 pub mod run_wasm;
+pub mod source_config;
 pub mod stress;

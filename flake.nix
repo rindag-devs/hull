@@ -288,7 +288,8 @@
       formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
       hullProblems = forEachSystem (system: (mkPerSystem system).hullProblems);
       hullContests = forEachSystem (system: (mkPerSystem system).hullContests);
-      templates = import ./nix/templates;
-      defaultTemplate = self.templates.basic;
+      templates = (import ./nix/templates) // {
+        default = self.templates.basic;
+      };
     };
 }

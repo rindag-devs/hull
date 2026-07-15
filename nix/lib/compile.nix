@@ -15,10 +15,15 @@
 
 {
   hull,
+  pkgs,
+  hullPkgs,
+  targetHullPkgsForSystem,
   ...
 }:
 
 let
+  buildHullPkgs = targetHullPkgsForSystem pkgs.stdenv.buildPlatform.system;
+
   getLangInfo =
     src: languages:
     let
@@ -27,6 +32,17 @@ let
     in
     {
       inherit languageName language;
+    };
+
+  compilerFor =
+    language:
+    language.compiler {
+      inherit
+        hull
+        pkgs
+        hullPkgs
+        buildHullPkgs
+        ;
     };
 
   sortLanguageNamesBySpecificity =
@@ -52,7 +68,7 @@ let
       includes,
       extraObjects,
     }:
-    languages.${languageName}.compile.executable.script {
+    (compilerFor languages.${languageName}).executable.script {
       inherit
         srcExpr
         outExpr
@@ -118,7 +134,7 @@ in
       let
         langInfo = getLangInfo src languages;
       in
-      langInfo.language.compile.object.drv {
+      (compilerFor langInfo.language).object.drv {
         inherit name src includes;
       };
 
@@ -141,7 +157,7 @@ in
               language = languages.${languageName};
             };
       in
-      langInfo.language.compile.object.script {
+      (compilerFor langInfo.language).object.script {
         inherit srcExpr outExpr includes;
       };
   };
@@ -153,13 +169,21 @@ in
         languages,
         name,
         src,
+        languageName ? null,
         includes,
         extraObjects,
       }:
       let
-        langInfo = getLangInfo src languages;
+        langInfo =
+          if languageName == null then
+            getLangInfo src languages
+          else
+            {
+              inherit languageName;
+              language = languages.${languageName};
+            };
       in
-      langInfo.language.compile.executable.drv {
+      (compilerFor langInfo.language).executable.drv {
         inherit
           name
           src

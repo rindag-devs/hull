@@ -51,8 +51,6 @@ pkgs.runCommandLocal "wasm32-wasi-wasip1-clang-${llvmPackages.clang.version}" { 
     exec "$wrapper_dir/../toolchain/bin/clang++" \
       -stdlib=libstdc++ \
       -nostdlib++ \
-      -lstdc++ \
-      -lsupc++ \
       -fno-exceptions \
       -resource-dir="$wrapper_dir/../resource-dir" \
       ${lib.escapeShellArgs commonFlags} \

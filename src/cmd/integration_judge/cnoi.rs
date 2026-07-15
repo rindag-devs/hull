@@ -24,6 +24,7 @@ use serde::Serialize;
 
 use crate::report::{JudgeCliReport, JudgeCliSubtaskResult, JudgeCliTestCaseResult};
 use crate::runtime::analysis::{aggregate_subtask_results, run_judge, run_prepare_solution};
+use crate::runtime::bundle_judge::hull_language_extension;
 use crate::runtime::metadata::{load_bundle_contest_spec, load_bundle_judge_problem_spec};
 use crate::runtime::types::{
   BundleJudgeProblemSpec, BundleLanguageSpec, JudgeStatus, ProblemSpec, ProgramSpec, SolutionSpec,
@@ -182,7 +183,7 @@ fn evaluate_problem(
   let local_source_path = workspace.root().join("participant-src").join(format!(
     "{}.{}",
     problem.name,
-    hull_language.split('.').rev().collect::<Vec<_>>().join(".")
+    hull_language_extension(hull_language)
   ));
   if let Some(parent) = local_source_path.parent() {
     fs::create_dir_all(parent)?;

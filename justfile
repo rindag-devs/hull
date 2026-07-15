@@ -18,6 +18,7 @@ update:
   cargo update
 
 lint:
+  nix flake check --no-build
   cargo check
   cargo test
   cargo clippy --all-targets --all-features -- -D warnings

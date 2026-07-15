@@ -96,15 +96,11 @@ pub fn run(opts: &RunOpts) -> Result<()> {
         pkgs = flake.inputs.nixpkgs.legacyPackages.${{builtins.currentSystem}};
         problem = flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem_name}.config;
 
-        langName = if languageName != null
-                   then languageName
-                   else hullLib.language.matchBaseName (builtins.baseNameOf srcPath) problem.languages;
-
-        lang = problem.languages.${{langName}} or (throw ("Language '" + langName + "' not found for problem '{problem_name}'"));
-
-        wasm = lang.compile.executable {{
+        wasm = hullLib.compile.executable.drv {{
+          languages = problem.languages;
           name = "hull-run-${{builtins.baseNameOf srcPath}}";
           src = (/. + srcPath);
+          inherit languageName;
           includes = problem.includes;
           extraObjects = [];
         }};

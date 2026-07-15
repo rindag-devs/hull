@@ -193,6 +193,11 @@ pub fn resolve_bundled_path(bundle_root: &Path, path: &str) -> String {
   }
 }
 
+/// Converts a Hull language identifier into its canonical source extension.
+pub fn hull_language_extension(hull_language: &str) -> String {
+  hull_language.split('.').rev().collect::<Vec<_>>().join(".")
+}
+
 /// Copies one participant submission into the bundle judging workspace.
 pub fn copy_submission_source(
   workspace: &RuntimeWorkspace,
@@ -200,7 +205,7 @@ pub fn copy_submission_source(
   submission_file: &Path,
   hull_language: &str,
 ) -> Result<String> {
-  let extension = hull_language.split('.').rev().collect::<Vec<_>>().join(".");
+  let extension = hull_language_extension(hull_language);
   let target = workspace
     .root()
     .join("participant-src")
@@ -649,4 +654,14 @@ pub fn missing_language_error(language: &str, system_name: &str) -> anyhow::Erro
   anyhow!(
     "{system_name} language `{language}` is configured as unsupported because Hull's bundled judger does not support it"
   )
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn language_extension() {
+    assert_eq!(hull_language_extension("cpp.20"), "20.cpp");
+  }
 }

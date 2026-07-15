@@ -56,6 +56,7 @@ fn main() -> Result<()> {
     cli::Command::Patch(opts) => cmd::patch::run(opts),
     cli::Command::Run(opts) => cmd::run::run(opts),
     cli::Command::RunWasm(opts) => cmd::run_wasm::run(opts),
+    cli::Command::SourceConfig(opts) => cmd::source_config::run(opts),
     cli::Command::Stress(opts) => cmd::stress::run(opts),
   }
 }

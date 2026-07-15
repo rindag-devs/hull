@@ -4,14 +4,14 @@
     {
       "display-name": "C",
       "file-name-suffix": ".c",
-      "display-compile-arguments": "gcc -lm -O3 -std=c23",
-      "hull-language": "c.23.s64m"
+      "display-compile-arguments": "wasm32-wasi-wasip1-clang -O3 -std=c23 -Wl,-z,stack-size=67108864",
+      "hull-language": "c.23"
     },
     {
       "display-name": "C++",
       "file-name-suffix": ".cpp",
-      "display-compile-arguments": "g++ -lm -O3 -std=c++23",
-      "hull-language": "cpp.23.s64m"
+      "display-compile-arguments": "wasm32-wasi-wasip1-clang++ -O3 -std=c++26 -Wl,-z,stack-size=67108864",
+      "hull-language": "cpp.26"
     }
   ]
 }

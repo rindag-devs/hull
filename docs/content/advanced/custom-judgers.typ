@@ -41,7 +41,7 @@ Basic skeleton:
         runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils targetPkgs.jq ];
         text = { targetHull, ... }: ''
           ${targetHull.compile.executableMatchScript {
-            languages = targetHull.language.retarget { inherit targetHull; } config.languages;
+            languages = config.languages;
             srcExpr = ''"$HULL_SOLUTION_SRC"'';
             outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
             includes = config.includes;
@@ -130,7 +130,7 @@ Example with an executable path:
 prepareSolution =
   solution:
   let
-    wasm = hull.compile.executable {
+    wasm = hull.compile.executable.drv {
       inherit (config) languages includes;
       src = solution.src;
       name = "${config.name}-solution-${solution.name}";

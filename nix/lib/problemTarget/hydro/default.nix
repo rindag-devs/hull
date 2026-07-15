@@ -49,36 +49,36 @@
 
   # Mapping from Hydro language ids to Hull language identifiers.
   hydroToHullLanguageMap ? {
-    "c.c99" = "c.99.s64m";
-    "c.c99o2" = "c.99.s64m";
-    "c.c99o3" = "c.99.s64m";
-    "c.c11" = "c.11.s64m";
-    "c.c11o2" = "c.11.s64m";
-    "c.c11o3" = "c.11.s64m";
-    "c.c17" = "c.17.s64m";
-    "c.c17o2" = "c.17.s64m";
-    "c.c17o3" = "c.17.s64m";
-    "c.c23" = "c.23.s64m";
-    "c.c23o2" = "c.23.s64m";
-    "c.c23o3" = "c.23.s64m";
-    "cc.cc11" = "cpp.11.s64m";
-    "cc.cc11o2" = "cpp.11.s64m";
-    "cc.cc11o3" = "cpp.11.s64m";
-    "cc.cc14" = "cpp.14.s64m";
-    "cc.cc14o2" = "cpp.14.s64m";
-    "cc.cc14o3" = "cpp.14.s64m";
-    "cc.cc17" = "cpp.17.s64m";
-    "cc.cc17o2" = "cpp.17.s64m";
-    "cc.cc17o3" = "cpp.17.s64m";
-    "cc.cc20" = "cpp.20.s64m";
-    "cc.cc20o2" = "cpp.20.s64m";
-    "cc.cc20o3" = "cpp.20.s64m";
-    "cc.cc23" = "cpp.23.s64m";
-    "cc.cc23o2" = "cpp.23.s64m";
-    "cc.cc23o3" = "cpp.23.s64m";
-    "cc.cc26" = "cpp.26.s64m";
-    "cc.cc26o2" = "cpp.26.s64m";
-    "cc.cc26o3" = "cpp.26.s64m";
+    "c.c99" = "c.99";
+    "c.c99o2" = "c.99";
+    "c.c99o3" = "c.99";
+    "c.c11" = "c.11";
+    "c.c11o2" = "c.11";
+    "c.c11o3" = "c.11";
+    "c.c17" = "c.17";
+    "c.c17o2" = "c.17";
+    "c.c17o3" = "c.17";
+    "c.c23" = "c.23";
+    "c.c23o2" = "c.23";
+    "c.c23o3" = "c.23";
+    "cc.cc11" = "cpp.11";
+    "cc.cc11o2" = "cpp.11";
+    "cc.cc11o3" = "cpp.11";
+    "cc.cc14" = "cpp.14";
+    "cc.cc14o2" = "cpp.14";
+    "cc.cc14o3" = "cpp.14";
+    "cc.cc17" = "cpp.17";
+    "cc.cc17o2" = "cpp.17";
+    "cc.cc17o3" = "cpp.17";
+    "cc.cc20" = "cpp.20";
+    "cc.cc20o2" = "cpp.20";
+    "cc.cc20o3" = "cpp.20";
+    "cc.cc23" = "cpp.23";
+    "cc.cc23o2" = "cpp.23";
+    "cc.cc23o3" = "cpp.23";
+    "cc.cc26" = "cpp.26";
+    "cc.cc26o2" = "cpp.26";
+    "cc.cc26o3" = "cpp.26";
   },
 
   # Participant solution label shown in bundled Hull reports.

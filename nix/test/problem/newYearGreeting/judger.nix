@@ -30,13 +30,10 @@
           ];
         text =
           { targetHull, ... }:
-          let
-            targetLanguages = targetHull.language.retarget { inherit targetHull; } config.languages;
-          in
           ''
             cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
             ${targetHull.compile.executableMatchScript {
-              languages = targetLanguages;
+              languages = config.languages;
               srcExpr = ''"$HULL_SOLUTION_SRC"'';
               outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
               includes = config.includes;

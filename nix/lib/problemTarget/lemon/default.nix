@@ -38,8 +38,8 @@
   compilerConfigurationName ? "default",
   # Mapping from Lemon source extension to Hull language.
   lemonToHullLanguageMap ? {
-    c = "c.23.s64m";
-    cpp = "cpp.26.s64m";
+    c = "c.23";
+    cpp = "cpp.26";
   },
 }:
 

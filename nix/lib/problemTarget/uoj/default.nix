@@ -41,21 +41,21 @@
   # Mapping from UOJ language names to Hull language identifiers.
   # null means the UOJ language is explicitly unsupported by the bundled UOJ target.
   uojToHullLanguageMap ? {
-    "C" = "c.23.s64m";
-    "C89" = "c.89.s64m";
-    "C99" = "c.99.s64m";
-    "C11" = "c.11.s64m";
-    "C17" = "c.17.s64m";
-    "C23" = "c.23.s64m";
-    "C++" = "cpp.26.s64m";
-    "C++98" = "cpp.98.s64m";
-    "C++03" = "cpp.03.s64m";
-    "C++11" = "cpp.11.s64m";
-    "C++14" = "cpp.14.s64m";
-    "C++17" = "cpp.17.s64m";
-    "C++20" = "cpp.20.s64m";
-    "C++23" = "cpp.23.s64m";
-    "C++26" = "cpp.26.s64m";
+    "C" = "c.23";
+    "C89" = "c.89";
+    "C99" = "c.99";
+    "C11" = "c.11";
+    "C17" = "c.17";
+    "C23" = "c.23";
+    "C++" = "cpp.26";
+    "C++98" = "cpp.98";
+    "C++03" = "cpp.03";
+    "C++11" = "cpp.11";
+    "C++14" = "cpp.14";
+    "C++17" = "cpp.17";
+    "C++20" = "cpp.20";
+    "C++23" = "cpp.23";
+    "C++26" = "cpp.26";
   },
 
   # A map of name to file path. These files will be placed in `download/`.

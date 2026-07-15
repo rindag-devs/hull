@@ -17,7 +17,8 @@ use clap::{Parser, Subcommand};
 
 use crate::cmd::{
   build::BuildOpts, build_contest::BuildContestOpts, integration_judge::IntegrationJudgeCommand,
-  judge::JudgeOpts, patch::PatchOpts, run::RunOpts, run_wasm::RunWasmOpts, stress::StressOpts,
+  judge::JudgeOpts, patch::PatchOpts, run::RunOpts, run_wasm::RunWasmOpts,
+  source_config::SourceConfigOpts, stress::StressOpts,
 };
 use crate::interactive::InteractiveMode;
 
@@ -71,6 +72,8 @@ pub enum Command {
     long_about = "Execute a WebAssembly module directly with Hull's runner, configurable stdio, tick and memory limits, optional sandbox files, and a JSON run report."
   )]
   RunWasm(RunWasmOpts),
+  /// Extracts Hull configuration from source comments.
+  SourceConfig(SourceConfigOpts),
   #[command(
     about = "Run judge-system integration helpers",
     long_about = "Run hidden helpers used by exported judge-system bundles and participant self-evaluation launchers."
@@ -99,6 +102,30 @@ fn parse_interactive_mode(value: &str) -> Result<InteractiveMode, String> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::cmd::source_config::SourceLanguage;
+
+  #[test]
+  fn source_config_cli() {
+    let c_opts = Opts::try_parse_from(["hull", "source-config", "c"])
+      .expect("source-config c subcommand parses");
+    assert!(matches!(
+      c_opts.command,
+      Command::SourceConfig(SourceConfigOpts {
+        language: SourceLanguage::C
+      })
+    ));
+
+    let cpp_opts = Opts::try_parse_from(["hull", "source-config", "cpp"])
+      .expect("source-config cpp subcommand parses");
+    assert!(matches!(
+      cpp_opts.command,
+      Command::SourceConfig(SourceConfigOpts {
+        language: SourceLanguage::Cpp
+      })
+    ));
+
+    assert!(Opts::try_parse_from(["hull", "source-config", "unsupported"]).is_err());
+  }
 
   #[test]
   fn judge_cli() {

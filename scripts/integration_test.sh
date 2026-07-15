@@ -133,7 +133,7 @@ test_hydro() {
   tar -C "$root/bundle" -xJf "$root/package/testdata/hull-bundle.tar.xz"
   mkdir "$root/work"
   cp "$root/bundle/bundle/solutions/std.20.cpp" "$root/work/foo.cpp"
-  hydro_language=$(nix develop --command jq -r '.hydroToHullLanguageMap | to_entries[] | select(.value == "cpp.20.s64m") | .key' \
+  hydro_language=$(nix develop --command jq -r '.hydroToHullLanguageMap | to_entries[] | select(.value == "cpp.20") | .key' \
     <"$root/bundle/bundle/hydro-language-map.json" | head -n 1)
   test -n "$hydro_language"
   (

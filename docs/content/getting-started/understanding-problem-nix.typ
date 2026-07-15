@@ -47,6 +47,51 @@ Hull relies on several key programs to manage the problem's lifecycle. You provi
 - `validator`: The program that reads a test case input file and verifies that it conforms to the problem's specified format and constraints. This is a critical step to ensure all test data is valid.
 - `generators`: An attribute set of input generators.
 
+== C and C++ Compilation
+
+`hull.language.c` and `hull.language.cpp` are factories. An empty instance uses Hull's defaults. The standard is derived from the source suffix, such as `.17.c` or `.20.cpp`.
+
+```nix
+{
+  languages =
+    hull.language.c { }
+    // hull.language.cpp {
+      optimize.default = _: "2";
+      fastMath.default = _: true;
+    };
+}
+```
+
+Each factory option has `default = context: value;` and `validate = valueExpression: shellCode;` fields. Overrides are merged by field. The context contains `language` (`"c"` or `"cpp"`) and the suffix-derived `standard`.
+
+The supported options are:
+
+- `optimize`: `"0"`, `"1"`, `"2"`, `"3"`, `"g"`, `"s"`, or `"z"`; default `"3"`.
+- `standard`: a Clang C or C++ standard, including GNU variants. Prefer a versioned source suffix; set this option for variants such as `"gnu++20"`.
+- `stackSize`: executable stack size in bytes; default `67108864`.
+- `pageSize`: WebAssembly page size; default `65536`.
+- `globalBase`: WebAssembly global base address; default `1024`.
+- `standardIncludes`: whether standard include paths are available; default `true`. `false` adds `-nostdinc`.
+- `standardLibraries`: whether standard libraries are linked; default `true`. `false` adds `-nostdlib`.
+- `freestanding`: whether to compile with `-ffreestanding`; default `false`.
+- `fastMath`: whether to compile with `-ffast-math`; default `false`.
+
+`optimize`, `standard`, `standardIncludes`, `freestanding`, and `fastMath` affect object and executable compilation. `stackSize`, `pageSize`, `globalBase`, and `standardLibraries` affect executable linking only.
+
+A source file can override an instantiated factory through its first marked C or C++ comment:
+
+```cpp
+/*
+ * hull_source_config {
+ *   "optimize": "2",
+ *   "standard": "gnu++20",
+ *   "fastMath": true
+ * }
+ */
+```
+
+The payload must be a JSON object. Values must be strings, booleans, or signed 64-bit integers. Unknown keys, duplicate keys, invalid values, and unsafe text fail compilation. A `// hull_source_config ...` comment must contain its complete JSON payload on one line.
+
 == Test Data
 
 The `testCases` attribute set is where you define every test case for your problem. Each test case can be specified manually or generated programmatically.

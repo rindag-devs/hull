@@ -1129,7 +1129,7 @@ mod tests {
     let runtime_solutions = build_runtime_solutions(
       Path::new("/bundle-root"),
       &problem,
-      "/tmp/submission.c.89.s64m",
+      "/tmp/submission.89.c",
       "uoj",
     );
 
@@ -1140,7 +1140,7 @@ mod tests {
       .iter()
       .find(|solution| solution.name == "uoj")
       .expect("participant solution should exist");
-    assert_eq!(participant_solution.src, "/tmp/submission.c.89.s64m");
+    assert_eq!(participant_solution.src, "/tmp/submission.89.c");
     assert!(!participant_solution.main_correct_solution);
   }
 
