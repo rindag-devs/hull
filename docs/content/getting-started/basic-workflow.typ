@@ -82,6 +82,12 @@ hull run -p example -l cpp.20 solution/std.20.cpp
 
 Arguments after the source path are passed to the program. Prefix arguments that start with `-` with a `--` separator. Use `--tick-limit`, `--memory-limit`, and `--show-status` to control and inspect execution.
 
+The program can access only its working directory. It defaults to the directory where Hull was started; use `--cwd` to select another host directory:
+
+```bash
+hull run --cwd sandbox solution/std.20.cpp
+```
+
 == Stress Testing
 
 `hull stress` runs a generator repeatedly, builds temporary test cases, compares one or more solutions against the standard solution, and stops on the first non-accepted result.

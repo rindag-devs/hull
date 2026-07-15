@@ -155,16 +155,24 @@ mod tests {
       "test.aPlusB",
       "-l",
       "cpp.20",
+      "--cwd",
+      "sandbox",
       "solution.20.cpp",
       "argument",
     ])
     .expect("run command parses");
     assert!(matches!(
       opts.command,
-      Command::Run(RunOpts { source, args, .. })
+      Command::Run(RunOpts {
+        source,
+        cwd,
+        args,
+        ..
+      })
         if source.problem == "test.aPlusB"
           && source.language.as_deref() == Some("cpp.20")
           && source.src_path == "solution.20.cpp"
+          && cwd.as_deref() == Some(std::path::Path::new("sandbox"))
           && args == ["argument"]
     ));
   }
