@@ -31,8 +31,8 @@
   # Whether to emit a single zip archive or an unpacked directory tree.
   zipped ? true,
 
-  # XZ compression level used for the bundled Nix store.
-  xzCompressionLevel ? 6,
+  # Zstandard compression level used for the bundled Nix store.
+  zstdCompressionLevel ? 19,
 
   # ZIP compression level used for the outer archive.
   zipCompressionLevel ? 9,
@@ -69,8 +69,8 @@
 }:
 
 assert lib.assertMsg (
-  builtins.isInt xzCompressionLevel && xzCompressionLevel >= 0 && xzCompressionLevel <= 9
-) "uoj xzCompressionLevel must be an integer from 0 to 9";
+  builtins.isInt zstdCompressionLevel && zstdCompressionLevel >= 1 && zstdCompressionLevel <= 22
+) "uoj zstdCompressionLevel must be an integer from 1 to 22";
 assert lib.assertMsg (
   builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
 ) "uoj zipCompressionLevel must be an integer from 0 to 9";
@@ -233,19 +233,32 @@ assert lib.assertMsg (
       judgeRunnerStorePath = builtins.unsafeDiscardStringContext (toString judgeRunner);
       judgeRunnerRelative = "/nix/store/${baseNameOf judgeRunnerStorePath}/bin/hull-uoj-integration-judge-runner-${problem.name}";
 
+      targetClosureRoots = [
+        judgeRunner
+        targetHullPkgs.default
+        targetHullPkgs.wasm32-wasi-wasip1.clang
+        nixUserChroot
+        problem.checker.wasm
+        problem.validator.wasm
+        targetJudger.prepareSolution
+        targetJudger.generateOutputs
+        targetJudger.judge
+      ];
       targetClosure = pkgs.closureInfo {
-        rootPaths = [
-          judgeRunner
-          targetHullPkgs.default
-          targetHullPkgs.wasm32-wasi-wasip1.clang
-          nixUserChroot
-          problem.checker.wasm
-          problem.validator.wasm
-          targetJudger.prepareSolution
-          targetJudger.generateOutputs
-          targetJudger.judge
-        ];
+        rootPaths = targetClosureRoots;
       };
+      runtimeId = builtins.hashString "sha256" (
+        builtins.toJSON {
+          closure = builtins.unsafeDiscardStringContext (toString targetClosure);
+          nixUserChroot = nixUserChrootRelative;
+          runner = judgeRunnerRelative;
+        }
+      );
+      zstdCompressionArgs = [
+        "-${toString zstdCompressionLevel}"
+        "-T0"
+      ]
+      ++ lib.optional (zstdCompressionLevel >= 20) "--ultra";
 
       problemConf = ''
         use_builtin_judger off
@@ -293,13 +306,6 @@ assert lib.assertMsg (
         '') samples
       );
 
-      judgerShellScript = pkgs.replaceVarsWith {
-        src = ./judger.sh.in;
-        replacements = {
-          NIX_USER_CHROOT_STORE_SUFFIX = lib.removePrefix "/nix/store" nixUserChrootRelative;
-          CUSTOM_JUDGE_RUNNER_RELATIVE = judgeRunnerRelative;
-        };
-      };
     in
     pkgs.runCommandLocal
       ("hull-problemTargetOutput-${problem.name}-uoj" + lib.optionalString zipped ".zip")
@@ -307,6 +313,7 @@ assert lib.assertMsg (
         nativeBuildInputs = [ pkgs._7zz ];
       }
       ''
+        set -o pipefail
         tmpdir=$(mktemp -d)
         cleanup() {
           rm -rf "$tmpdir"
@@ -348,13 +355,20 @@ assert lib.assertMsg (
 
         cp -R -P --no-preserve=ownership ${judgeBundleData}/. "$tmpdir/hull-bundle/"
         chmod -R u+rwX "$tmpdir/hull-bundle"
-        XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmpdir/hull-bundle/nix" -cJf "$tmpdir/hull-bundle/nix-store.tar.xz" store
+        tar -C "$tmpdir/hull-bundle/nix" -cf - store \
+          | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$tmpdir/hull-bundle/nix-store.tar.zst"
         rm -rf "$tmpdir/hull-bundle/nix/store"
         rmdir "$tmpdir/hull-bundle/nix"
+        cp ${lib.getExe targetHullPkgs.uojSupervisor} "$tmpdir/judger"
+        cp ${lib.getExe targetHullPkgs.staticBusybox} "$tmpdir/hull-bundle/busybox"
+        cp ${lib.getExe targetHullPkgs.staticZstd} "$tmpdir/hull-bundle/zstd"
+        cp ${pkgs.writeText "hull-uoj-supervisor.conf" ''
+          nix_user_chroot_store_suffix=${lib.removePrefix "/nix/store" nixUserChrootRelative}
+          runner=${judgeRunnerRelative}
+          runtime_id=${runtimeId}
+        ''} "$tmpdir/hull-bundle/supervisor.conf"
         cp ${pkgs.writeText "problem.conf" problemConf} "$tmpdir/problem.conf"
         cp ${./judger.mk} "$tmpdir/Makefile"
-        cp ${./judger.c} "$tmpdir/judger.c"
-        cp ${judgerShellScript} "$tmpdir/judger.sh"
         cp ${./README.txt} "$tmpdir/README.txt"
 
         ${lib.concatMapAttrsStringSep "\n" (
@@ -377,8 +391,8 @@ assert lib.assertMsg (
             ''
               (
                 cd "$tmpdir"
-                7zz a -tzip -mx=${toString zipCompressionLevel} -mmt=on "$out" . -x!hull-bundle/nix-store.tar.xz
-                7zz a -tzip -mx=0 "$out" hull-bundle/nix-store.tar.xz
+                7zz a -tzip -mx=${toString zipCompressionLevel} -mmt=on "$out" . -x!hull-bundle/nix-store.tar.zst
+                7zz a -tzip -mx=0 "$out" hull-bundle/nix-store.tar.zst
               )
             ''
           else

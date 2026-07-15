@@ -229,7 +229,7 @@
     };
     hydroX86_64 = hull.problemTarget.hydro {
       targetSystem = "x86_64-linux";
-      xzCompressionLevel = 0;
+      zstdCompressionLevel = 1;
       zipCompressionLevel = 0;
       statements = {
         en = "statement.en.pdf";
@@ -238,7 +238,7 @@
     };
     hydroAarch64 = hull.problemTarget.hydro {
       targetSystem = "aarch64-linux";
-      xzCompressionLevel = 0;
+      zstdCompressionLevel = 1;
       zipCompressionLevel = 0;
       statements = {
         en = "statement.en.pdf";
@@ -259,12 +259,12 @@
     uoj = hull.problemTarget.uoj { };
     uojX86_64 = hull.problemTarget.uoj {
       targetSystem = "x86_64-linux";
-      xzCompressionLevel = 0;
+      zstdCompressionLevel = 1;
       zipCompressionLevel = 0;
     };
     uojAarch64 = hull.problemTarget.uoj {
       targetSystem = "aarch64-linux";
-      xzCompressionLevel = 0;
+      zstdCompressionLevel = 1;
       zipCompressionLevel = 0;
     };
     hydroLegacy = hull.problemTarget.legacy.hydro.batch {

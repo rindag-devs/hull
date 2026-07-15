@@ -264,7 +264,10 @@ Prefer these platform targets for ordinary use. Use legacy targets only when a p
 `hull.problemTarget.hydro { ... }` packages one problem as a Hydro bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, a static `proot`, custom judger runners, and problem data.
+- It carries static BusyBox and Zstandard executables for `targetSystem`; supported targets are `x86_64-linux` and `aarch64-linux`.
+- `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
 - It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Hydro.
+- The Hydro platform must provide `/bin/bash` for the first script invocation; bundle extraction does not depend on host `tar` or `zstd`.
 - It requires judge resource limits and language settings that fit the bundled runtime.
 
 ==== `lemon`
@@ -278,9 +281,12 @@ Prefer these platform targets for ordinary use. Use legacy targets only when a p
 
 `hull.problemTarget.uoj { ... }` packages one problem as a UOJ bundle that runs Hull's judging flow.
 
-- It includes a bundled Hull runtime, custom judger runners, and problem data.
-- It accepts `targetSystem`.
-- The default `targetSystem` is `x86_64-linux`.
+- It includes a bundled Hull runtime, custom judger runners, problem data, and static BusyBox and Zstandard executables.
+- `targetSystem` selects `x86_64-linux` or `aarch64-linux` and defaults to `x86_64-linux`; the UOJ host must run binaries for the selected architecture.
+- `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
+- The UOJ host must run Linux with unprivileged user namespaces enabled for `nix-user-chroot`.
+- Set the problem `extra_config` to `{"dont_use_formatter": true}` before syncing data so UOJ's formatter does not modify packaged binary files.
+- UOJ invokes the packaged Makefile before running the judger. Judging does not depend on host `tar`, `zstd`, or a compiler.
 
 == Built-in Contest Targets
 
@@ -350,8 +356,11 @@ Use it only when a contest package must rely on Lemon's native evaluation model.
 - It gathers all sample cases from each problem.
 - It includes any participant-visible files (e.g., graders, skeleton code).
 - It can build one PDF booklet for all problem statements.
-- It accepts `archive = null | "tar.xz" | "zip"`.
-- The default `archive` is `null`, which outputs a directory.
+- `archive` accepts `null | "tar.xz" | "tar.zst" | "zip"` and defaults to `null`; `null` outputs a directory.
+- `xzCompressionLevel` controls `tar.xz` compression, accepts integers from 0 through 9, and defaults to 6.
+- `zstdCompressionLevel` applies to `tar.zst`, accepts integers from 1 through 22, and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
+- `zipCompressionLevel` controls `zip` compression, accepts integers from 0 through 9, and defaults to 9.
+- Archive outputs require the consuming host to provide an extractor for the selected outer format; they do not carry archive bootstrap tools.
 - It accepts `targetSystem`.
 - The default `targetSystem` is `x86_64-linux`.
 

@@ -36,7 +36,8 @@
       hull.contestTarget.cnoiParticipant {
         inherit displayLanguages;
         targetSystem = "x86_64-linux";
-        archive = "zip";
+        archive = "tar.zst";
+        zstdCompressionLevel = 1;
         statements = builtins.listToAttrs (
           map (p: {
             name = p.config.name;
@@ -60,31 +61,8 @@
       hull.contestTarget.cnoiParticipant {
         inherit displayLanguages;
         targetSystem = "aarch64-linux";
-        archive = "zip";
-        statements = builtins.listToAttrs (
-          map (p: {
-            name = p.config.name;
-            value = builtins.listToAttrs (
-              map (l: {
-                name = l;
-                value = ./. + "/../problem/${p.config.name}/document/statement/${l}.typ";
-              }) displayLanguages
-            );
-          }) config.problems
-        );
-        enableSelfEval = true;
-      };
-    cnoiParticipantDarwin =
-      let
-        displayLanguages = [
-          "en"
-          "zh"
-        ];
-      in
-      hull.contestTarget.cnoiParticipant {
-        inherit displayLanguages;
-        targetSystem = "x86_64-darwin";
-        archive = "zip";
+        archive = "tar.zst";
+        zstdCompressionLevel = 1;
         statements = builtins.listToAttrs (
           map (p: {
             name = p.config.name;

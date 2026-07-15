@@ -5,7 +5,7 @@ case $(uname -m) in
 x86_64)
   local_suffix=X86_64
   cross_suffix=Aarch64
-  local_cnoi_target=cnoiParticipant
+  local_cnoi_target=cnoiParticipantX86_64
   cross_cnoi_target=cnoiParticipantAarch64
   local_machine='Advanced Micro Devices X86-64'
   cross_machine='AArch64'
@@ -14,7 +14,7 @@ aarch64)
   local_suffix=Aarch64
   cross_suffix=X86_64
   local_cnoi_target=cnoiParticipantAarch64
-  cross_cnoi_target=cnoiParticipant
+  cross_cnoi_target=cnoiParticipantX86_64
   local_machine='AArch64'
   cross_machine='Advanced Micro Devices X86-64'
   ;;
@@ -45,7 +45,14 @@ build_contest_target() {
     --out-link "$root/artifact" --stop-on-failure
   test -L "$root/artifact"
   mkdir "$root/package"
-  7zz x -o"$root/package" "$root/artifact" >/dev/null
+  case $(readlink -f "$root/artifact") in
+  *.tar.zst) tar --zstd -C "$root/package" -xf "$root/artifact" ;;
+  *.zip) 7zz x -o"$root/package" "$root/artifact" >/dev/null ;;
+  *)
+    printf 'unsupported contest archive: %s\n' "$(readlink -f "$root/artifact")" >&2
+    return 1
+    ;;
+  esac
 }
 
 run_test() {
@@ -79,20 +86,45 @@ require_executable() {
 require_machines() {
   directory=$1
   machine=$2
-  marker=$(mktemp)
-  find "$directory" -type f -perm /111 >"$marker"
+  marker=$(mktemp "$directory/.hull-machines.XXXXXX")
+  header=$(mktemp "$directory/.hull-elf-header.XXXXXX")
+  find "$directory" -type f -perm /111 ! -path "$marker" ! -path "$header" >"$marker"
   found=0
   while IFS= read -r candidate; do
-    if readelf -h "$candidate" >/dev/null 2>&1; then
-      if ! readelf -h "$candidate" | grep -F "Machine:                           $machine" >/dev/null; then
-        rm "$marker"
+    if readelf -h "$candidate" >"$header" 2>/dev/null; then
+      if ! grep -F "Machine:                           $machine" "$header" >/dev/null; then
+        rm -f "$marker" "$header"
         return 1
       fi
       found=1
     fi
   done <"$marker"
-  rm "$marker"
+  rm -f "$marker" "$header"
   test "$found" -eq 1
+}
+
+require_static_machine() {
+  executable=$1
+  machine=$2
+  readelf -h "$executable" | grep -F "Machine:                           $machine" >/dev/null
+  ! readelf -l "$executable" | grep -F 'Requesting program interpreter' >/dev/null
+  readelf -d "$executable" | grep -F 'There is no dynamic section in this file.' >/dev/null
+}
+
+extract_zstd_archive() {
+  archive=$1
+  destination=$2
+  root=$3
+  temporary_tar=$(mktemp "$root/archive.XXXXXX.tar")
+  if ! 7zz x -so "$archive" >"$temporary_tar"; then
+    rm -f "$temporary_tar"
+    return 1
+  fi
+  if ! tar -C "$destination" -xf "$temporary_tar"; then
+    rm -f "$temporary_tar"
+    return 1
+  fi
+  rm -f "$temporary_tar"
 }
 
 require_archive_machines() {
@@ -104,15 +136,35 @@ require_archive_machines() {
   require_machines "$root/runtime" "$machine"
 }
 
+require_zstd_archive_machines() {
+  archive=$1
+  machine=$2
+  root=$3
+  mkdir "$root/runtime"
+  extract_zstd_archive "$archive" "$root/runtime" "$root"
+  require_machines "$root/runtime" "$machine"
+}
+
 check_hydro_structure() {
   package=$1
   require_executable "$package/testdata/compile.sh"
   require_executable "$package/testdata/execute.sh"
   require_executable "$package/testdata/proot"
-  require_file "$package/testdata/hull-bundle.tar.xz"
-  require_file "$package/testdata/hull-runtime-store.tar.xz"
+  require_executable "$package/testdata/busybox"
+  require_executable "$package/testdata/zstd"
+  require_file "$package/testdata/hull-bundle.tar.zst"
+  require_file "$package/testdata/hull-runtime-store.tar.zst"
   require_file "$package/problem.yaml"
   require_file "$package/testdata/config.yaml"
+  jq -e '.user_extra_files == [
+    "compile.sh",
+    "execute.sh",
+    "proot",
+    "busybox",
+    "zstd",
+    "hull-bundle.tar.zst",
+    "hull-runtime-store.tar.zst"
+  ]' "$package/testdata/config.yaml" >/dev/null
 }
 
 check_lemon_structure() {
@@ -128,12 +180,14 @@ check_lemon_structure() {
 check_uoj_structure() {
   package=$1
   require_file "$package/Makefile"
-  require_file "$package/judger.c"
-  require_file "$package/judger.sh"
+  require_file "$package/judger"
   require_file "$package/problem.conf"
   require_file "$package/hull-bundle/problem.json"
   require_file "$package/hull-bundle/uoj-language-config.json"
-  require_file "$package/hull-bundle/nix-store.tar.xz"
+  require_file "$package/hull-bundle/busybox"
+  require_file "$package/hull-bundle/zstd"
+  require_file "$package/hull-bundle/supervisor.conf"
+  require_file "$package/hull-bundle/nix-store.tar.zst"
   require_file "$package/hull-bundle/solutions/std.20.cpp"
 }
 
@@ -141,19 +195,23 @@ test_hydro() {
   root=$1
   build_target "$root" "hydro$local_suffix"
   check_hydro_structure "$root/package"
-  require_archive_machines "$root/package/testdata/hull-runtime-store.tar.xz" "$local_machine" "$root"
+  require_static_machine "$root/package/testdata/proot" "$local_machine"
+  require_static_machine "$root/package/testdata/busybox" "$local_machine"
+  require_static_machine "$root/package/testdata/zstd" "$local_machine"
+  require_zstd_archive_machines "$root/package/testdata/hull-runtime-store.tar.zst" "$local_machine" "$root"
 
   mkdir "$root/bundle"
-  tar -C "$root/bundle" -xJf "$root/package/testdata/hull-bundle.tar.xz"
+  extract_zstd_archive "$root/package/testdata/hull-bundle.tar.zst" "$root/bundle" "$root"
   mkdir "$root/work"
   cp "$root/bundle/bundle/solutions/std.20.cpp" "$root/work/foo.cpp"
-  hydro_language=$(jq -r '.hydroToHullLanguageMap | to_entries[] | select(.value == "cpp.20") | .key' \
-    <"$root/bundle/bundle/hydro-language-map.json" | head -n 1)
+  hydro_language=$(jq -r '[.hydroToHullLanguageMap | to_entries[] | select(.value == "cpp.20") | .key][0] // empty' \
+    "$root/bundle/bundle/hydro-language-map.json")
   test -n "$hydro_language"
+  bash_path=$(command -v bash)
   (
     cd "$root/work"
-    HYDRO_LANG="$hydro_language" "$root/package/testdata/compile.sh"
-    "$root/package/testdata/execute.sh" >report.txt
+    PATH=/nonexistent HYDRO_LANG="$hydro_language" "$bash_path" "$root/package/testdata/compile.sh"
+    PATH=/nonexistent "$bash_path" "$root/package/testdata/execute.sh" >report.txt
   )
   grep -Fx '100' "$root/work/report.txt" >/dev/null
   grep -Fx 'accepted' "$root/work/report.txt" >/dev/null
@@ -188,9 +246,25 @@ test_uoj() {
   root=$1
   build_target "$root" "uoj$local_suffix"
   check_uoj_structure "$root/package"
-  require_archive_machines "$root/package/hull-bundle/nix-store.tar.xz" "$local_machine" "$root"
+  require_static_machine "$root/package/judger" "$local_machine"
+  require_static_machine "$root/package/hull-bundle/busybox" "$local_machine"
+  require_static_machine "$root/package/hull-bundle/zstd" "$local_machine"
+  require_zstd_archive_machines "$root/package/hull-bundle/nix-store.tar.zst" "$local_machine" "$root"
 
+  chmod 0644 \
+    "$root/package/judger" \
+    "$root/package/hull-bundle/busybox" \
+    "$root/package/hull-bundle/zstd"
+  test ! -x "$root/package/judger"
+  test ! -x "$root/package/hull-bundle/busybox"
+  test ! -x "$root/package/hull-bundle/zstd"
   make -C "$root/package" >/dev/null
+  test "$(stat -c '%a' "$root/package/judger")" = 755
+  test "$(stat -c '%a' "$root/package/hull-bundle/busybox")" = 755
+  test "$(stat -c '%a' "$root/package/hull-bundle/zstd")" = 755
+  require_executable "$root/package/judger"
+  require_executable "$root/package/hull-bundle/busybox"
+  require_executable "$root/package/hull-bundle/zstd"
   mkdir "$root/work" "$root/result"
   cp "$root/package/hull-bundle/solutions/std.20.cpp" "$root/work/answer.code"
   printf '%s\n' 'answer_language C++20' >"$root/work/submission.conf"
@@ -224,8 +298,10 @@ test_cross_hydro() {
   root=$1
   build_target "$root" "hydro$cross_suffix"
   check_hydro_structure "$root/package"
-  require_machines "$root/package/testdata" "$cross_machine"
-  require_archive_machines "$root/package/testdata/hull-runtime-store.tar.xz" "$cross_machine" "$root"
+  require_static_machine "$root/package/testdata/proot" "$cross_machine"
+  require_static_machine "$root/package/testdata/busybox" "$cross_machine"
+  require_static_machine "$root/package/testdata/zstd" "$cross_machine"
+  require_zstd_archive_machines "$root/package/testdata/hull-runtime-store.tar.zst" "$cross_machine" "$root"
 }
 
 test_cross_lemon() {
@@ -239,7 +315,10 @@ test_cross_uoj() {
   root=$1
   build_target "$root" "uoj$cross_suffix"
   check_uoj_structure "$root/package"
-  require_archive_machines "$root/package/hull-bundle/nix-store.tar.xz" "$cross_machine" "$root"
+  require_static_machine "$root/package/judger" "$cross_machine"
+  require_static_machine "$root/package/hull-bundle/busybox" "$cross_machine"
+  require_static_machine "$root/package/hull-bundle/zstd" "$cross_machine"
+  require_zstd_archive_machines "$root/package/hull-bundle/nix-store.tar.zst" "$cross_machine" "$root"
 }
 
 test_cross_cnoi() {

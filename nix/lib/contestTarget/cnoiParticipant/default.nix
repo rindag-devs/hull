@@ -70,11 +70,14 @@
   enableSelfEval ? false,
 
   # Packaging mode for the target output.
-  # `null` outputs a directory, `"tar.xz"` creates a tar.xz archive, and `"zip"` creates a zip archive.
+  # `null` outputs a directory; other values select the corresponding archive format.
   archive ? null,
 
   # XZ compression level used for tar.xz archives.
   xzCompressionLevel ? 6,
+
+  # Zstandard compression level used for tar.zst archives.
+  zstdCompressionLevel ? 19,
 
   # ZIP compression level used for zip archives.
   zipCompressionLevel ? 9,
@@ -83,6 +86,10 @@
 assert lib.assertMsg (
   builtins.isInt xzCompressionLevel && xzCompressionLevel >= 0 && xzCompressionLevel <= 9
 ) "cnoiParticipant xzCompressionLevel must be an integer from 0 to 9";
+assert lib.assertMsg (
+  archive != "tar.zst"
+  || (builtins.isInt zstdCompressionLevel && zstdCompressionLevel >= 1 && zstdCompressionLevel <= 22)
+) "cnoiParticipant zstdCompressionLevel must be an integer from 1 to 22";
 assert lib.assertMsg (
   builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
 ) "cnoiParticipant zipCompressionLevel must be an integer from 0 to 9";
@@ -449,10 +456,15 @@ assert lib.assertMsg (
         "cp ${statement} $out/statement.${displayLanguage}.pdf"
       ) displayLanguages;
       archiveMode =
-        if archive == null || archive == "tar.xz" || archive == "zip" then
+        if archive == null || archive == "tar.xz" || archive == "tar.zst" || archive == "zip" then
           archive
         else
-          throw "cnoiParticipant archive must be null, \"tar.xz\", or \"zip\"";
+          throw "cnoiParticipant archive must be null, \"tar.xz\", \"tar.zst\", or \"zip\"";
+      zstdCompressionArgs = [
+        "-${toString zstdCompressionLevel}"
+        "-T0"
+      ]
+      ++ lib.optional (zstdCompressionLevel >= 20) "--ultra";
     in
     if archiveMode == "tar.xz" then
       pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.tar.xz" { } ''
@@ -462,6 +474,16 @@ assert lib.assertMsg (
         chmod -R u+rwX,go+rX "$tmp_archive_dir"
         rm -rf "$out"
         XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmp_archive_dir" -cJf "$out" .
+      ''
+    else if archiveMode == "tar.zst" then
+      pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.tar.zst" { } ''
+        set -o pipefail
+        tmp_archive_dir=$(mktemp -d)
+        trap 'rm -rf "$tmp_archive_dir"' EXIT
+        cp -r --no-preserve=ownership ${outputDir}/. "$tmp_archive_dir/"
+        chmod -R u+rwX,go+rX "$tmp_archive_dir"
+        rm -rf "$out"
+        tar -C "$tmp_archive_dir" -cf - . | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
       ''
     else if archiveMode == "zip" then
       pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.zip"

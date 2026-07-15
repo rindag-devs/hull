@@ -44,8 +44,8 @@
   # Whether to emit a single zip archive or an unpacked directory tree.
   zipped ? true,
 
-  # XZ compression level used for tar.xz archives.
-  xzCompressionLevel ? 6,
+  # Zstandard compression level used for tar.zst archives.
+  zstdCompressionLevel ? 19,
 
   # ZIP compression level used for the outer archive.
   zipCompressionLevel ? 9,
@@ -108,8 +108,8 @@
 }:
 
 assert lib.assertMsg (
-  builtins.isInt xzCompressionLevel && xzCompressionLevel >= 0 && xzCompressionLevel <= 9
-) "hydro xzCompressionLevel must be an integer from 0 to 9";
+  builtins.isInt zstdCompressionLevel && zstdCompressionLevel >= 1 && zstdCompressionLevel <= 22
+) "hydro zstdCompressionLevel must be an integer from 1 to 22";
 assert lib.assertMsg (
   builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
 ) "hydro zipCompressionLevel must be an integer from 0 to 9";
@@ -130,6 +130,8 @@ assert lib.assertMsg (
       targetPkgs = targetPkgsForSystem targetSystem;
       targetHull = targetHullForSystem targetSystem;
       proot = targetHullPkgs.proot-static;
+      busybox = targetHullPkgs.staticBusybox;
+      zstd = targetHullPkgs.staticZstd;
       retargetRunner =
         runner:
         if runner ? retarget then
@@ -221,7 +223,14 @@ assert lib.assertMsg (
           tar -C "$tmpdir" -cf "$out" official-data-metadata.json validation.json outputs
         '';
 
-      judgeBundleArchive = pkgs.runCommandLocal "hull-hydro-bundle-${problem.name}.tar.xz" { } ''
+      zstdCompressionArgs = [
+        "-${toString zstdCompressionLevel}"
+        "-T0"
+      ]
+      ++ lib.optional (zstdCompressionLevel >= 20) "--ultra";
+
+      judgeBundleArchive = pkgs.runCommandLocal "hull-hydro-bundle-${problem.name}.tar.zst" { } ''
+        set -o pipefail
         tmpdir=$(mktemp -d)
         cleanup() {
           chmod -R u+rwX "$tmpdir" 2>/dev/null || true
@@ -254,7 +263,8 @@ assert lib.assertMsg (
           cp ${solution.src} "$tmpdir/bundle/solutions/${baseNameOf (toString solution.src)}"
         '') (builtins.attrValues problem.solutions)}
 
-        XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmpdir" -cJf "$out" bundle
+        ${lib.getExe pkgs.gnutar} -C "$tmpdir" -cf - bundle \
+          | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
       '';
 
       targetClosure = pkgs.closureInfo {
@@ -269,7 +279,8 @@ assert lib.assertMsg (
         ];
       };
 
-      runtimeStoreArchive = pkgs.runCommandLocal "hull-hydro-runtimeStore-${problem.name}.tar.xz" { } ''
+      runtimeStoreArchive = pkgs.runCommandLocal "hull-hydro-runtimeStore-${problem.name}.tar.zst" { } ''
+        set -o pipefail
         tmpdir=$(mktemp -d)
         cleanup() {
           chmod -R u+rwX "$tmpdir" 2>/dev/null || true
@@ -308,7 +319,8 @@ assert lib.assertMsg (
           fi
         done < <(find "$store_dir" -type l -print0)
 
-        XZ_OPT=-${toString xzCompressionLevel} tar -C "$tmpdir" -cJf "$out" nix
+        ${lib.getExe pkgs.gnutar} -C "$tmpdir" -cf - nix \
+          | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
       '';
 
       problemYamlContent = {
@@ -342,8 +354,10 @@ assert lib.assertMsg (
           "compile.sh"
           "execute.sh"
           "proot"
-          "hull-bundle.tar.xz"
-          "hull-runtime-store.tar.xz"
+          "busybox"
+          "zstd"
+          "hull-bundle.tar.zst"
+          "hull-runtime-store.tar.zst"
         ];
         judge_extra_files = [ ];
       }
@@ -353,9 +367,15 @@ assert lib.assertMsg (
         name = "hull-hydro-compile-${problem.name}";
         executable = true;
         text = ''
-          #!/bin/sh
-          set -eu
-          self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+          #!/bin/bash
+          set -euo pipefail
+          case $0 in
+            */*) script_dir=''${0%/*} ;;
+            *) script_dir=. ;;
+          esac
+          self_dir=$(CDPATH= cd -P -- "$script_dir" && pwd -P)
+          bb="$self_dir/busybox"
+          zstd="$self_dir/zstd"
           lang_suffix=''${HYDRO_LANG#*.}
           src="foo.$lang_suffix"
           if [ ! -f "$src" ]; then
@@ -368,18 +388,18 @@ assert lib.assertMsg (
             printf 'missing Hydro submission source\n' >&2
             exit 1
           fi
-          tmpdir=$(mktemp -d)
+          tmpdir=$("$bb" mktemp -d)
           cleanup() {
-            chmod -R u+rwX "$tmpdir" 2>/dev/null || true
-            rm -rf "$tmpdir"
+            "$bb" chmod -R u+rwX "$tmpdir" 2>/dev/null || true
+            "$bb" rm -rf "$tmpdir"
           }
           trap cleanup EXIT
-          mkdir -p "$tmpdir/root"
-          submission_name=$(basename "$src")
+          "$bb" mkdir -p "$tmpdir/root"
+          submission_name=''${src##*/}
           printf '%s\n' "$submission_name" > "$tmpdir/root/submission-name"
           printf '%s\n' "$HYDRO_LANG" > "$tmpdir/root/submission-language"
-          cp "$src" "$tmpdir/root/$submission_name"
-          tar -C "$tmpdir/root" -cf foo .
+          "$bb" cp "$src" "$tmpdir/root/$submission_name"
+          "$bb" tar -C "$tmpdir/root" -cf foo .
         '';
         checkPhase = ''
           runHook preCheck
@@ -392,24 +412,39 @@ assert lib.assertMsg (
         name = "hull-hydro-execute-${problem.name}";
         executable = true;
         text = ''
-          #!/bin/sh
-          set -eu
-          self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+          #!/bin/bash
+          set -euo pipefail
+          case $0 in
+            */*) script_dir=''${0%/*} ;;
+            *) script_dir=. ;;
+          esac
+          self_dir=$(CDPATH= cd -P -- "$script_dir" && pwd -P)
+          bb="$self_dir/busybox"
+          zstd="$self_dir/zstd"
           bundle_path="foo"
-          tmpdir=$(mktemp -d)
+          tmpdir=$("$bb" mktemp -d)
           cleanup() {
-            chmod -R u+rwX "$tmpdir" 2>/dev/null || true
-            rm -rf "$tmpdir"
+            "$bb" chmod -R u+rwX "$tmpdir" 2>/dev/null || true
+            "$bb" rm -rf "$tmpdir"
           }
           trap cleanup EXIT
           extract_root="$tmpdir/extract"
-          mkdir -p "$extract_root"
-          tar -C "$extract_root" -xf "$bundle_path"
-          mkdir -p "$extract_root/bundle-root" "$extract_root/runtime-root"
-          tar -C "$extract_root" --no-same-owner -xJf "$self_dir/hull-bundle.tar.xz"
-          tar -C "$extract_root/runtime-root" --no-same-owner -xJf "$self_dir/hull-runtime-store.tar.xz"
+          "$bb" mkdir -p "$extract_root"
+          "$bb" tar -C "$extract_root" --no-same-owner -xf "$bundle_path"
+          "$bb" mkdir -p "$extract_root/runtime-root"
+          if ! "$zstd" -dc "$self_dir/hull-bundle.tar.zst" \
+            | "$bb" tar -C "$extract_root" --no-same-owner -xf -; then
+            printf 'failed to extract Hull judge bundle\n' >&2
+            exit 1
+          fi
+          if ! "$zstd" -dc "$self_dir/hull-runtime-store.tar.zst" \
+            | "$bb" tar -C "$extract_root/runtime-root" --no-same-owner -xf -; then
+            printf 'failed to extract Hull runtime store\n' >&2
+            exit 1
+          fi
           stdout_report="$extract_root/stdout-report.txt"
-          submission_language=$(cat "$extract_root/submission-language")
+          submission_language=$(<"$extract_root/submission-language")
+          submission_name=$(<"$extract_root/submission-name")
           "$self_dir/proot" \
             -b "$extract_root/runtime-root/nix:/nix" \
             -b "$extract_root:/bundle-host" \
@@ -417,13 +452,13 @@ assert lib.assertMsg (
             "${lib.getExe targetHullPkgs.default}" integration-judge hydro \
             --bundle-root /bundle \
             --metadata-path problem.json \
-            --submission-file "/bundle-host/$(cat "$extract_root/submission-name")" \
+            --submission-file "/bundle-host/$submission_name" \
             --submission-language "$submission_language" \
             --language-map-path hydro-language-map.json \
             --participant-solution-name ${participantSolutionName} \
             --stdout-report-path /bundle-host/stdout-report.txt \
             --threads ${toString judgerThreads}
-          cat "$stdout_report"
+          "$bb" cat "$stdout_report"
         '';
         checkPhase = ''
           runHook preCheck
@@ -458,12 +493,19 @@ assert lib.assertMsg (
         echo ${lib.escapeShellArg (builtins.toJSON problemYamlContent)} > "$tmpdir/problem.yaml"
         echo ${lib.escapeShellArg (builtins.toJSON configYamlContent)} > "$tmpdir/testdata/config.yaml"
 
-        cp ${judgeBundleArchive} "$tmpdir/testdata/hull-bundle.tar.xz"
-        cp ${runtimeStoreArchive} "$tmpdir/testdata/hull-runtime-store.tar.xz"
+        cp ${judgeBundleArchive} "$tmpdir/testdata/hull-bundle.tar.zst"
+        cp ${runtimeStoreArchive} "$tmpdir/testdata/hull-runtime-store.tar.zst"
         cp ${proot}/bin/proot "$tmpdir/testdata/proot"
+        cp ${lib.getExe busybox} "$tmpdir/testdata/busybox"
+        cp ${lib.getExe zstd} "$tmpdir/testdata/zstd"
         cp ${compileSh} "$tmpdir/testdata/compile.sh"
         cp ${executeSh} "$tmpdir/testdata/execute.sh"
-        chmod +x "$tmpdir/testdata/compile.sh" "$tmpdir/testdata/execute.sh" "$tmpdir/testdata/proot"
+        chmod +x \
+          "$tmpdir/testdata/compile.sh" \
+          "$tmpdir/testdata/execute.sh" \
+          "$tmpdir/testdata/proot" \
+          "$tmpdir/testdata/busybox" \
+          "$tmpdir/testdata/zstd"
         cp ${./checker.c} "$tmpdir/testdata/checker.c"
 
         ${documentsCommand}
@@ -492,8 +534,8 @@ assert lib.assertMsg (
             ''
               (
                 cd "$tmpdir"
-                7zz a -tzip -mx=${toString zipCompressionLevel} -mmt=on "$out" . -x!testdata/hull-bundle.tar.xz -x!testdata/hull-runtime-store.tar.xz
-                7zz a -tzip -mx=0 "$out" testdata/hull-bundle.tar.xz testdata/hull-runtime-store.tar.xz
+                7zz a -tzip -mx=${toString zipCompressionLevel} -mmt=on "$out" . -x!testdata/hull-bundle.tar.zst -x!testdata/hull-runtime-store.tar.zst
+                7zz a -tzip -mx=0 "$out" testdata/hull-bundle.tar.zst testdata/hull-runtime-store.tar.zst
               )
             ''
           else

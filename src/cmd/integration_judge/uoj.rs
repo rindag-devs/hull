@@ -14,8 +14,10 @@
 */
 
 use std::collections::{BTreeMap, HashMap};
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -39,6 +41,10 @@ use crate::runtime::types::{
   ScoringMethod, SolutionSpec, TestCaseSpec,
 };
 use crate::runtime::workspace::RuntimeWorkspace;
+
+const COMPLETION_MARKER: &str = ".hull-uoj-complete";
+const COMPLETION_MARKER_BYTES: &[u8] = b"hull-uoj-result\n";
+static TERMINAL_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Runs Hull's compatibility judger inside a packaged UOJ problem.
 #[derive(Parser)]
@@ -283,20 +289,11 @@ fn run_impl(opts: &UojOpts) -> Result<()> {
 /// failure so the user can see the error without reading judge logs.
 fn write_internal_error_result(result_path: &Path, message: &str) -> Result<()> {
   let escaped = xml_escape(message);
-  fs::create_dir_all(result_path).with_context(|| {
-    format!(
-      "Failed to create UOJ result directory for internal error {}",
-      result_path.display()
-    )
-  })?;
-  fs::write(result_path.join("cur_status.txt"), "Judgment failed")
-    .with_context(|| format!("Failed to write status file into {}", result_path.display()))?;
-  fs::write(
-    result_path.join("result.txt"),
-    format!(
-      "error Judgment Failed\ndetails\n<error>{}</error>\n",
-      escaped
-    ),
+  commit_terminal_result(
+    result_path,
+    b"Judgment failed",
+    format!("error Judgment Failed\ndetails\n<error>{escaped}</error>\n").as_bytes(),
+    None,
   )
   .with_context(|| {
     format!(
@@ -343,9 +340,9 @@ impl JudgeProgressTracker {
   }
 
   fn write_message(&self, status: &str) -> Result<()> {
-    fs::write(
-      self.result_path.join("cur_status.txt"),
-      format!("{status}\n"),
+    atomic_write_progress(
+      &self.result_path.join("cur_status.txt"),
+      format!("{status}\n").as_bytes(),
     )
     .with_context(|| {
       format!(
@@ -374,21 +371,11 @@ impl JudgeProgressTracker {
 
 fn write_compile_error_result(result_path: &Path, message: &str) -> Result<()> {
   let escaped = xml_escape(message);
-  fs::create_dir_all(result_path).with_context(|| {
-    format!(
-      "Failed to create UOJ result directory for compile error {}",
-      result_path.display()
-    )
-  })?;
-  fs::write(result_path.join("cur_status.txt"), "Compile Error").with_context(|| {
-    format!(
-      "Failed to write compile status into {}",
-      result_path.display()
-    )
-  })?;
-  fs::write(
-    result_path.join("result.txt"),
-    format!("error Compile Error\ndetails\n<error>{escaped}</error>\n"),
+  commit_terminal_result(
+    result_path,
+    b"Compile Error",
+    format!("error Compile Error\ndetails\n<error>{escaped}</error>\n").as_bytes(),
+    None,
   )
   .with_context(|| {
     format!(
@@ -549,12 +536,15 @@ fn write_result(
     total_score.to_string()
   };
 
-  fs::write(
-    result_path.join("result.txt"),
+  commit_terminal_result(
+    result_path,
+    b"Judging complete\n",
     format!(
       "score {}\ntime {}\nmemory {}\ndetails\n{}",
       top_level_score, encoded_total_tick, max_memory, details
-    ),
+    )
+    .as_bytes(),
+    None,
   )
   .with_context(|| format!("Failed to write UOJ result to {}", result_path.display()))
 }
@@ -779,7 +769,7 @@ fn run_hack_mode(ctx: HackModeContext<'_>) -> Result<()> {
   let work_path = Path::new(&ctx.opts.uoj_work_path);
   let result_path = Path::new(&ctx.opts.uoj_result_path);
   let hack_input_path = work_path.join("hack_input.txt");
-  let official_data_tar_path = result_path.join("std_output.txt");
+  let official_data_tar_path = ctx.workspace.root().join("uoj-hack-std-output.tar");
   let hack_test_case = TestCaseSpec {
     name: "hack".to_string(),
     input_file: Some(hack_input_path.to_string_lossy().into_owned()),
@@ -824,23 +814,20 @@ fn run_hack_mode(ctx: HackModeContext<'_>) -> Result<()> {
     &official_outputs_dir,
     ctx.workspace,
   )?;
-  write_hack_result(result_path, &report)
+  write_hack_result(result_path, &report, &official_data_tar_path)
 }
 
 fn write_hack_input_invalid_result(result_path: &Path, message: &str) -> Result<()> {
   let escaped = xml_escape(message);
-  fs::write(result_path.join("cur_status.txt"), "Invalid hack input").with_context(|| {
-    format!(
-      "Failed to write invalid hack status into {}",
-      result_path.display()
-    )
-  })?;
-  fs::write(
-    result_path.join("result.txt"),
+  commit_terminal_result(
+    result_path,
+    b"Invalid hack input",
     format!(
       "score 0\ntime 0\nmemory 0\ndetails\n<tests><test num=\"1\" score=\"0\" info=\"Invalid Input\" time=\"0\" memory=\"0\"><res>{}</res></test></tests>",
       escaped
-    ),
+    )
+    .as_bytes(),
+    None,
   )
   .with_context(|| {
     format!(
@@ -850,7 +837,7 @@ fn write_hack_input_invalid_result(result_path: &Path, message: &str) -> Result<
   })
 }
 
-fn write_hack_result(result_path: &Path, report: &JudgeReport) -> Result<()> {
+fn write_hack_result(result_path: &Path, report: &JudgeReport, stdout_path: &Path) -> Result<()> {
   let hack_succeeded = report.score < 1.0;
   let point_score = if hack_succeeded { 0.0 } else { 100.0 };
   let message = xml_escape(&report.message);
@@ -863,15 +850,18 @@ fn write_hack_result(result_path: &Path, report: &JudgeReport) -> Result<()> {
     message,
   );
 
-  fs::write(
-    result_path.join("result.txt"),
+  commit_terminal_result(
+    result_path,
+    b"Hack complete\n",
     format!(
       "score {}\ntime {}\nmemory {}\ndetails\n<tests>{}</tests>",
       if hack_succeeded { "1" } else { "0" },
       report.tick,
       report.memory,
       test_xml,
-    ),
+    )
+    .as_bytes(),
+    Some(stdout_path),
   )
   .with_context(|| {
     format!(
@@ -904,18 +894,15 @@ fn write_custom_test_result(
     xml_escape(message),
   );
 
-  fs::write(result_path.join("cur_status.txt"), format!("{info}\n")).with_context(|| {
-    format!(
-      "Failed to write custom test status into {}",
-      result_path.display()
-    )
-  })?;
-  fs::write(
-    result_path.join("result.txt"),
+  commit_terminal_result(
+    result_path,
+    format!("{info}\n").as_bytes(),
     format!(
       "score 0\ntime {}\nmemory {}\ndetails\n{}",
       tick, memory, details
-    ),
+    )
+    .as_bytes(),
+    None,
   )
   .with_context(|| {
     format!(
@@ -923,6 +910,120 @@ fn write_custom_test_result(
       result_path.display()
     )
   })
+}
+
+fn commit_terminal_result(
+  result_path: &Path,
+  status: &[u8],
+  result: &[u8],
+  stdout_path: Option<&Path>,
+) -> Result<()> {
+  fs::create_dir_all(result_path).with_context(|| {
+    format!(
+      "Failed to create UOJ result directory {}",
+      result_path.display()
+    )
+  })?;
+  let marker = result_path.join(COMPLETION_MARKER);
+  match fs::remove_file(&marker) {
+    Ok(()) => sync_directory(result_path)?,
+    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+    Err(error) => return Err(error.into()),
+  }
+
+  if let Some(source) = stdout_path {
+    atomic_copy_file(source, &result_path.join("std_output.txt"))?;
+  } else {
+    match fs::remove_file(result_path.join("std_output.txt")) {
+      Ok(()) => sync_directory(result_path)?,
+      Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+      Err(error) => return Err(error.into()),
+    }
+  }
+  atomic_write_file(&result_path.join("result.txt"), result)?;
+  atomic_write_file(&result_path.join("cur_status.txt"), status)?;
+  atomic_write_file(&marker, COMPLETION_MARKER_BYTES)
+}
+
+fn atomic_write_progress(path: &Path, content: &[u8]) -> Result<()> {
+  let temp = terminal_temp_path(path)?;
+  let write_result = (|| {
+    let mut file = OpenOptions::new()
+      .write(true)
+      .create_new(true)
+      .open(&temp)?;
+    file.write_all(content)?;
+    fs::rename(&temp, path)
+  })();
+  if write_result.is_err() {
+    let _ = fs::remove_file(&temp);
+  }
+  write_result.map_err(Into::into)
+}
+
+fn atomic_write_file(path: &Path, content: &[u8]) -> Result<()> {
+  let temp = terminal_temp_path(path)?;
+  let write_result = (|| {
+    let mut file = OpenOptions::new()
+      .write(true)
+      .create_new(true)
+      .open(&temp)?;
+    file.write_all(content)?;
+    file.sync_all()?;
+    fs::rename(&temp, path)?;
+    sync_directory(
+      path
+        .parent()
+        .context("Terminal result path has no parent")?,
+    )
+  })();
+  if write_result.is_err() {
+    let _ = fs::remove_file(&temp);
+  }
+  write_result
+}
+
+fn atomic_copy_file(source: &Path, path: &Path) -> Result<()> {
+  let temp = terminal_temp_path(path)?;
+  let copy_result = (|| {
+    let mut input = File::open(source)?;
+    let mut output = OpenOptions::new()
+      .write(true)
+      .create_new(true)
+      .open(&temp)?;
+    io::copy(&mut input, &mut output)?;
+    output.sync_all()?;
+    fs::rename(&temp, path)?;
+    sync_directory(
+      path
+        .parent()
+        .context("Terminal stdout path has no parent")?,
+    )
+  })();
+  if copy_result.is_err() {
+    let _ = fs::remove_file(&temp);
+  }
+  copy_result
+}
+
+fn terminal_temp_path(path: &Path) -> Result<PathBuf> {
+  let parent = path
+    .parent()
+    .context("Terminal result path has no parent")?;
+  let name = path
+    .file_name()
+    .context("Terminal result path has no file name")?;
+  Ok(parent.join(format!(
+    ".{}.tmp-{}-{}",
+    name.to_string_lossy(),
+    std::process::id(),
+    TERMINAL_TEMP_ID.fetch_add(1, Ordering::Relaxed)
+  )))
+}
+
+fn sync_directory(path: &Path) -> Result<()> {
+  File::open(path)?.sync_all()?;
+  Ok(())
 }
 
 fn to_uoj_custom_test_info(status: &JudgeStatus) -> String {
@@ -1170,6 +1271,52 @@ mod tests {
       fs::read_to_string(result_path.join("result.txt")).expect("read result"),
       "error Compile Error\ndetails\n<error>compile failed</error>\n"
     );
+    assert_eq!(
+      fs::read(result_path.join(".hull-uoj-complete")).expect("read marker"),
+      b"hull-uoj-result\n"
+    );
+  }
+
+  #[test]
+  fn terminal_commit() {
+    let workspace = RuntimeWorkspace::new().expect("create workspace");
+    let result_path = workspace.root().join("result");
+
+    commit_terminal_result(&result_path, b"Accepted\n", b"complete result", None)
+      .expect("commit terminal result");
+
+    assert_eq!(
+      fs::read(result_path.join("result.txt")).expect("read result"),
+      b"complete result"
+    );
+    assert_eq!(
+      fs::read(result_path.join("cur_status.txt")).expect("read status"),
+      b"Accepted\n"
+    );
+    assert_eq!(
+      fs::read(result_path.join(".hull-uoj-complete")).expect("read marker"),
+      b"hull-uoj-result\n"
+    );
+    assert!(!result_path.join("std_output.txt").exists());
+  }
+
+  #[test]
+  fn failed_commit() {
+    let workspace = RuntimeWorkspace::new().expect("create workspace");
+    let result_path = workspace.root().join("result");
+    let missing_stdout = workspace.root().join("missing-stdout");
+
+    assert!(
+      commit_terminal_result(
+        &result_path,
+        b"Accepted\n",
+        b"complete result",
+        Some(&missing_stdout),
+      )
+      .is_err()
+    );
+
+    assert!(!result_path.join(".hull-uoj-complete").exists());
   }
 
   #[test]
@@ -1185,6 +1332,8 @@ mod tests {
       fs::read_to_string(result_path.join("result.txt")).expect("read result"),
       "score 0\ntime 12\nmemory 34\ndetails\n<tests><test num=\"0\" score=\"100\" info=\"Success\" time=\"12\" memory=\"34\"><res></res></test></tests>"
     );
+    assert!(result_path.join(".hull-uoj-complete").is_file());
+    assert!(!result_path.join("std_output.txt").exists());
   }
 
   #[test]
