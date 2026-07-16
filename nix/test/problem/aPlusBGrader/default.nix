@@ -23,11 +23,11 @@
 
   judger = hull.judger.batch config { extraObjects = [ ./grader.17.cpp ]; };
 
-  checker.src = ./checker.20.cpp;
+  checker.src = ./checker.23.cpp;
 
-  validator.src = ./validator.20.cpp;
+  validator.src = ./validator.23.cpp;
 
-  generators.rand.src = ./generator/rand.20.cpp;
+  generators.rand.src = ./generator/rand.23.cpp;
 
   traits = {
     a_positive = { };

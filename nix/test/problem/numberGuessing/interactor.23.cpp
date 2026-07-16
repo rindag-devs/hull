@@ -1,5 +1,5 @@
 #include "cplib.hpp"
-#include "problem.20.hpp"
+#include "problem.23.hpp"
 
 CPLIB_REGISTER_INTERACTOR(intr);
 

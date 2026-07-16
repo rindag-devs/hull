@@ -20,12 +20,12 @@
 
   judger = hull.judger.stdioInteraction config { realTimeLimitSeconds = 10; };
 
-  checker.src = ./interactor.20.cpp;
+  checker.src = ./interactor.23.cpp;
 
-  validator.src = ./validator.20.cpp;
+  validator.src = ./validator.23.cpp;
 
   generators = {
-    rand.src = ./generator/rand.20.cpp;
+    rand.src = ./generator/rand.23.cpp;
   };
 
   testCases = {

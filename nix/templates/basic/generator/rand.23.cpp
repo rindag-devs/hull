@@ -1,4 +1,4 @@
-#include <iostream>
+#include <print>
 
 #include "cplib.hpp"
 
@@ -15,7 +15,7 @@ void generator_main() {
   int a = gen.rnd.next(n_min, n_max);
   int b = gen.rnd.next(n_min, n_max);
 
-  std::cout << a << ' ' << b << '\n';
+  std::println("{} {}", a, b);
 
   gen.quit_ok();
 }

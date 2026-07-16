@@ -37,29 +37,29 @@ A typical problem directory looks like this:
 │       ├── en.typ
 │       └── ...
 ├── generator/
-│   └── rand.20.cpp
+│   └── rand.23.cpp
 ├── include/
-│   └── problem.20.hpp
+│   └── problem.23.hpp
 ├── solution/
-│   ├── bf.20.cpp
-│   └── std.20.cpp
+│   ├── bf.23.cpp
+│   └── std.23.cpp
 ├── .clang-format
 ├── .clangd
 ├── .editorconfig
 ├── .gitignore
-├── checker.20.cpp
+├── checker.23.cpp
 ├── flake.nix
 ├── problem.nix
-└── validator.20.cpp
+└── validator.23.cpp
 ```
 
 - `data/`: Manually created test case input files.
 - `document/`: Source files for generating problem statements (e.g., Typst files).
 - `generator/`: Source code for test data generators.
-- `include/`: Shared header files, like `problem.20.hpp`, used by other components.
+- `include/`: Shared header files, like `problem.23.hpp`, used by other components.
 - `solution/`: Source code for all solutions (correct, incorrect, suboptimal).
-- `checker.20.cpp`: The checker program.
-- `validator.20.cpp`: The validator program.
+- `checker.23.cpp`: The checker program.
+- `validator.23.cpp`: The validator program.
 - `problem.nix`: The central declarative configuration for the problem.
 - `flake.nix`: The Nix flake definition for the project.
 
@@ -82,7 +82,7 @@ You can add a `tests` attribute to your `validator` and `checker` definitions. E
 {
   # ...
   validator = {
-    src = ./validator.20.cpp;
+    src = ./validator.23.cpp;
     tests = {
       # Test case with a valid input
       valid = {
@@ -99,7 +99,7 @@ You can add a `tests` attribute to your `validator` and `checker` definitions. E
   };
 
   checker = {
-    src = ./checker.20.cpp;
+    src = ./checker.23.cpp;
     tests = {
       # Test an accepted case
       ac = {
@@ -127,13 +127,13 @@ For a brute-force solution that is expected to be too slow for larger subtasks, 
   # ...
   solutions = {
     std = {
-      src = ./solution/std.20.cpp;
+      src = ./solution/std.23.cpp;
       mainCorrectSolution = true;
       subtaskPredictions."0" = { score, ... }: score == 1.0; # Expect AC
     };
 
     bruteForce = {
-      src = ./solution/bf.20.cpp;
+      src = ./solution/bf.23.cpp;
       subtaskPredictions."0" = { statuses, ... }:
         builtins.all (s: s == "accepted" || s == "time_limit_exceeded") statuses;
     };
@@ -159,7 +159,7 @@ nix fmt
 The template provides configuration files for a consistent C/C++ development experience.
 
 - *.clang-format*: Defines the code style for `clang-format`.
-- *.clangd*: Configures the `clangd` language server, enabling features like auto-completion and diagnostics. It automatically sets the correct C++ standard based on file extensions (e.g., `.20.cpp` for C++ 20).
+- *.clangd*: Configures the `clangd` language server, enabling features like auto-completion and diagnostics. It automatically sets the correct C++ standard based on file extensions (e.g., `.23.cpp` for C++ 23).
 
 === Editor Configuration
 

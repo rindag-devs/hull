@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <iostream>
+#include <print>
 
 #include "cplib.hpp"
 
@@ -25,7 +25,7 @@ void generator_main() {
   if (m_min > m_max) panic("m_min must be <= m_max");
   if (w_min > w_max) panic("w_min must be <= w_max");
 
-  std::cout << T << '\n';
+  std::println("{}", T);
 
   for (int t = 1; t <= T; ++t) {
     int n = gen.rnd.next(n_min, n_max);
@@ -35,15 +35,14 @@ void generator_main() {
 
     int m = gen.rnd.next(final_m_min, m_max);
 
-    std::cout << n << ' ' << m << '\n';
+    std::println("{} {}", n, m);
 
     for (int i = 2; i <= n; ++i) {
-      std::cout << gen.rnd.next(1, i - 1) << ' ' << i << ' ' << gen.rnd.next(w_min, w_max) << '\n';
+      std::println("{} {} {}", gen.rnd.next(1, i - 1), i, gen.rnd.next(w_min, w_max));
     }
 
     for (int i = n; i <= m; ++i) {
-      std::cout << gen.rnd.next(1, n) << ' ' << gen.rnd.next(1, n) << ' '
-                << gen.rnd.next(w_min, w_max) << '\n';
+      std::println("{} {} {}", gen.rnd.next(1, n), gen.rnd.next(1, n), gen.rnd.next(w_min, w_max));
     }
   }
 

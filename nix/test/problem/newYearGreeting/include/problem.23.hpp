@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <format>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <tuple>
 #include <variant>
@@ -33,10 +34,7 @@ struct InputFirst {
     auto pairs = in.read(cplib::var::Vec(cplib::var::ExtVar<Pair>("pairs"), CNT, cplib::var::eoln));
     in.read(cplib::var::eoln);
     if (cplib::get_work_mode() == cplib::WorkMode::VALIDATOR) {
-      std::vector<std::uint32_t> keys(pairs.size());
-      for (std::size_t i = 0; i < pairs.size(); ++i) {
-        keys[i] = pairs[i].k;
-      }
+      auto keys = pairs | std::views::transform(&Pair::k) | std::ranges::to<std::vector>();
       std::ranges::sort(keys);
       if (std::ranges::unique(keys).end() != keys.end()) {
         in.fail("Keys must be unique");
@@ -92,7 +90,7 @@ struct OutputFirst {
 };
 
 struct OutputSecond {
-  std::vector<uint32_t> positions;
+  std::vector<std::uint32_t> positions;
 
   static auto read(cplib::var::Reader &in, const InputSecond &inp) -> OutputSecond {
     auto positions = in.read(cplib::var::u32(0, CNT - 1) * inp.Q);
@@ -122,15 +120,11 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
     }
 
     if (pans.index() == 0) {
-      auto encoded = std::get<0>(pans).encoded;
+      const auto &encoded = std::get<0>(pans).encoded;
       constexpr std::array<std::size_t, 10> requirements = {100000, 43008, 40000, 30000, 20000,
                                                             15000,  14000, 13000, 12750, 12500};
-      std::size_t n_satisfied = 0;
-      for (auto len : requirements) {
-        if (encoded.size() <= len) {
-          ++n_satisfied;
-        }
-      }
+      auto n_satisfied = std::ranges::count_if(
+          requirements, [&](std::size_t len) -> bool { return encoded.size() <= len; });
       if (n_satisfied == 0) {
         return cplib::evaluate::Result::wa(
             std::format("Encoded string too big, length = {}", encoded.size()));
@@ -143,8 +137,8 @@ struct Output : std::variant<OutputFirst, OutputSecond> {
           std::format("length = {}, {} of {} requirements satisfied", encoded.size(), n_satisfied,
                       requirements.size()));
     } else {
-      auto positions_p = std::get<1>(pans).positions;
-      auto positions_j = std::get<1>(jans).positions;
+      const auto &positions_p = std::get<1>(pans).positions;
+      const auto &positions_j = std::get<1>(jans).positions;
       auto result = cplib::evaluate::Result::ac();
       result &= ev.eq("positions", positions_p, positions_j);
       return result;

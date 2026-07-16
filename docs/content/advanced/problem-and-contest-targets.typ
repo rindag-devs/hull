@@ -63,7 +63,7 @@ Problem targets operate on a single problem's evaluated configuration.
 
 - *`data/`*: Contains all test case inputs and their corresponding standard answer files.
 - *`solution/`*: Contains detailed judging results for every solution.
-- *`checker.20.cpp`, `validator.20.cpp`, etc.*: Source code for core programs.
+- *`checker.23.cpp`, `validator.23.cpp`, etc.*: Source code for core programs.
 - *`overview.pdf`*: An automatically generated technical report of the problem, including test case analysis and solution performance.
 
 Use it directly:
@@ -138,7 +138,7 @@ Important outputs:
 
 - *`problem.conf`*: The main configuration file defining subtasks, scoring, samples, interaction mode, and resource limits.
 - *`<problem-name>1.in`, `<problem-name>1.out`, etc.*: Test data files following UOJ's naming convention.
-- *`chk.20.cpp`, `interactor20.cpp`, `val20.cpp`, `std20.cpp`*: Checker, interactor, validator, and main correct solution sources as required by the selected branch.
+- *`chk.23.cpp`, `interactor23.cpp`, `val23.cpp`, `std23.cpp`*: Checker, interactor, validator, and main correct solution source examples for the selected branch.
 - *`require/`* and *`download/`*: Judge-side support files and participant-visible files.
 
 Example:

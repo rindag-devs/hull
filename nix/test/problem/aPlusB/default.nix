@@ -23,7 +23,7 @@
   ];
 
   checker = {
-    src = ./checker.20.cpp;
+    src = ./checker.23.cpp;
     tests = {
       ac = {
         inputFile = builtins.toFile "ac.in" "1 2\n";
@@ -34,7 +34,7 @@
   };
 
   validator = {
-    src = ./validator.20.cpp;
+    src = ./validator.23.cpp;
     participantVisibility = "src";
     tests = {
       noEoln = {
@@ -66,7 +66,7 @@
 
   generators = {
     rand = {
-      src = ./generator/rand.20.cpp;
+      src = ./generator/rand.23.cpp;
       participantVisibility = "wasm";
     };
   };

@@ -54,7 +54,7 @@
 
   generators = {
     rand = {
-      src = ./generator/rand.20.cpp;
+      src = ./generator/rand.23.cpp;
       participantVisibility = "wasm";
     };
   };

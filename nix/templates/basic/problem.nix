@@ -18,10 +18,10 @@
     ./include
   ];
 
-  generators.rand.src = ./generator/rand.20.cpp;
+  generators.rand.src = ./generator/rand.23.cpp;
 
   validator = {
-    src = ./validator.20.cpp;
+    src = ./validator.23.cpp;
     tests = {
       noEoln = {
         inputFile = builtins.toFile "noEoln.in" "1 2";
@@ -51,7 +51,7 @@
   };
 
   checker = {
-    src = ./checker.20.cpp;
+    src = ./checker.23.cpp;
     tests = {
       ac = {
         inputFile = builtins.toFile "ac.in" "1 2\n";

@@ -20,9 +20,9 @@
 
   judger = hull.judger.answerOnly config;
 
-  checker.src = ./checker.20.cpp;
+  checker.src = ./checker.23.cpp;
 
-  validator.src = ./validator.20.cpp;
+  validator.src = ./validator.23.cpp;
 
   testCases = {
     hand1 = {

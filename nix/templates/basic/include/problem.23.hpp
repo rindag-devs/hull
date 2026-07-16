@@ -37,7 +37,7 @@ struct Output {
 
 inline auto traits(const Input &input) -> std::vector<cplib::validator::Trait> {
   return {
-      {"a_positive", [&]() { return input.a > 0; }},
-      {"b_positive", [&]() { return input.b > 0; }},
+      {"a_positive", [&]() -> bool { return input.a > 0; }},
+      {"b_positive", [&]() -> bool { return input.b > 0; }},
   };
 }

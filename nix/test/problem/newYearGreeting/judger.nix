@@ -8,7 +8,7 @@
   judger =
     let
       # Compile the transform program once, as it's used in both generateOutputs and judge.
-      transformSrc = ./transform.20.cpp;
+      transformSrc = ./transform.23.cpp;
       transformWasm = hull.compile.executable.drv {
         inherit (config) languages includes;
         src = transformSrc;

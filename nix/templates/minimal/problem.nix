@@ -15,11 +15,11 @@
   };
 
   validator = {
-    src = ./validator.20.cpp;
+    src = ./validator.23.cpp;
   };
 
   checker = {
-    src = ./checker.20.cpp;
+    src = ./checker.23.cpp;
   };
 
   testCases = {

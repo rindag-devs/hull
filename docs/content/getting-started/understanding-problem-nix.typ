@@ -35,11 +35,11 @@ Hull relies on several key programs to manage the problem's lifecycle. You provi
 
 ```nix
 {
-  checker.src = ./checker.20.cpp;
+  checker.src = ./checker.23.cpp;
 
-  validator.src = ./validator.20.cpp;
+  validator.src = ./validator.23.cpp;
 
-  generators.rand.src = ./generator/rand.20.cpp;
+  generators.rand.src = ./generator/rand.23.cpp;
 }
 ```
 
@@ -49,7 +49,7 @@ Hull relies on several key programs to manage the problem's lifecycle. You provi
 
 == C and C++ Compilation
 
-`hull.language.c` and `hull.language.cpp` are factories. An empty instance uses Hull's defaults. The standard is derived from the source suffix, such as `.17.c` or `.20.cpp`.
+`hull.language.c` and `hull.language.cpp` are factories. An empty instance uses Hull's defaults. The standard is derived from the source suffix, such as `.17.c` or `.23.cpp`.
 
 ```nix
 {
@@ -176,7 +176,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
   solutions = {
     # The main correct solution
     std = {
-      src = ./solution/std.20.cpp;
+      src = ./solution/std.23.cpp;
       mainCorrectSolution = true;
       subtaskPredictions = {
         "0" = { score, ... }: score == 1.0; # Predicts AC on subtask 0
@@ -186,7 +186,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
 
     # A wrong answer solution
     wa = {
-      src = ./solution/wa.20.cpp;
+      src = ./solution/wa.23.cpp;
       subtaskPredictions = {
         "0" = { score, ... }: score == 1.0; # Predicts AC on subtask 0
         "1" = { score, ... }: score == 0.0; # Predicts WA on subtask 1
