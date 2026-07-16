@@ -1,8 +1,7 @@
-all:
-	@set -eu; \
-	for file in judger busybox zstd; do \
-		tmp=".$$file.hull-prepare-$$$$"; \
-		cp "$$file" "$$tmp"; \
-		chmod 0755 "$$tmp"; \
-		mv -f "$$tmp" "$$file"; \
-	done
+.PHONY: hull-uoj-prepare
+
+all: hull-uoj-prepare
+	./hull-uoj-prepare
+
+hull-uoj-prepare: hull-uoj-prepare.c
+	gcc hull-uoj-prepare.c -o hull-uoj-prepare -O3 -std=c99

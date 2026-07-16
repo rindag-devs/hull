@@ -392,6 +392,7 @@ assert lib.assertMsg (
         ''} "$tmpdir/hull-bundle/supervisor.conf"
         cp ${pkgs.writeText "problem.conf" problemConf} "$tmpdir/problem.conf"
         cp ${./judger.mk} "$tmpdir/Makefile"
+        cp ${./prepare.c} "$tmpdir/hull-uoj-prepare.c"
         cp ${./README.txt} "$tmpdir/README.txt"
 
         ${lib.concatMapAttrsStringSep "\n" (
