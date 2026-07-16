@@ -155,9 +155,9 @@ struct Output {
 
 inline auto traits(const Input &input) -> std::vector<cplib::validator::Trait> {
   return {{"w_eq_1", [&input]() -> bool {
-             return std::ranges::all_of(input.test_cases, [](const auto &test_case) -> auto {
+             return std::ranges::all_of(input.test_cases, [](const auto &test_case) -> bool {
                return std::ranges::all_of(test_case.edges,
-                                          [](const auto &e) -> auto { return e.w == 1; });
+                                          [](const auto &e) -> bool { return e.w == 1; });
              });
            }}};
 }

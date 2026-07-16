@@ -13,7 +13,10 @@
     zh = "猜数";
   };
 
-  includes = [ cplib ];
+  includes = [
+    cplib
+    ./include
+  ];
 
   judger = hull.judger.stdioInteraction config { realTimeLimitSeconds = 10; };
 

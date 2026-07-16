@@ -16,9 +16,11 @@ Recommended naming:
 - *Problem Name, Test Cases, Generators, Solutions*: Use `camelCase` for the machine-readable identifier. This name is often used in directory paths, so avoid spaces or special characters.
   - Good: `aPlusB`, `newYearGreeting`.
   - Bad: `A + B Problem`, `new_year_greeting`.
-- *Traits*: Use descriptive `snake_case` to clearly state the property the trait represents.
-  - Good: `n_is_small`, `all_positive`, `is_tree`.
-  - Bad: `trait1`, `subtask2_property`.
+- *Traits*: Use concise, descriptive `snake_case` names that state the property precisely.
+  - For numeric constraints, prefer `variable_comparison_value`, such as `n_le_1000`, `a_ge_100`, or `a_mod_2_eq_0`.
+  - For categorical or structural properties, use an affirmative `is_property` or `variable_is_property` name, such as `is_tree` or `n_is_odd`. Other concise and descriptive names, such as `all_positive`, are also appropriate.
+  - Avoid vague names such as `n_is_small`, `trait1`, and `subtask2_property`.
+  - Avoid negation in trait names. For example, use `is_tree = false` instead of `is_not_tree = true`.
 
 == Directory Structure
 
@@ -60,6 +62,12 @@ A typical problem directory looks like this:
 - `validator.20.cpp`: The validator program.
 - `problem.nix`: The central declarative configuration for the problem.
 - `flake.nix`: The Nix flake definition for the project.
+
+=== Sharing Problem Definitions
+
+Keep definitions used by both the checker and validator in the matching `include/problem.*.hpp`, and add `./include` to `includes` in `problem.nix`. This shared header should be the single source of truth for input models, parsing rules, constraint constants, and other reusable problem structures. Interactive problems should use the same approach for definitions shared by the interactor and validator.
+
+Keep `checker.*.cpp`, `validator.*.cpp`, and `interactor.*.cpp` as thin entry points that include the shared header and register the relevant component. Do not duplicate input structures, bounds, or parsing logic between these programs: duplicated definitions can drift and cause the checker or interactor to interpret input differently from the validator.
 
 == Testing Core Components
 

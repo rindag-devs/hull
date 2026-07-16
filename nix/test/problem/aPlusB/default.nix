@@ -17,7 +17,10 @@
   tickLimit = 100 * 10000000;
   memoryLimit = 128 * 1024 * 1024;
 
-  includes = [ cplib ];
+  includes = [
+    cplib
+    ./include
+  ];
 
   checker = {
     src = ./checker.20.cpp;

@@ -6,7 +6,10 @@
 {
   name = "exampleProblem";
 
-  includes = [ cplib ];
+  includes = [
+    cplib
+    ./include
+  ];
 
   generators = {
   };

@@ -123,7 +123,7 @@ Each attribute in `testCases` defines a test case. The name of the attribute (e.
 
 == Subtasks & Scoring
 
-Hull uses a system of "traits" to define subtasks. A trait is a specific property that a test case might have (e.g., "the input number N is small").
+Hull uses a system of "traits" to define subtasks. A trait is a specific property that a test case might have (e.g., "$N <= 100$").
 
 1. First, you declare all possible traits for the problem.
 2. The `validator` is responsible for detecting which traits are present in a given input file.
@@ -133,7 +133,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
 {
   # 1. Declare all possible traits
   traits = {
-    n_is_small = {
+    n_le_100 = {
       descriptions.en = "$N <= 100$.";
     };
     all_positive = {
@@ -146,15 +146,15 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
     {
       # This subtask requires both traits to be true
       traits = {
-        n_is_small = true;
+        n_le_100 = true;
         all_positive = true;
       };
       fullScore = 0.4; # This subtask is worth 40% of the total score
     },
     {
-      # This subtask only requires n_is_small
+      # This subtask only requires n_le_100
       traits = {
-        n_is_small = true;
+        n_le_100 = true;
       };
       fullScore = 0.6; # This subtask is worth 60%
     }

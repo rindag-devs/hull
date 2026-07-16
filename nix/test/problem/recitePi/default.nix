@@ -13,7 +13,10 @@
     zh = "背诵圆周率";
   };
 
-  includes = [ cplib ];
+  includes = [
+    cplib
+    ./include
+  ];
 
   judger = hull.judger.answerOnly config;
 
