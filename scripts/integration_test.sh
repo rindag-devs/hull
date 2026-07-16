@@ -181,11 +181,11 @@ check_uoj_structure() {
   package=$1
   require_file "$package/Makefile"
   require_file "$package/judger"
+  require_file "$package/busybox"
+  require_file "$package/zstd"
   require_file "$package/problem.conf"
   require_file "$package/hull-bundle/problem.json"
   require_file "$package/hull-bundle/uoj-language-config.json"
-  require_file "$package/hull-bundle/busybox"
-  require_file "$package/hull-bundle/zstd"
   require_file "$package/hull-bundle/supervisor.conf"
   require_file "$package/hull-bundle/nix-store.tar.zst"
   require_file "$package/hull-bundle/solutions/std.20.cpp"
@@ -247,28 +247,34 @@ test_uoj() {
   build_target "$root" "uoj$local_suffix"
   check_uoj_structure "$root/package"
   require_static_machine "$root/package/judger" "$local_machine"
-  require_static_machine "$root/package/hull-bundle/busybox" "$local_machine"
-  require_static_machine "$root/package/hull-bundle/zstd" "$local_machine"
+  require_static_machine "$root/package/busybox" "$local_machine"
+  require_static_machine "$root/package/zstd" "$local_machine"
   require_zstd_archive_machines "$root/package/hull-bundle/nix-store.tar.zst" "$local_machine" "$root"
 
   chmod 0644 \
     "$root/package/judger" \
-    "$root/package/hull-bundle/busybox" \
-    "$root/package/hull-bundle/zstd"
+    "$root/package/busybox" \
+    "$root/package/zstd"
   test ! -x "$root/package/judger"
-  test ! -x "$root/package/hull-bundle/busybox"
-  test ! -x "$root/package/hull-bundle/zstd"
+  test ! -x "$root/package/busybox"
+  test ! -x "$root/package/zstd"
+  judger_inode=$(stat -c '%i' "$root/package/judger")
+  busybox_inode=$(stat -c '%i' "$root/package/busybox")
+  zstd_inode=$(stat -c '%i' "$root/package/zstd")
   make -C "$root/package" >/dev/null
   test "$(stat -c '%a' "$root/package/judger")" = 755
-  test "$(stat -c '%a' "$root/package/hull-bundle/busybox")" = 755
-  test "$(stat -c '%a' "$root/package/hull-bundle/zstd")" = 755
+  test "$(stat -c '%a' "$root/package/busybox")" = 755
+  test "$(stat -c '%a' "$root/package/zstd")" = 755
+  test "$(stat -c '%i' "$root/package/judger")" != "$judger_inode"
+  test "$(stat -c '%i' "$root/package/busybox")" != "$busybox_inode"
+  test "$(stat -c '%i' "$root/package/zstd")" != "$zstd_inode"
   require_executable "$root/package/judger"
-  require_executable "$root/package/hull-bundle/busybox"
-  require_executable "$root/package/hull-bundle/zstd"
-  mkdir "$root/work" "$root/result"
+  require_executable "$root/package/busybox"
+  require_executable "$root/package/zstd"
+  mkdir "$root/main" "$root/work" "$root/result"
   cp "$root/package/hull-bundle/solutions/std.20.cpp" "$root/work/answer.code"
   printf '%s\n' 'answer_language C++20' >"$root/work/submission.conf"
-  "$root/package/judger" "$root/package" "$root/work" "$root/result" "$root/package"
+  "$root/package/judger" "$root/main" "$root/work" "$root/result" "$root/package"
   grep -Fx 'score 100' "$root/result/result.txt" >/dev/null
   grep -E '^time [0-9]+$' "$root/result/result.txt" >/dev/null
   grep -E '^memory [0-9]+$' "$root/result/result.txt" >/dev/null
@@ -316,8 +322,8 @@ test_cross_uoj() {
   build_target "$root" "uoj$cross_suffix"
   check_uoj_structure "$root/package"
   require_static_machine "$root/package/judger" "$cross_machine"
-  require_static_machine "$root/package/hull-bundle/busybox" "$cross_machine"
-  require_static_machine "$root/package/hull-bundle/zstd" "$cross_machine"
+  require_static_machine "$root/package/busybox" "$cross_machine"
+  require_static_machine "$root/package/zstd" "$cross_machine"
   require_zstd_archive_machines "$root/package/hull-bundle/nix-store.tar.zst" "$cross_machine" "$root"
 }
 

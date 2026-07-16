@@ -28,7 +28,7 @@ impl From<io::Error> for ArchiveError {
 
 /// Reuses or extracts the runtime cache and returns nix-user-chroot's host path.
 pub fn prepare(
-  bundle: &Path,
+  package: &Path,
   work: &Path,
   config: &SupervisorConfig,
   signals: &SignalMonitor,
@@ -50,7 +50,7 @@ pub fn prepare(
   fs::create_dir(&staging)?;
 
   let prepared = (|| {
-    extract(bundle, &staging, signals)?;
+    extract(package, &staging, signals)?;
     let mut ready = File::create(staging.join(READY))?;
     ready.write_all(config.runtime_id.as_bytes())?;
     ready.sync_all()?;
@@ -69,17 +69,17 @@ pub fn prepare(
   Ok(chroot)
 }
 
-fn extract(bundle: &Path, staging: &Path, signals: &SignalMonitor) -> Result<(), ArchiveError> {
-  let mut decoder = Command::new(bundle.join("zstd"));
+fn extract(package: &Path, staging: &Path, signals: &SignalMonitor) -> Result<(), ArchiveError> {
+  let mut decoder = Command::new(package.join("zstd"));
   decoder
     .arg("-dc")
-    .arg(bundle.join("nix-store.tar.zst"))
+    .arg(package.join("hull-bundle/nix-store.tar.zst"))
     .stdout(Stdio::piped());
   let mut group = ProcessGroup::spawn(&mut decoder)?;
   let output = group
     .take_stdout(0)
     .ok_or_else(|| io::Error::other("zstd stdout was not piped"))?;
-  let mut unpack = Command::new(bundle.join("busybox"));
+  let mut unpack = Command::new(package.join("busybox"));
   unpack
     .arg("tar")
     .arg("-C")
@@ -169,15 +169,16 @@ mod tests {
   #[test]
   fn stream() {
     let root = temp();
-    let bundle = root.join("bundle");
+    let package = root.join("package");
     let staging = root.join("staging");
-    fs::create_dir(&bundle).unwrap();
+    fs::create_dir(&package).unwrap();
+    fs::create_dir(package.join("hull-bundle")).unwrap();
     fs::create_dir(&staging).unwrap();
-    fs::write(bundle.join("nix-store.tar.zst"), "payload").unwrap();
-    script(&bundle.join("zstd"), "cat \"$2\"");
-    script(&bundle.join("busybox"), "cat > \"$3/extracted\"");
+    fs::write(package.join("hull-bundle/nix-store.tar.zst"), "payload").unwrap();
+    script(&package.join("zstd"), "cat \"$2\"");
+    script(&package.join("busybox"), "cat > \"$3/extracted\"");
     let signals = SignalMonitor::new().unwrap();
-    extract(&bundle, &staging, &signals).unwrap();
+    extract(&package, &staging, &signals).unwrap();
     assert_eq!(fs::read(staging.join("extracted")).unwrap(), b"payload");
     fs::remove_dir_all(root).unwrap();
   }
@@ -185,40 +186,42 @@ mod tests {
   #[test]
   fn zstd_failure() {
     let root = temp();
-    let bundle = root.join("bundle");
+    let package = root.join("package");
     let staging = root.join("staging");
-    fs::create_dir(&bundle).unwrap();
+    fs::create_dir(&package).unwrap();
+    fs::create_dir(package.join("hull-bundle")).unwrap();
     fs::create_dir(&staging).unwrap();
-    fs::write(bundle.join("nix-store.tar.zst"), "payload").unwrap();
-    script(&bundle.join("zstd"), "exit 7");
-    script(&bundle.join("busybox"), "cat >/dev/null");
+    fs::write(package.join("hull-bundle/nix-store.tar.zst"), "payload").unwrap();
+    script(&package.join("zstd"), "exit 7");
+    script(&package.join("busybox"), "cat >/dev/null");
     let signals = SignalMonitor::new().unwrap();
-    assert!(extract(&bundle, &staging, &signals).is_err());
+    assert!(extract(&package, &staging, &signals).is_err());
     fs::remove_dir_all(root).unwrap();
   }
 
   #[test]
   fn tar_failure() {
     let root = temp();
-    let bundle = root.join("bundle");
+    let package = root.join("package");
     let staging = root.join("staging");
-    fs::create_dir(&bundle).unwrap();
+    fs::create_dir(&package).unwrap();
+    fs::create_dir(package.join("hull-bundle")).unwrap();
     fs::create_dir(&staging).unwrap();
-    fs::write(bundle.join("nix-store.tar.zst"), "payload").unwrap();
-    script(&bundle.join("zstd"), "cat \"$2\"");
-    script(&bundle.join("busybox"), "cat >/dev/null; exit 9");
+    fs::write(package.join("hull-bundle/nix-store.tar.zst"), "payload").unwrap();
+    script(&package.join("zstd"), "cat \"$2\"");
+    script(&package.join("busybox"), "cat >/dev/null; exit 9");
     let signals = SignalMonitor::new().unwrap();
-    assert!(extract(&bundle, &staging, &signals).is_err());
+    assert!(extract(&package, &staging, &signals).is_err());
     fs::remove_dir_all(root).unwrap();
   }
 
   #[test]
   fn cache_hit() {
     let root = temp();
-    let bundle = root.join("bundle");
+    let package = root.join("package");
     let work = root.join("work");
     let cache = work.join("hull-nix");
-    fs::create_dir(&bundle).unwrap();
+    fs::create_dir(&package).unwrap();
     fs::create_dir(&work).unwrap();
     fs::create_dir(&cache).unwrap();
     fs::write(cache.join(READY), "closure-1").unwrap();
@@ -229,7 +232,7 @@ mod tests {
     };
     let signals = SignalMonitor::new().unwrap();
     assert_eq!(
-      prepare(&bundle, &work, &config, &signals).unwrap(),
+      prepare(&package, &work, &config, &signals).unwrap(),
       cache.join("store/abc/bin/nix-user-chroot")
     );
     fs::remove_dir_all(root).unwrap();

@@ -5,8 +5,6 @@ use std::path::{Path, PathBuf};
 
 /// The four directories supplied by the UOJ judger ABI.
 pub struct Args {
-  /// Directory containing the packaged problem.
-  pub main: PathBuf,
   /// Per-run UOJ working directory.
   pub work: PathBuf,
   /// UOJ result directory.
@@ -24,7 +22,7 @@ impl Args {
   {
     let mut args = args.into_iter().map(Into::into);
     let _program = args.next();
-    let main = args.next().ok_or_else(|| invalid("missing main path"))?;
+    let _main = args.next().ok_or_else(|| invalid("missing main path"))?;
     let work = args.next().ok_or_else(|| invalid("missing work path"))?;
     let result = args.next().ok_or_else(|| invalid("missing result path"))?;
     let data = args.next().ok_or_else(|| invalid("missing data path"))?;
@@ -32,7 +30,6 @@ impl Args {
       return Err(invalid("too many arguments"));
     }
     Ok(Self {
-      main: main.into(),
       work: work.into(),
       result: result.into(),
       data: data.into(),
@@ -123,7 +120,7 @@ mod tests {
   #[test]
   fn four_paths() {
     let args = Args::parse(["supervisor", "main", "work", "result", "data"]).unwrap();
-    assert_eq!(args.main, Path::new("main"));
+    assert_eq!(args.data, Path::new("data"));
     assert!(Args::parse(["supervisor", "main", "work", "result"]).is_err());
   }
 

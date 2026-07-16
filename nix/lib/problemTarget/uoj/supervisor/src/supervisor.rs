@@ -98,13 +98,13 @@ impl Supervisor {
 
   fn run_request(&self) -> Result<(), SupervisorError> {
     fs::create_dir_all(&self.args.result)?;
-    let bundle = self.args.main.join("hull-bundle");
+    let bundle = self.args.data.join("hull-bundle");
     let inner = self.args.work.join("hull-uoj-result");
     fs::create_dir_all(&inner)?;
     result::cleanup(&inner, &self.args.result, &self.args.work)?;
     self.check_signal()?;
     let config = SupervisorConfig::read(&bundle.join("supervisor.conf"))?;
-    let chroot = match archive::prepare(&bundle, &self.args.work, &config, &self.signals) {
+    let chroot = match archive::prepare(&self.args.data, &self.args.work, &config, &self.signals) {
       Ok(path) => path,
       Err(ArchiveError::Signal(signal)) => {
         let _ = result::cleanup(&inner, &self.args.result, &self.args.work);
@@ -119,8 +119,6 @@ impl Supervisor {
     let mut command = Command::new(chroot);
     command
       .arg("-m")
-      .arg(format!("{}:main", self.args.main.display()))
-      .arg("-m")
       .arg(format!("{}:work", self.args.work.display()))
       .arg("-m")
       .arg(format!("{}:data", self.args.data.display()))
@@ -132,7 +130,7 @@ impl Supervisor {
       .arg(self.args.work.join("hull-nix"))
       .arg("--")
       .arg(&config.runner)
-      .arg("/main/hull-bundle")
+      .arg("/data/hull-bundle")
       .arg("/work/answer.code")
       .arg(language)
       .arg("/work")
@@ -246,7 +244,6 @@ mod tests {
 
   fn args(root: &std::path::Path) -> Args {
     Args {
-      main: root.join("main"),
       work: root.join("work"),
       result: root.join("result"),
       data: root.join("data"),
@@ -412,8 +409,8 @@ mod tests {
   fn archive_signal_survives_cleanup_failure() {
     let root = temp();
     let args = args(&root);
-    let bundle = args.main.join("hull-bundle");
-    for path in [&args.main, &args.work, &args.result, &args.data, &bundle] {
+    let bundle = args.data.join("hull-bundle");
+    for path in [&args.work, &args.result, &args.data, &bundle] {
       fs::create_dir_all(path).unwrap();
     }
     fs::write(
@@ -423,10 +420,10 @@ mod tests {
     .unwrap();
     fs::write(bundle.join("nix-store.tar.zst"), "payload").unwrap();
     script(
-      &bundle.join("zstd"),
+      &args.data.join("zstd"),
       &format!("mkdir '{}'/result.txt; sleep 1", args.result.display()),
     );
-    script(&bundle.join("busybox"), "cat >/dev/null");
+    script(&args.data.join("busybox"), "cat >/dev/null");
 
     let signals = SignalMonitor::new().unwrap();
     let sender = signal_when(args.result.join("result.txt"), unsafe {
@@ -450,10 +447,9 @@ mod tests {
   fn judge_signal_survives_cleanup_failure() {
     let root = temp();
     let args = args(&root);
-    let bundle = args.main.join("hull-bundle");
+    let bundle = args.data.join("hull-bundle");
     let chroot = args.work.join("hull-nix/store/abc/bin/nix-user-chroot");
     for path in [
-      &args.main,
       &args.work,
       &args.result,
       &args.data,

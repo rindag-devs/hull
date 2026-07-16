@@ -129,9 +129,15 @@ assert lib.assertMsg (
       targetHullPkgs = targetHullPkgsForSystem targetSystem;
       targetPkgs = targetPkgsForSystem targetSystem;
       targetHull = targetHullForSystem targetSystem;
+      staticPkgs =
+        {
+          "x86_64-linux" = pkgs.pkgsCross.musl64;
+          "aarch64-linux" = pkgs.pkgsCross.aarch64-multiplatform-musl;
+        }
+        .${targetSystem} or (throw "Hydro supports only x86_64-linux and aarch64-linux");
       proot = targetHullPkgs.proot-static;
-      busybox = targetHullPkgs.staticBusybox;
-      zstd = targetHullPkgs.staticZstd;
+      busybox = staticPkgs.pkgsStatic.busybox;
+      zstd = staticPkgs.pkgsStatic.zstd;
       retargetRunner =
         runner:
         if runner ? retarget then

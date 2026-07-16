@@ -94,53 +94,6 @@
           rustToolchain = rustToolchainFor pkgs;
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
 
-          mkLinuxTargetTools =
-            targetSystem:
-            let
-              muslCrossPkgs =
-                {
-                  "x86_64-linux" = pkgs.pkgsCross.musl64;
-                  "aarch64-linux" = pkgs.pkgsCross.aarch64-multiplatform-musl;
-                }
-                .${targetSystem} or (throw "UOJ and Hydro targets support only x86_64-linux and aarch64-linux");
-              muslRustTarget = muslCrossPkgs.stdenv.hostPlatform.rust.rustcTarget;
-              muslRustTargetEnv = pkgs.lib.toUpper (
-                pkgs.lib.replaceStrings [ "-" "." ] [ "_" "_" ] muslRustTarget
-              );
-              muslRustToolchainFor =
-                _p:
-                rustPkgs.combine [
-                  rustPkgs.stable.cargo
-                  rustPkgs.stable.rustc
-                  rustPkgs.targets.${muslRustTarget}.stable.rust-std
-                ];
-              muslCraneLib = (crane.mkLib muslCrossPkgs).overrideToolchain muslRustToolchainFor;
-            in
-            {
-              staticBusybox = muslCrossPkgs.pkgsStatic.busybox;
-              staticZstd = muslCrossPkgs.pkgsStatic.zstd;
-              uojSupervisor = muslCraneLib.buildPackage {
-                pname = "hull-uoj-supervisor";
-                src = muslCraneLib.cleanCargoSource ./nix/lib/problemTarget/uoj/supervisor;
-                cargoExtraArgs = "--target ${muslRustTarget}";
-                doCheck = false;
-                strictDeps = true;
-                CARGO_BUILD_TARGET = muslRustTarget;
-                "CARGO_TARGET_${muslRustTargetEnv}_LINKER" = "${muslCrossPkgs.stdenv.cc.targetPrefix}cc";
-                "CARGO_TARGET_${muslRustTargetEnv}_RUSTFLAGS" =
-                  "-C target-feature=+crt-static -C relocation-model=static -C link-arg=-no-pie";
-                "CC_${muslRustTargetEnv}" = "${muslCrossPkgs.stdenv.cc.targetPrefix}cc";
-                postInstall = ''
-                  ${muslCrossPkgs.stdenv.cc.bintools}/bin/${muslCrossPkgs.stdenv.cc.targetPrefix}strip \
-                    $out/bin/hull-uoj-supervisor
-                '';
-                meta = {
-                  license = muslCrossPkgs.lib.licenses.lgpl3Plus;
-                  mainProgram = "hull-uoj-supervisor";
-                };
-              };
-            };
-
           mkTargetHullPkgs =
             targetSystem:
             let
@@ -168,9 +121,6 @@
               targetCraneLib = (crane.mkLib targetCrossPkgs).overrideToolchain targetRustToolchainFor;
             in
             targetHullPkgsBase
-            // pkgs.lib.optionalAttrs targetCrossPkgs.stdenv.hostPlatform.isLinux (
-              mkLinuxTargetTools targetSystem
-            )
             // {
               nix-user-chroot = targetCrossPkgs.callPackage ./nix/pkgs/nix-user-chroot {
                 pkgs = targetCrossPkgs;
@@ -243,32 +193,29 @@
               ;
           };
 
-          hullPkgs =
-            import ./nix/pkgs { inherit pkgs; }
-            // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux (mkLinuxTargetTools system)
-            // {
-              docs = import ./docs/package.nix {
-                inherit
-                  pkgs
-                  system
-                  tola
-                  ;
-                optionsDocs = hull.docs.options;
-              };
+          hullPkgs = import ./nix/pkgs { inherit pkgs; } // {
+            docs = import ./docs/package.nix {
+              inherit
+                pkgs
+                system
+                tola
+                ;
               optionsDocs = hull.docs.options;
-              default = craneLib.buildPackage {
-                src = craneLib.cleanCargoSource self;
-                nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
-                postInstall = ''
-                  wrapProgram $out/bin/hull \
-                    --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix-output-monitor ]}
-                '';
-                meta = {
-                  license = pkgs.lib.licenses.lgpl3Plus;
-                  mainProgram = "hull";
-                };
+            };
+            optionsDocs = hull.docs.options;
+            default = craneLib.buildPackage {
+              src = craneLib.cleanCargoSource self;
+              nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
+              postInstall = ''
+                wrapProgram $out/bin/hull \
+                  --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix-output-monitor ]}
+              '';
+              meta = {
+                license = pkgs.lib.licenses.lgpl3Plus;
+                mainProgram = "hull";
               };
             };
+          };
 
           targetHullPkgsForSystem =
             targetSystem: if targetSystem == system then hullPkgs else mkTargetHullPkgs targetSystem;

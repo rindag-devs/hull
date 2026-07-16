@@ -92,6 +92,29 @@ assert lib.assertMsg (
       targetHullPkgs = targetHullPkgsForSystem targetSystem;
       targetPkgs = targetPkgsForSystem targetSystem;
       targetHull = targetHullForSystem targetSystem;
+      staticPkgs =
+        {
+          "x86_64-linux" = pkgs.pkgsCross.musl64;
+          "aarch64-linux" = pkgs.pkgsCross.aarch64-multiplatform-musl;
+        }
+        .${targetSystem} or (throw "UOJ supports only x86_64-linux and aarch64-linux");
+      uojSupervisor = staticPkgs.rustPlatform.buildRustPackage {
+        pname = "hull-uoj-supervisor";
+        version = "0.1.0";
+        src = lib.sourceByRegex ./supervisor [
+          "Cargo.toml"
+          "Cargo.lock"
+          "src(/.*)?"
+        ];
+        cargoLock.lockFile = ./supervisor/Cargo.lock;
+        doCheck = false;
+        strictDeps = true;
+        RUSTFLAGS = "-C target-feature=+crt-static -C relocation-model=static -C link-arg=-no-pie";
+        meta = {
+          license = lib.licenses.lgpl3Plus;
+          mainProgram = "hull-uoj-supervisor";
+        };
+      };
       nixUserChroot = targetHullPkgs.nix-user-chroot;
       retargetRunner =
         runner:
@@ -359,9 +382,9 @@ assert lib.assertMsg (
           | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$tmpdir/hull-bundle/nix-store.tar.zst"
         rm -rf "$tmpdir/hull-bundle/nix/store"
         rmdir "$tmpdir/hull-bundle/nix"
-        cp ${lib.getExe targetHullPkgs.uojSupervisor} "$tmpdir/judger"
-        cp ${lib.getExe targetHullPkgs.staticBusybox} "$tmpdir/hull-bundle/busybox"
-        cp ${lib.getExe targetHullPkgs.staticZstd} "$tmpdir/hull-bundle/zstd"
+        cp ${lib.getExe uojSupervisor} "$tmpdir/judger"
+        cp ${lib.getExe staticPkgs.pkgsStatic.busybox} "$tmpdir/busybox"
+        cp ${lib.getExe staticPkgs.pkgsStatic.zstd} "$tmpdir/zstd"
         cp ${pkgs.writeText "hull-uoj-supervisor.conf" ''
           nix_user_chroot_store_suffix=${lib.removePrefix "/nix/store" nixUserChrootRelative}
           runner=${judgeRunnerRelative}
