@@ -123,24 +123,40 @@ The `hull-generated.json` file is the bridge between your Nix configuration and 
 
 Templates can render subtasks, samples, and generated metadata directly.
 
-=== Automatic Visualization
+=== Automatic Sample Visualization <automatic-sample-visualization>
 
-The `samples.#.input-validation.reader-trace-tree` object contains the validator parse tree.
+Every embedded sample includes the validator's full reader trace at `samples.#.input-validation.reader-trace-tree`. The standard `hull.xcpcStatement` template recognizes two CPLib tags attached to nodes in this trace:
 
-By attaching special tags within your validator code (using `cplib`), you can embed structured information directly into this tree. For example, for a graph problem, you can tag the nodes and edges.
+- `hull/case` is an integer identifying a logical test case. The template gives consecutive cases alternating background colors and labels their first lines, which makes multi-test samples easier to follow.
+- `hull/graph` describes a graph or tree. Its `name` is a string and `nodes` is a list of strings. Each edge has string endpoints `u` and `v`, a Boolean `directed` value, and an optional string `w` label. The template renders the graph below the sample.
+
+Attach the tags while reading the corresponding structure in the validator. Full traces are produced for statement samples, so guard additional tag construction by the trace level when it is expensive.
 
 ```cpp
-// In your problem's header file or validator.cpp
-// ... inside a cplib var::Reader scope ...
-
-in.attach_tag("hull/graph", cplib::json::Value(cplib::json::Map{
-  {"name", cplib::json::Value("graph")},
-  {"nodes", cplib::json::Value(/* vector of node name strings */)},
-  {"edges", cplib::json::Value(/* vector of edge objects */)},
-}));
+if (in.get_trace_level() >= cplib::trace::Level::FULL) {
+  in.attach_tag(
+      "hull/graph",
+      cplib::json::Map{
+          {"name", std::format("graph_{}", test_case_index)},
+          {"nodes", std::views::iota(1, n + 1) |
+                        std::views::transform([](std::int32_t x) {
+                          return std::to_string(x);
+                        })},
+          {"edges", edges |
+                        std::views::transform([](const Edge &edge) {
+                          return cplib::json::Map{
+                              {"u", std::to_string(edge.u)},
+                              {"v", std::to_string(edge.v)},
+                              {"w", std::to_string(edge.w)},
+                              {"directed", false},
+                          };
+                        })},
+      });
+  in.attach_tag("hull/case", test_case_index);
+}
 ```
 
-`hull.xcpcStatement` can render graph visualizations from `hull/graph` tags.
+Attach `hull/case` to the reader node that spans one complete test case. Attach `hull/graph` to the node that spans the represented graph; multiple named graphs are rendered in name order. Omit `w` for unweighted edges.
 
 == Generating Contest Booklets
 

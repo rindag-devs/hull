@@ -36,7 +36,7 @@ Expand a short draft with this logical order:
 2. State the required computation or construction.
 3. Give the input format and define every field where it appears.
 4. Give the output format and all acceptance conditions.
-5. State sample explanations when they add information beyond repeating arithmetic.
+5. Design samples and their explanations under [data-subtasks-and-limits.md](data-subtasks-and-limits.md).
 6. State subtask or constraint information when applicable.
 
 Make each sentence understandable when read in order. Resolve a necessary question immediately or in the next paragraph, not several sections later. Do not force readers to inspect the input format or samples to infer the task.

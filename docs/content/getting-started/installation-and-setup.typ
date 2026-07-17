@@ -46,24 +46,15 @@ nix flake --version
 
 == Creating a New Problem
 
-Use the Hull template to create a project.
+Using an AI agent is the recommended way to create a Hull problem. Point an agent that supports Agent Skills to the #link("https://hull.aberter0x3f.top/.well-known/agent-skills/index.json")[Hull skill index] and ask it to use `author-hull-problems`. The #link("https://hull.aberter0x3f.top/.well-known/agent-skills/author-hull-problems.tar.gz")[skill archive] is also available directly.
 
-=== Creating a New Project Directory
+You may give the agent only an idea, a partial problem, an existing problem, or an existing Hull workspace. Ask it to complete omitted details, initialize the basic template when needed, and implement and verify the problem in your workspace.
 
-To create a problem in a directory, use `nix flake init` inside that directory.
+To create a problem manually, use the Hull template.
 
-```bash
-# Initialize this directory from the basic Hull template
-nix flake init -t github:rindag-devs/hull#basic
-```
-
-=== Initializing an Existing Directory
-
-If you already have an empty directory where you want to set up your problem, you can initialize it directly.
+Run this command in the target directory:
 
 ```bash
-mkdir myProblem
-cd myProblem
 nix flake init -t github:rindag-devs/hull#basic
 ```
 

@@ -19,7 +19,10 @@ Hull defines problems and contests in Nix, compiles programs to WebAssembly, run
 
 == Why Hull?
 
-- One file defines problem structure, data, programs, solutions, documents, and targets.
-- Analysis checks validator tests, checker tests, official outputs, and solution predictions.
-- Targets package one problem or one contest for a specific format.
-- The same source tree can package for multiple target systems.
+Hull treats a problem as one reproducible pipeline rather than a collection of scripts. A Nix definition connects programs, generated data, validation, official outputs, solution predictions, documents, and packages, so a build checks the relationships between them instead of merely compiling files.
+
+- *Data-driven Typst documents*: Generate multilingual statements, technical overviews, and contest booklets from analyzed problem data. Templates can inject samples and subtasks and render validator-backed visualizations. See #link("/advanced/document-generation-with-typst/")[Document Generation with Typst].
+- *Programmable judging*: Start with batch, standard-input/standard-output interaction, or answer-only judging. Define a custom judger when a problem needs multiple evaluation stages, a specialized protocol, or custom scoring. See #link("/advanced/custom-judgers/")[Custom Judgers].
+- *Targets are an extension point*: Package a problem or contest for supported judge systems and participant environments, or define a target for a project-specific directory, archive, or deployment format. See #link("/advanced/problem-and-contest-targets/")[Problem and Contest Targets].
+- *End-to-end parallel execution*: Hull uses available CPU parallelism by default across problem builds, contest builds, judging, and stress testing. Artifact builds and final packaging retain Nix's own parallel scheduling, allowing high-core-count servers to process large solution and testcase sets with high throughput.
+- *Designed for AI agents*: Hull publishes Agent Skills, `llms.txt`, Typst source mirrors, and generated Nix option references. These machine-readable entry points let an agent discover exact configuration and follow a complete problem-authoring workflow. See #link("/getting-started/installation-and-setup/#creating-a-new-problem")[Creating a New Problem].

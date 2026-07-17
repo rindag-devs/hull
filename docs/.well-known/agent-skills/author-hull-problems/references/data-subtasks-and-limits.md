@@ -37,9 +37,15 @@ Add cases targeting plausible overflow, off-by-one, wrong tie handling, accident
 
 ## Samples And Groups
 
-Samples are part of the public contract. Keep them small enough to understand, cover distinct behavior, and ensure their explanations match every language version.
+Samples must help contestants understand the task. Keep ordinary samples small enough to inspect, but strong enough to expose simple mistakes and likely misreadings of the statement. For a task with multiple operation types, exercise every type across the samples. For a task with multiple possible output categories, demonstrate every category, except that an impossible category need not be fabricated; for example, omit a no-solution sample when every legal input is guaranteed to have a solution even if the output protocol asks contestants to distinguish existence.
+
+Explain samples in enough detail for the difficulty of the statement. A complex or easily misunderstood task needs a detailed walkthrough; a straightforward example needs only information that clarifies behavior rather than restating arithmetic. Keep explanations consistent across all statement languages. Large samples may omit explanations.
+
+Use validator trace tags to make explanations easier to follow when structure matters. CPLib `attach_tag` can mark test-case ranges for alternating colors and can provide `hull/graph` data for automatic tree or graph visualization. Follow [Document Generation with Typst](https://hull.aberter0x3f.top/advanced/document-generation-with-typst/#automatic-sample-visualization) for the supported tags and schema. Add an explanatory image only when it makes the sample materially clearer.
 
 Both `sample` and `sampleLarge` are sample testcase groups. Cases in `sample` are automatically embedded in generated statements. Cases in `sampleLarge` are distributed as samples but not embedded in the statement; use it for a sample that is useful to provide but too large to display inline.
+
+An ICPC-style problem normally does not need large samples. For an OI-style problem, normally select one purely random generated testcase from each data-size tier as a large sample. If random data has an extremely unrepresentative property, such as every answer being no solution, choose a representative directed testcase instead or omit the large sample when neither choice helps contestants.
 
 Use generated inputs by default. Fixed external input files are acceptable for tiny hand-written samples or an exceptional construction that is clearer and safer as a literal file.
 
