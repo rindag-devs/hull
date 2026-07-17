@@ -55,6 +55,7 @@ let
     LLM index: ${siteUrl}/llms.txt
     Agent skills index: ${siteUrl}/.well-known/agent-skills/index.json
     Documentation discovery skill: ${siteUrl}/.well-known/agent-skills/documentation/SKILL.md
+    Problem authoring skill: ${siteUrl}/.well-known/agent-skills/author-hull-problems.tar.gz
     Source repository: https://github.com/rindag-devs/hull
 
     ## Use This Documentation For
@@ -89,11 +90,12 @@ let
 
     ## Agent Discovery
 
-    Agents may start from `llms.txt`, the sitemap, or the agent skills index. The documentation discovery skill describes the canonical crawl surfaces, source-oriented representations, and reference pages. These files are stable public discovery entry points:
+    Agents may start from `llms.txt`, the sitemap, or the agent skills index. The documentation discovery skill describes the canonical crawl surfaces, source-oriented representations, and reference pages. The problem authoring skill provides an end-to-end workflow for creating and verifying Hull problems. These files are stable public discovery entry points:
 
     - ${siteUrl}/llms.txt
     - ${siteUrl}/.well-known/agent-skills/index.json
     - ${siteUrl}/.well-known/agent-skills/documentation/SKILL.md
+    - ${siteUrl}/.well-known/agent-skills/author-hull-problems.tar.gz
 
     ## Crawl Policy
 

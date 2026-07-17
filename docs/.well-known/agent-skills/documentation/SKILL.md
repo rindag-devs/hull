@@ -1,3 +1,8 @@
+---
+name: documentation
+description: Discover and consume Hull documentation, including the canonical llms.txt index, sitemap, Typst source mirrors, and generated Nix option references. Use when an agent needs authoritative Hull concepts, configuration fields, defaults, examples, or published documentation sources.
+---
+
 # Hull Documentation Discovery
 
 Use this skill to discover and consume the Hull documentation.

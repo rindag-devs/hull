@@ -115,6 +115,8 @@ You can add a `tests` attribute to your `validator` and `checker` definitions. E
 
 When you run `hull build`, these tests are executed automatically. If any prediction fails, the build will stop, alerting you to a potential issue with your validator or checker.
 
+Keep component tests short and focused on plausible defects, such as a missing bound, trailing token, malformed construction, floating-point tolerance boundary, or protocol violation. Do not enumerate the input domain or add tests that only assert constants or implementation shape.
+
 === Predicting Solution Behavior
 
 `subtaskPredictions` checks expected solution behavior.
@@ -160,6 +162,26 @@ The template provides configuration files for a consistent C/C++ development exp
 
 - *.clang-format*: Defines the code style for `clang-format`.
 - *.clangd*: Configures the `clangd` language server, enabling features like auto-completion and diagnostics. It automatically sets the correct C++ standard based on file extensions (e.g., `.23.cpp` for C++ 23).
+
+== Reproducible Test Data
+
+Make generator output depend only on its complete command-line argument sequence. Avoid wall-clock seeds, `rand`, implementation-dependent iteration order, and other runtime state. Running the same generator with the same arguments should produce byte-for-byte identical output.
+
+Give independently variable input dimensions separate generator modes, such as size, value distribution, parity, density, or structural shape. Combine relevant modes systematically and add directed boundary cases; random sampling alone is not coverage.
+
+Use generated inputs by default. Fixed input files remain appropriate for small samples or exceptional constructions that are clearer as literal data. Both `sample` and `sampleLarge` are sample groups: `sample` cases are embedded in generated statements, while `sampleLarge` cases are distributed without being expanded inline.
+
+== Subtasks And Test Coverage
+
+Define subtask membership through precise affirmative traits emitted by the validator. Trait hints are checked author assertions, not a replacement for validator-derived traits. Keep statement constraints, validator conditions, generator arguments, testcase traits, and solution assumptions consistent.
+
+A single-subtask ICPC-style problem often needs roughly 20 to 100 testcases. A problem with many partial-scoring subtasks may need hundreds or thousands. These are guidelines rather than quotas; use the smallest set that strongly covers algorithm branches, boundaries, structural families, and plausible unintended approaches.
+
+Problem scores conventionally total `1.0`. Allocate partial scores primarily by difficulty, with modest additional weight when a subtask gives useful insight toward the intended solution. For a problem without partial scoring, prefer one subtask containing every testcase.
+
+== Participant Visibility
+
+Keep solutions, generators, validators, checkers, and interactors private unless participants require a specific distributed interface. Statements and required grader headers or libraries are exceptions. Check the generated option reference before setting visibility because component kinds use different option types.
 
 === Editor Configuration
 

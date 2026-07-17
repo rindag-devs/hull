@@ -1,12 +1,19 @@
 {
-  "$schema": "https://agentskills.io/schemas/agent-skills-index-v0.2.json",
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "skills": [
     {
-      "name": "Hull Documentation Discovery",
-      "type": "documentation",
-      "description": "Discover and consume the Hull documentation, including the canonical llms.txt index, sitemap, and generated Nix option references.",
-      "url": "https://hull.aberter0x3f.top/.well-known/agent-skills/documentation/SKILL.md",
-      "sha256": "d7e7a88b6f8cf9bfd1a99b0650ad2022b70e2ba3a695440b203c8df9a1af6fb0"
+      "name": "documentation",
+      "type": "skill-md",
+      "description": "Discover and consume Hull documentation, including the canonical llms.txt index, sitemap, Typst source mirrors, and generated Nix option references. Use when an agent needs authoritative Hull concepts, configuration fields, defaults, examples, or published documentation sources.",
+      "url": "/.well-known/agent-skills/documentation/SKILL.md",
+      "digest": "sha256:15e279f4cc57e8f13bf573c005b090a1ecbcbc5d731d1213893d7de4b3f31452"
+    },
+    {
+      "name": "author-hull-problems",
+      "type": "archive",
+      "description": "Create, complete, adapt, and verify competitive programming problems for Hull from an idea, a partial draft, an existing problem, or an existing problem workspace. Use when an agent must turn incomplete problem-authoring input into a buildable Hull problem, including formal Typst statements, intended and brute-force solutions, CPLib validators/checkers/generators/interactors, tests, traits, subtasks, targets, generated data, and calibrated resource limits.",
+      "url": "/.well-known/agent-skills/author-hull-problems.tar.gz",
+      "digest": "sha256:383f04c4e46f1b327bfe5e5959476c0b9c0a87052f335f092ed139133d30228e"
     }
   ]
 }
