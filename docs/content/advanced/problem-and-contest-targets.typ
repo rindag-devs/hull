@@ -72,31 +72,65 @@ Use it directly:
 targets.default = hull.problemTarget.common;
 ```
 
+=== Platform Targets
+
+Platform targets preserve Hull's judging flow inside the target package instead of mapping the problem into one platform-native judging route.
+
+Prefer these platform targets for ordinary use. Use legacy targets only when a platform-native evaluation model is specifically required.
+
+==== `hydro`
+
+`hull.problemTarget.hydro { ... }` packages one problem as a Hydro bundle that runs Hull's judging flow.
+
+- It includes a bundled Hull runtime, a static `proot`, custom judger runners, and problem data.
+- It carries static BusyBox and Zstandard executables for `targetSystem`; supported targets are `x86_64-linux` and `aarch64-linux`.
+- `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
+- It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Hydro.
+- The Hydro platform must provide `/bin/bash` for the first script invocation; bundle extraction does not depend on host `tar` or `zstd`.
+- It requires judge resource limits and language settings that fit the bundled runtime.
+
+==== `lemon`
+
+`hull.problemTarget.lemon { ... }` packages one problem as a Lemon bundle that runs Hull's judging flow.
+
+- It includes a bundled Hull runtime, custom judger runners, and problem data.
+- It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Lemon.
+
+==== `uoj`
+
+`hull.problemTarget.uoj { ... }` packages one problem as a UOJ bundle that runs Hull's judging flow.
+
+- It includes a bundled Hull runtime, custom judger runners, problem data, and static BusyBox and Zstandard executables.
+- `targetSystem` selects `x86_64-linux` or `aarch64-linux` and defaults to `x86_64-linux`; the UOJ host must run binaries for the selected architecture.
+- `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
+- The UOJ host must run Linux with unprivileged user namespaces enabled for `nix-user-chroot`.
+- Set the problem `extra_config` to `{"dont_use_formatter": true}` before syncing data so UOJ's formatter does not modify packaged binary files.
+- UOJ invokes the packaged Makefile before running the judger. Judging does not depend on host `tar`, `zstd`, or a compiler.
+
 === Legacy Judge-Format Target Families
 
-Legacy targets use the corresponding target platform's native judging flow instead of Hull's judging flow. They are useful when you need the platform to own the evaluation model directly, but they are not recommended unless that native flow is required.
+Legacy targets use the corresponding platform's native judging flow. They are intended for packages that must follow a platform-native evaluation model rather than Hull's judging flow.
 
-These targets require a branch constructor under `hull.problemTarget.legacy`. The common branches are:
+These targets use a platform family followed by a judging branch:
 
 - `.batch`: traditional input/output problems, including function-style grader problems when the target accepts grader files.
 - `.stdioInteraction`: standard-input/standard-output interactive problems.
 - `.answerOnly`: answer-only or submit-answer packages.
 
-Not every judge backend supports every branch.
-
 Branch support summary:
 
-```text
-target     batch  stdioInteraction  answerOnly
-hydro      yes    yes               yes
-uoj        yes    yes               yes
-cms        yes    yes               yes
-domjudge   yes    yes               no
-luogu      yes    yes               yes
-lemon      yes    no                yes
-```
+#table(
+  columns: 4,
+  table.header([Target], [batch], [stdioInteraction], [answerOnly]),
+  [hydro], [yes], [yes], [yes],
+  [uoj], [yes], [yes], [yes],
+  [cms], [yes], [yes], [yes],
+  [domjudge], [yes], [yes], [no],
+  [luogu], [yes], [yes], [yes],
+  [lemon], [yes], [no], [yes],
+)
 
-Use the constructor path shown by the matrix. There is no separate `type` option on these target families.
+Use the constructor path shown by the table. There is no separate `type` option on these target families.
 
 ==== `hydro`
 
@@ -252,41 +286,6 @@ targets.lemonLegacy = hull.problemTarget.legacy.lemon.batch {
   solutionExtNames.std = "cpp";
 };
 ```
-
-=== Platform Targets
-
-These targets are direct targets, not branch constructors. They preserve Hull's judging flow inside the target package instead of mapping the problem into one platform-native judging route.
-
-Prefer these platform targets for ordinary use. Use legacy targets only when a platform-native evaluation model is specifically required.
-
-==== `hydro`
-
-`hull.problemTarget.hydro { ... }` packages one problem as a Hydro bundle that runs Hull's judging flow.
-
-- It includes a bundled Hull runtime, a static `proot`, custom judger runners, and problem data.
-- It carries static BusyBox and Zstandard executables for `targetSystem`; supported targets are `x86_64-linux` and `aarch64-linux`.
-- `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
-- It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Hydro.
-- The Hydro platform must provide `/bin/bash` for the first script invocation; bundle extraction does not depend on host `tar` or `zstd`.
-- It requires judge resource limits and language settings that fit the bundled runtime.
-
-==== `lemon`
-
-`hull.problemTarget.lemon { ... }` packages one problem as a Lemon bundle that runs Hull's judging flow.
-
-- It includes a bundled Hull runtime, custom judger runners, and problem data.
-- It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Lemon.
-
-==== `uoj`
-
-`hull.problemTarget.uoj { ... }` packages one problem as a UOJ bundle that runs Hull's judging flow.
-
-- It includes a bundled Hull runtime, custom judger runners, problem data, and static BusyBox and Zstandard executables.
-- `targetSystem` selects `x86_64-linux` or `aarch64-linux` and defaults to `x86_64-linux`; the UOJ host must run binaries for the selected architecture.
-- `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
-- The UOJ host must run Linux with unprivileged user namespaces enabled for `nix-user-chroot`.
-- Set the problem `extra_config` to `{"dont_use_formatter": true}` before syncing data so UOJ's formatter does not modify packaged binary files.
-- UOJ invokes the packaged Makefile before running the judger. Judging does not depend on host `tar`, `zstd`, or a compiler.
 
 == Built-in Contest Targets
 
