@@ -18,6 +18,8 @@ Apply the role-based language defaults from `SKILL.md` unless the user specifies
 
 Write contest-style code: compact, direct, and performance-conscious. Fast input, bit operations, `inline`, `__int128`, and appropriate compiler builtins are acceptable. Do not include `bits/stdc++.h`; include the required standard headers. Do not add recovery logic for invalid input or impossible states that the validator excludes.
 
+By default, keep each solution self-contained; include only standard-library headers and, for special problem types, libraries or headers explicitly required by the statement (for example, a provided grader header).
+
 Use CPLib for generators, validators, checkers, and interactors. By default, depend only on CPLib and the C/C++ standard library. Discover the installed CPLib API from the project dependency, Hull documentation, or a user-provided source; never assume a machine-specific checkout path.
 
 ## Correct And Suboptimal Solutions
