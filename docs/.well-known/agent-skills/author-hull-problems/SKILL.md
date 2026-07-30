@@ -76,6 +76,8 @@ Apply [programs-and-cplib.md](references/programs-and-cplib.md) to implement and
 
 Implement the validator, generator, required judging components, concise component tests, documents, groups, traits, subtasks, limits, and requested targets. Apply [programs-and-cplib.md](references/programs-and-cplib.md) to component behavior and [hull-configuration.md](references/hull-configuration.md) to registration and packaging.
 
+For a custom judger or direct `hull.runWasm.script` request, read the online Custom Judgers page linked from [hull-configuration.md](references/hull-configuration.md). Do not reconstruct or duplicate the run-wasm schema from memory.
+
 Finish this phase with one coherent configuration ready to generate and validate data.
 
 ### 7. Construct Strong Data

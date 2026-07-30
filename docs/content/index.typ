@@ -11,10 +11,10 @@ Hull is a Nix-based framework for competitive programming problem authoring, ana
 
 == What is Hull?
 
-Hull defines problems and contests in Nix, compiles programs to WebAssembly, runs analysis through the Hull CLI, and packages results for judge systems or local inspection.
+Hull defines problems and contests in Nix, compiles programs to WASI Preview 1 source WASM, runs them through a deterministic Wasmtime-backed runner, and packages analyzed results for judge systems or local inspection.
 
 - Nix defines build inputs and package structure.
-- WebAssembly provides a stable execution target.
+- WASI Preview 1 source WASM provides the authoritative execution input.
 - Hull CLI performs runtime analysis and packaging.
 
 == Why Hull?

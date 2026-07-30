@@ -1,17 +1,17 @@
 {
-  "ticks-per-ms": 10000000,
+  "ticks_per_ms": 10000000,
   "languages": [
     {
-      "display-name": "C",
-      "file-name-suffix": ".c",
-      "display-compile-arguments": "wasm32-wasi-wasip1-clang -O3 -std=c23 -Wl,-z,stack-size=67108864",
-      "hull-language": "c.23"
+      "display_name": "C",
+      "file_name_suffix": ".c",
+      "display_compile_arguments": "wasm32-wasi-wasip1-clang -O3 -std=c23 -Wl,-z,stack-size=67108864",
+      "hull_language": "c.23"
     },
     {
-      "display-name": "C++",
-      "file-name-suffix": ".cpp",
-      "display-compile-arguments": "wasm32-wasi-wasip1-clang++ -O3 -std=c++26 -Wl,-z,stack-size=67108864",
-      "hull-language": "cpp.26"
+      "display_name": "C++",
+      "file_name_suffix": ".cpp",
+      "display_compile_arguments": "wasm32-wasi-wasip1-clang++ -O3 -std=c++26 -Wl,-z,stack-size=67108864",
+      "hull_language": "cpp.26"
     }
   ]
 }

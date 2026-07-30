@@ -78,13 +78,13 @@ struct LemonBundleTestCase {
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct LemonLanguageMap {
   lemon_to_hull_language_map: BTreeMap<String, String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct LemonBundleMetadata {
   lemon_full_score: i64,
 }
@@ -188,6 +188,7 @@ fn aggregate_lemon_report(
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
+    file_size_limit: problem.file_size_limit,
     full_score: problem.full_score,
     checker: problem.checker.clone(),
     validator: problem.validator.clone(),
@@ -239,11 +240,30 @@ fn aggregate_lemon_report(
     .map(|report| report.memory)
     .max()
     .unwrap_or(0);
+  let status = aggregate_top_level_status(test_case_reports);
+  let failure_details = test_case_reports
+    .values()
+    .find(|report| report.status == status && report.status != JudgeStatus::Accepted)
+    .map(|report| {
+      if report.message.is_empty() {
+        format!("status: {}", report.status)
+      } else {
+        format!("status: {}\n\nmessage:\n{}", report.status, report.message)
+      }
+    });
+  let message = match failure_details {
+    Some(details) => format!(
+      "{}\n\nSelected Failure Details:\n{}",
+      cli_report.render_human_readable(),
+      details
+    ),
+    None => cli_report.render_human_readable(),
+  };
 
   JudgeReport {
-    status: aggregate_top_level_status(test_case_reports),
+    status,
     score,
-    message: cli_report.render_human_readable(),
+    message,
     tick,
     memory,
     outputs: String::new(),
@@ -251,36 +271,8 @@ fn aggregate_lemon_report(
 }
 
 fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>) -> JudgeStatus {
-  let statuses = test_case_reports
-    .values()
-    .map(|report| report.status)
-    .collect::<Vec<_>>();
-  if statuses.is_empty() {
-    return JudgeStatus::InternalError;
-  }
-  if statuses
-    .iter()
-    .all(|status| *status == JudgeStatus::Accepted)
-  {
-    return JudgeStatus::Accepted;
-  }
-  for fatal in [
-    JudgeStatus::RuntimeError,
-    JudgeStatus::TimeLimitExceeded,
-    JudgeStatus::MemoryLimitExceeded,
-    JudgeStatus::InternalError,
-  ] {
-    if statuses.contains(&fatal) {
-      return fatal;
-    }
-  }
-  if statuses.contains(&JudgeStatus::WrongAnswer) {
-    return JudgeStatus::WrongAnswer;
-  }
-  if statuses.contains(&JudgeStatus::PartiallyCorrect) {
-    return JudgeStatus::PartiallyCorrect;
-  }
-  statuses[0]
+  JudgeStatus::aggregate(test_case_reports.values().map(|report| report.status))
+    .unwrap_or(JudgeStatus::InternalError)
 }
 
 fn write_lemon_report(
@@ -288,6 +280,9 @@ fn write_lemon_report(
   plain_output_path: &Path,
   report: &JudgeReport,
 ) -> Result<()> {
+  if report.status == JudgeStatus::FileError {
+    eprintln!("Hull file error:\n{}", report.message);
+  }
   if let Some(parent) = plain_output_path.parent() {
     std::fs::create_dir_all(parent)?;
   }
@@ -358,6 +353,33 @@ mod tests {
   use crate::runtime::types::{ValidationReport, ValidationStatus};
 
   #[test]
+  fn file_error_uses_native_marker() {
+    let directory = tempfile::tempdir().unwrap();
+    let report_path = directory.path().join("contestant-report");
+    let report = JudgeReport {
+      status: JudgeStatus::FileError,
+      score: 0.0,
+      message: "size limit exceeded".to_string(),
+      tick: 1,
+      memory: 2,
+      outputs: String::new(),
+    };
+
+    write_lemon_report(
+      &LemonBundleMetadata {
+        lemon_full_score: 100,
+      },
+      &report_path,
+      &report,
+    )
+    .unwrap();
+
+    let plain_report = fs::read_to_string(report_path).unwrap();
+    assert_eq!(plain_report.lines().nth(3), Some("file_error"));
+    assert!(plain_report.contains("size limit exceeded"));
+  }
+
+  #[test]
   fn bundle_root_layout() {
     let root = std::env::temp_dir().join(format!(
       "hull-lemon-custom-bundle-test-{}",
@@ -372,29 +394,30 @@ mod tests {
       root.join("problem.json"),
       serde_json::to_vec(&serde_json::json!({
         "name": "sample",
-        "tickLimit": 1000,
-        "memoryLimit": 268435456,
-        "fullScore": 100.0,
-        "lemonFullScore": 100,
-        "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drvPath": null } },
-        "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drvPath": null } },
+        "tick_limit": 1000,
+        "memory_limit": 268435456,
+        "file_size_limit": 1073741824,
+        "full_score": 100.0,
+        "lemon_full_score": 100,
+        "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drv_path": null } },
+        "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drv_path": null } },
         "judger": {
-          "prepareSolutionRunner": { "path": "/prepare", "drvPath": null },
-          "generateOutputsRunner": { "path": "/generate", "drvPath": null },
-          "judgeRunner": { "path": "/judge", "drvPath": null }
+          "prepare_solution_runner": { "path": "/prepare", "drv_path": null },
+          "generate_outputs_runner": { "path": "/generate", "drv_path": null },
+          "judge_runner": { "path": "/judge", "drv_path": null }
         },
-        "mainCorrectSolution": "std",
+        "main_correct_solution": "std",
         "subtasks": [
-          { "fullScore": 100.0, "scoringMethod": "sum", "traits": {} }
+          { "full_score": 100.0, "scoring_method": "sum", "traits": {} }
         ],
         "solutions": [],
-        "testCases": [
+        "test_cases": [
           {
             "name": "hand1",
-            "tickLimit": 1000,
-            "memoryLimit": 268435456,
+            "tick_limit": 1000,
+            "memory_limit": 268435456,
             "groups": [],
-            "traitHints": {}
+            "trait_hints": {}
           }
         ]
       }))
@@ -403,28 +426,29 @@ mod tests {
     .expect("write problem metadata");
     let problem: BundleJudgeProblemSpec = serde_json::from_value(serde_json::json!({
       "name": "sample",
-      "tickLimit": 1000,
-      "memoryLimit": 268435456,
-      "fullScore": 100.0,
-      "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drvPath": null } },
-      "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drvPath": null } },
+      "tick_limit": 1000,
+      "memory_limit": 268435456,
+      "file_size_limit": 1073741824,
+      "full_score": 100.0,
+      "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drv_path": null } },
+      "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drv_path": null } },
       "judger": {
-        "prepareSolutionRunner": { "path": "/prepare", "drvPath": null },
-        "generateOutputsRunner": { "path": "/generate", "drvPath": null },
-        "judgeRunner": { "path": "/judge", "drvPath": null }
+        "prepare_solution_runner": { "path": "/prepare", "drv_path": null },
+        "generate_outputs_runner": { "path": "/generate", "drv_path": null },
+        "judge_runner": { "path": "/judge", "drv_path": null }
       },
-      "mainCorrectSolution": "std",
+      "main_correct_solution": "std",
       "subtasks": [
-        { "fullScore": 100.0, "scoringMethod": "sum", "traits": {} }
+        { "full_score": 100.0, "scoring_method": "sum", "traits": {} }
       ],
       "solutions": [],
-      "testCases": [
+      "test_cases": [
         {
           "name": "hand1",
-          "tickLimit": 1000,
-          "memoryLimit": 268435456,
+          "tick_limit": 1000,
+          "memory_limit": 268435456,
           "groups": [],
-          "traitHints": {}
+          "trait_hints": {}
         }
       ]
     }))

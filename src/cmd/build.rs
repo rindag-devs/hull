@@ -21,6 +21,7 @@ use crate::runtime::build::build_problem;
 use crate::runtime::types::RuntimeOptions;
 
 #[derive(Parser)]
+/// Options for analyzing and packaging one problem.
 pub struct BuildOpts {
   /// Problem name to analyze and package, e.g. `aPlusB`.
   #[arg(long, short, default_value = "default")]
@@ -47,8 +48,9 @@ pub struct BuildOpts {
   pub nix_args: Vec<String>,
 }
 
+/// Executes the problem build command.
 pub fn run(build_opts: &BuildOpts) -> Result<()> {
-  let progress = interactive::create_problem_progress(&build_opts.problem);
+  let progress = interactive::create_progress("Problem", None);
   build_problem(
     &build_opts.problem,
     &build_opts.target,

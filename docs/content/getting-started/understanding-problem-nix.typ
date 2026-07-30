@@ -21,6 +21,7 @@ These options define the fundamental properties of your problem.
 
   tickLimit = 1000 * 10000000; # 1 second
   memoryLimit = 256 * 1024 * 1024; # 256 MiB
+  fileSizeLimit = 1024 * 1024 * 1024; # 1 GiB per regular file or pipe
 }
 ```
 
@@ -28,6 +29,7 @@ These options define the fundamental properties of your problem.
 - `displayName`: An attribute set containing human-readable titles for the problem in different languages. The keys are language codes (e.g., `en`, `zh`).
 - `tickLimit`: The default execution time limit for solutions, measured in "ticks". A common starting point is `1000 * 10000000` ticks, which roughly corresponds to 1 second of execution time in the WASM runtime.
 - `memoryLimit`: The default memory limit for solutions, measured in bytes.
+- `fileSizeLimit`: The byte ceiling applied independently to each contestant-controlled regular file or pipe. It defaults to 1 GiB. A regular file is limited by its logical length, including initial contents; a pipe is limited by cumulative successful writes. Exceeding a governed file produces `file_error`.
 
 == Core Programs
 

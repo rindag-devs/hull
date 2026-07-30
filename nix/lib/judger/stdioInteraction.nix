@@ -20,11 +20,11 @@
   hullPkgs,
 }:
 
-# Judger for problems that require interaction via standard I/O.
+# Runs the solution and interactor in one deterministic session with bounded in-process pipes.
+# A connected protocol deadlock produces time_limit_exceeded without a wall-clock timeout option.
 problem:
 {
   solutionSpecificLanguages ? null,
-  realTimeLimitSeconds,
 }:
 let
   languages =
@@ -41,6 +41,115 @@ let
         )
         && (builtins.elem n solutionSpecificLanguages)
       ) problem.languages;
+
+  request = {
+    report_path = "session-report.json";
+    files = [
+      {
+        name = "input";
+        kind = "regular";
+        host_path = hull.runWasm.dynamicString "HULL_INPUT_PATH";
+        max_permissions = 4;
+        size_limit = problem.fileSizeLimit;
+      }
+      {
+        name = "solution_stderr";
+        kind = "regular";
+        host_path = "solution.stderr";
+        max_permissions = 2;
+        size_limit = problem.fileSizeLimit;
+      }
+      {
+        name = "interactor_report";
+        kind = "regular";
+        host_path = "interactor.json";
+        max_permissions = 2;
+        size_limit = "tool";
+      }
+      {
+        name = "solution_to_interactor";
+        kind = "pipe";
+        capacity = 1048576;
+        size_limit = problem.fileSizeLimit;
+      }
+      {
+        name = "interactor_to_solution";
+        kind = "pipe";
+        capacity = 1048576;
+        size_limit = "tool";
+      }
+    ];
+    programs = [
+      {
+        name = "solution";
+        wasm_path = hull.runWasm.dynamicString "HULL_SOLUTION_EXECUTABLE";
+        arguments = [ ];
+        tick_limit = hull.runWasm.dynamicNumber "HULL_TICK_LIMIT";
+        memory_limit = hull.runWasm.dynamicNumber "HULL_MEMORY_LIMIT";
+        required_accepted = false;
+        file_system = {
+          directories = [
+            {
+              path = ".";
+              permissions = 5;
+            }
+          ];
+          bindings = [ ];
+        };
+        initial_descriptors = [
+          {
+            file = "interactor_to_solution";
+            permissions = 4;
+          }
+          {
+            file = "solution_to_interactor";
+            permissions = 2;
+          }
+          {
+            file = "solution_stderr";
+            permissions = 2;
+          }
+        ];
+      }
+      {
+        name = "interactor";
+        wasm_path = toString problem.checker.wasm;
+        arguments = [ "input" ];
+        tick_limit = "tool";
+        memory_limit = "tool";
+        required_accepted = false;
+        file_system = {
+          directories = [
+            {
+              path = ".";
+              permissions = 5;
+            }
+          ];
+          bindings = [
+            {
+              path = "input";
+              file = "input";
+              permissions = 4;
+            }
+          ];
+        };
+        initial_descriptors = [
+          {
+            file = "solution_to_interactor";
+            permissions = 4;
+          }
+          {
+            file = "interactor_to_solution";
+            permissions = 2;
+          }
+          {
+            file = "interactor_report";
+            permissions = 2;
+          }
+        ];
+      }
+    ];
+  };
 in
 {
   _type = "hullJudger";
@@ -68,7 +177,7 @@ in
         jq -nc \
           --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
           --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
-          '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
+          '{ src: $src, executable: { path: $executable, drv_path: null } }' > "$HULL_REPORT_PATH"
       '';
   };
 
@@ -76,127 +185,55 @@ in
     name = "hull-judger-stdioInteraction-judge-${problem.name}";
     inheritPath = false;
     runtimeInputs =
-      { targetHullPkgs, targetPkgs, ... }:
+      { targetPkgs, ... }:
       [
-        targetHullPkgs.default
         targetPkgs.coreutils
         targetPkgs.jq
       ];
-    text = ''
-      workdir=$(mktemp -d)
-      intr_to_sol_guard_pid=
-      sol_to_intr_guard_pid=
+    text =
+      { targetHull, ... }:
+      ''
+        ${targetHull.runWasm.script { inherit request; }}
 
-      cleanup() {
-        if [ -n "$intr_to_sol_guard_pid" ]; then
-          kill "$intr_to_sol_guard_pid" 2>/dev/null || true
+        solution_status=$(jq -r '.results[] | select(.program == "solution") | .status' session-report.json)
+        tick=$(jq '.results[] | select(.program == "solution") | .tick' session-report.json)
+        memory=$(jq '.results[] | select(.program == "solution") | .memory' session-report.json)
+
+        if [ "$solution_status" != "accepted" ]; then
+          final_status=$solution_status
+          final_score=0.0
+          final_message=$(jq -r '.results[] | select(.program == "solution") | .error_message // ""' session-report.json)
+        else
+          if ! jq -e \
+            '.results[] | select(.program == "interactor" and (.status == "accepted" or (.status == "runtime_error" and .exit_code != null)))' \
+            session-report.json >/dev/null || ! jq -e \
+            '.status | IN("accepted", "wrong_answer", "partially_correct", "internal_error")' \
+            interactor.json >/dev/null 2>&1; then
+            final_status=internal_error
+            final_score=0.0
+            final_message=$(jq -r '.results[] | select(.program == "interactor") | .error_message // "Interactor failed to produce a valid report"' session-report.json)
+          else
+            final_status=$(jq -r .status interactor.json)
+            final_score=$(jq -r .score interactor.json)
+            final_message=$(jq -r .message interactor.json)
+          fi
         fi
-        if [ -n "$sol_to_intr_guard_pid" ]; then
-          kill "$sol_to_intr_guard_pid" 2>/dev/null || true
-        fi
-        rm -rf "$workdir"
-      }
-      trap cleanup EXIT
-      cd "$workdir"
 
-      sol_to_intr=sol_to_intr
-      intr_to_sol=intr_to_sol
-      interactor_json=interactor.json
-      run_json=run.json
-      sol_wasm=sol.wasm
-      interactor_wasm=interactor.wasm
-      input_path=input
-
-      mkfifo "$sol_to_intr" "$intr_to_sol"
-
-      (exec <"$intr_to_sol"; sleep 2147483647) &
-      intr_to_sol_guard_pid=$!
-      (exec <"$sol_to_intr"; sleep 2147483647) &
-      sol_to_intr_guard_pid=$!
-
-      cp "$HULL_SOLUTION_EXECUTABLE" "$sol_wasm"
-      cp ${problem.checker.wasm} "$interactor_wasm"
-      cp "$HULL_INPUT_PATH" "$input_path"
-
-      timeout ${toString (realTimeLimitSeconds * 2)}s hull run-wasm "$interactor_wasm" \
-        --stdin-path="$sol_to_intr" \
-        --stdout-path="$intr_to_sol" \
-        --stderr-path="$interactor_json" \
-        --read-file input \
-        -- input &
-      intr_pid=$!
-
-      timeout ${toString realTimeLimitSeconds}s hull run-wasm "$sol_wasm" \
-        --stdin-path="$intr_to_sol" \
-        --stdout-path="$sol_to_intr" \
-        --tick-limit="$HULL_TICK_LIMIT" \
-        --memory-limit="$HULL_MEMORY_LIMIT" \
-        > "$run_json" &
-      sol_pid=$!
-
-      set +e
-      wait $sol_pid
-      sol_exit_code=$?
-      set -e
-
-      TLE_RUN_JSON=$(jq -nc \
-        --arg status "time_limit_exceeded" \
-        --argjson tick "$HULL_TICK_LIMIT" \
-        --argjson memory 0 \
-        --argjson exitCode -1 \
-        --arg errorMessage "Real-time limit exceeded (killed after ${toString realTimeLimitSeconds}s)" \
-        '{
-          status: $status,
-          tick: $tick,
-          memory: $memory,
-          exitCode: $exitCode,
-          errorMessage: $errorMessage
-        }')
-
-      if [ "$sol_exit_code" -eq 124 ] || [ "$sol_exit_code" -eq 137 ]; then
-        printf '%s\n' "$TLE_RUN_JSON" > "$run_json"
-        kill -9 $intr_pid || true
-      else
-        wait $intr_pid || true
-      fi
-
-      run_status=$(jq -r .status "$run_json")
-
-      if [ "$run_status" = "accepted" ]; then
-        final_status=$(jq -r .status "$interactor_json")
-        final_score=$(jq -r .score "$interactor_json")
-        final_message=$(jq -r .message "$interactor_json")
-      else
-        final_status=$run_status
-        final_score=0.0
-        final_message=$(jq -r .errorMessage "$run_json")
-      fi
-
-      tick=$(jq .tick "$run_json")
-      memory=$(jq .memory "$run_json")
-
-      jq -nc \
-        --arg status "$final_status" \
-        --argjson score "$final_score" \
-        --arg message "$final_message" \
-        --argjson tick "$tick" \
-        --argjson memory "$memory" \
-        '{
-          status: $status,
-          score: $score,
-          message: $message,
-          tick: $tick,
-          memory: $memory
-        }' > "$HULL_REPORT_PATH"
-    '';
+        jq -nc \
+          --arg status "$final_status" \
+          --argjson score "$final_score" \
+          --arg message "$final_message" \
+          --argjson tick "$tick" \
+          --argjson memory "$memory" \
+          '{ status: $status, score: $score, message: $message, tick: $tick, memory: $memory }' \
+          > "$HULL_REPORT_PATH"
+      '';
   };
 
   generateOutputs = hull.judger.writeShellApplication {
     name = "hull-judger-stdioInteraction-generateOutputs-${problem.name}";
     inheritPath = false;
     runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
-    text = ''
-      mkdir -p "$HULL_OUTPUTS_DIR"
-    '';
+    text = ''mkdir -p "$HULL_OUTPUTS_DIR"'';
   };
 }

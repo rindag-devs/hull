@@ -82,7 +82,7 @@ struct HydroBundleTestCase {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct HydroLanguageMap {
   hydro_to_hull_language_map: Value,
 }
@@ -183,6 +183,7 @@ fn aggregate_hydro_report(
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
+    file_size_limit: problem.file_size_limit,
     full_score: problem.full_score,
     checker: problem.checker.clone(),
     validator: problem.validator.clone(),
@@ -215,20 +216,21 @@ fn aggregate_hydro_report(
     &subtask_reports,
     test_case_reports,
   );
-  let failure_details = test_case_reports.values().find_map(|report| {
-    if report.status == JudgeStatus::Accepted {
-      return None;
-    }
-    let mut parts = Vec::new();
-    parts.push(format!("status: {}", report.status));
-    if !report.message.is_empty() {
-      parts.push(format!("message:\n{}", report.message));
-    }
-    if !report.outputs.is_empty() {
-      parts.push(format!("outputs:\n{}", report.outputs));
-    }
-    Some(parts.join("\n\n"))
-  });
+  let status = aggregate_top_level_status(test_case_reports);
+  let failure_details = test_case_reports
+    .values()
+    .find(|report| report.status == status && report.status != JudgeStatus::Accepted)
+    .map(|report| {
+      let mut parts = Vec::new();
+      parts.push(format!("status: {}", report.status));
+      if !report.message.is_empty() {
+        parts.push(format!("message:\n{}", report.message));
+      }
+      if !report.outputs.is_empty() {
+        parts.push(format!("outputs:\n{}", report.outputs));
+      }
+      parts.join("\n\n")
+    });
   let total_score = subtask_reports
     .iter()
     .map(|report| report.scaled_score)
@@ -250,7 +252,7 @@ fn aggregate_hydro_report(
     .unwrap_or(0);
 
   JudgeReport {
-    status: aggregate_top_level_status(test_case_reports),
+    status,
     score,
     message: match failure_details {
       Some(details) => format!(
@@ -267,36 +269,8 @@ fn aggregate_hydro_report(
 }
 
 fn aggregate_top_level_status(test_case_reports: &BTreeMap<String, JudgeReport>) -> JudgeStatus {
-  let statuses = test_case_reports
-    .values()
-    .map(|report| report.status)
-    .collect::<Vec<_>>();
-  if statuses.is_empty() {
-    return JudgeStatus::InternalError;
-  }
-  if statuses
-    .iter()
-    .all(|status| *status == JudgeStatus::Accepted)
-  {
-    return JudgeStatus::Accepted;
-  }
-  for fatal in [
-    JudgeStatus::RuntimeError,
-    JudgeStatus::TimeLimitExceeded,
-    JudgeStatus::MemoryLimitExceeded,
-    JudgeStatus::InternalError,
-  ] {
-    if statuses.contains(&fatal) {
-      return fatal;
-    }
-  }
-  if statuses.contains(&JudgeStatus::WrongAnswer) {
-    return JudgeStatus::WrongAnswer;
-  }
-  if statuses.contains(&JudgeStatus::PartiallyCorrect) {
-    return JudgeStatus::PartiallyCorrect;
-  }
-  statuses[0]
+  JudgeStatus::aggregate(test_case_reports.values().map(|report| report.status))
+    .unwrap_or(JudgeStatus::InternalError)
 }
 
 fn write_hydro_reports(stdout_report_path: &Path, report: &JudgeReport) -> Result<()> {
@@ -360,4 +334,30 @@ fn resolve_submission_hull_language(
       submission_language
     )
   })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn file_error_marks_outer_failure() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("report");
+    write_hydro_reports(
+      &path,
+      &JudgeReport {
+        status: JudgeStatus::FileError,
+        score: 0.0,
+        message: "size limit exceeded".to_string(),
+        tick: 1,
+        memory: 2,
+        outputs: String::new(),
+      },
+    )
+    .unwrap();
+    let report = std::fs::read_to_string(path).unwrap();
+    assert!(report.contains("\nfile_error\n"));
+    assert!(report.contains("file_error:\nsize limit exceeded"));
+  }
 }

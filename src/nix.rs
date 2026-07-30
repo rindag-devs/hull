@@ -33,6 +33,7 @@ enum ExprInput {
 }
 
 #[derive(Deserialize)]
+/// Relevant fields returned by `nix flake metadata`.
 pub struct FlakeMetadata {
   url: String,
 }
@@ -58,6 +59,7 @@ pub fn get_flake_url() -> Result<String> {
   Ok(metadata.url)
 }
 
+/// Builder for one `nix eval` command.
 pub struct EvalCommand {
   expr: Option<ExprInput>,
   impure: bool,
@@ -66,6 +68,7 @@ pub struct EvalCommand {
 }
 
 impl EvalCommand {
+  /// Creates an evaluator that emits raw output without `nom`.
   pub fn new() -> Self {
     Self {
       expr: None,
@@ -78,31 +81,37 @@ impl EvalCommand {
     }
   }
 
+  /// Supplies an expression through `--expr`.
   pub fn expr(mut self, expr: &str) -> Self {
     self.expr = Some(ExprInput::Arg(expr.to_string()));
     self
   }
 
+  /// Supplies an expression through `--file`.
   pub fn expr_file(mut self, path: PathBuf) -> Self {
     self.expr = Some(ExprInput::File(path));
     self
   }
 
+  /// Supplies an expression through standard input.
   pub fn expr_stdin(mut self, expr: &str) -> Self {
     self.expr = Some(ExprInput::Stdin(expr.to_string()));
     self
   }
 
+  /// Enables or disables impure evaluation.
   pub fn impure(mut self, impure: bool) -> Self {
     self.impure = impure;
     self
   }
 
+  /// Enables or disables raw evaluator output.
   pub fn raw(mut self, raw: bool) -> Self {
     self.raw = raw;
     self
   }
 
+  /// Enables or disables `nom` log rendering.
   pub fn with_nom(mut self, with_nom: bool) -> Self {
     self.with_nom = with_nom;
     self
@@ -136,6 +145,7 @@ impl EvalCommand {
     cmd
   }
 
+  /// Executes the evaluator and returns its standard output.
   pub fn run_and_capture_stdout(self) -> Result<String> {
     let stdin_expr = match &self.expr {
       Some(ExprInput::Stdin(expr)) => Some(expr.clone()),
@@ -203,11 +213,13 @@ impl BuildCommand {
     self
   }
 
+  /// Sets a Nix expression file to be built via `--file`.
   pub fn expr_file(mut self, path: PathBuf) -> Self {
     self.expr = Some(ExprInput::File(path));
     self
   }
 
+  /// Sets a Nix expression supplied through standard input.
   pub fn expr_stdin(mut self, expr: &str) -> Self {
     self.expr = Some(ExprInput::Stdin(expr.to_string()));
     self
@@ -373,6 +385,7 @@ impl Default for BuildCommand {
   }
 }
 
+/// Executes independent Nix build commands concurrently with shared `nom` output.
 pub fn run_build_commands(commands: Vec<BuildCommand>, label: &str) -> Result<()> {
   if commands.is_empty() {
     return Ok(());

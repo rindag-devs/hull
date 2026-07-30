@@ -14,21 +14,14 @@
 */
 
 use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use sha2::{Digest, Sha256};
 
 use super::types::{ArtifactSpec, ProblemSpec, RuntimeData};
 use crate::interactive::{ProblemProgressHandle, TaskItemReport, TaskKind};
 use crate::nix::BuildCommand;
-use crate::runner;
-
-static NATIVE_MODULE_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 const STORE_ADD_BATCH_SIZE: usize = 128;
 const STORE_ADD_ARG_BYTES_LIMIT: usize = 128 * 1024;
 
@@ -172,120 +165,6 @@ fn run_parent_build(artifact: &ArtifactSpec) -> Result<()> {
     .no_link(true)
     .installable(parent.to_string_lossy().as_ref())
     .run()
-}
-
-/// Compiles a WASM module into Hull's native module cache and returns its path.
-pub fn cache_native_module(module_path: &str) -> Result<String> {
-  let module_bytes = fs::read(module_path)
-    .with_context(|| format!("Failed to read module artifact {}", module_path))?;
-  let cache_dir = native_module_cache_dir()?;
-
-  if runner::is_precompiled(&module_bytes) {
-    let module_path = Path::new(module_path);
-    if module_path.starts_with(&cache_dir) {
-      return Ok(module_path.to_string_lossy().into_owned());
-    }
-    bail!(
-      "Refusing to load external precompiled module {}",
-      module_path.display()
-    );
-  }
-
-  fs::create_dir_all(&cache_dir).with_context(|| {
-    format!(
-      "Failed to create native module cache {}",
-      cache_dir.display()
-    )
-  })?;
-
-  let mut hasher = Sha256::new();
-  hasher.update(env!("CARGO_PKG_VERSION").as_bytes());
-  hasher.update(wasmtime_cache_version().as_bytes());
-  hasher.update(std::env::consts::ARCH.as_bytes());
-  hasher.update(std::env::consts::OS.as_bytes());
-  hasher.update(&module_bytes);
-  let cache_key = hasher
-    .finalize()
-    .as_slice()
-    .iter()
-    .map(|byte| format!("{byte:02x}"))
-    .collect::<String>();
-  let cached_path = cache_dir.join(format!("{cache_key}.cwasm"));
-
-  if cached_path.exists() {
-    return Ok(cached_path.to_string_lossy().into_owned());
-  }
-
-  let compiled_bytes = runner::compile(&module_bytes)?;
-  let temp_path = cache_dir.join(format!(
-    "{cache_key}.{}.{}.{}.tmp",
-    std::process::id(),
-    unique_temp_component(),
-    NATIVE_MODULE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
-  ));
-  fs::write(&temp_path, compiled_bytes).with_context(|| {
-    format!(
-      "Failed to write cached native module {}",
-      temp_path.display()
-    )
-  })?;
-
-  match fs::rename(&temp_path, &cached_path) {
-    Ok(()) => {}
-    Err(err) if cached_path.exists() => {
-      let _ = fs::remove_file(&temp_path);
-      let _ = err;
-    }
-    Err(err) => {
-      let _ = fs::remove_file(&temp_path);
-      return Err(err).with_context(|| {
-        format!(
-          "Failed to move cached native module into place at {}",
-          cached_path.display()
-        )
-      });
-    }
-  }
-
-  Ok(cached_path.to_string_lossy().into_owned())
-}
-
-fn wasmtime_cache_version() -> &'static str {
-  let lockfile = include_str!("../../Cargo.lock");
-  let mut in_wasmtime_package = false;
-  for line in lockfile.lines() {
-    match line {
-      "[[package]]" => in_wasmtime_package = false,
-      "name = \"wasmtime\"" => in_wasmtime_package = true,
-      _ if in_wasmtime_package && line.starts_with("version = ") => {
-        return line.trim_start_matches("version = ").trim_matches('"');
-      }
-      _ => {}
-    }
-  }
-  "unknown"
-}
-
-fn unique_temp_component() -> u128 {
-  SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .map(|duration| duration.as_nanos())
-    .unwrap_or(0)
-}
-
-fn native_module_cache_dir() -> Result<PathBuf> {
-  if let Some(cache_home) = std::env::var_os("XDG_CACHE_HOME") {
-    return Ok(PathBuf::from(cache_home).join("hull").join("cwasm"));
-  }
-
-  let home =
-    std::env::var_os("HOME").context("Failed to determine HOME for native module cache")?;
-  Ok(
-    PathBuf::from(home)
-      .join(".cache")
-      .join("hull")
-      .join("cwasm"),
-  )
 }
 
 /// Imports one path into the Nix store and returns the resulting store path.
@@ -484,8 +363,7 @@ pub fn storeify_runtime_data(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::collections::{BTreeMap, HashSet};
-  use std::thread;
+  use std::collections::BTreeMap;
 
   use crate::runtime::types::{
     CheckerTestSpec, JudgerSpec, ProblemSpec, ProgramSpec, ScoringMethod, SolutionSpec,
@@ -523,55 +401,12 @@ mod tests {
     );
   }
 
-  #[test]
-  fn temp_names_unique() {
-    let cache_key = "cache-key";
-    let handles = (0..32)
-      .map(|_| {
-        thread::spawn(move || {
-          format!(
-            "{cache_key}.{}.{}.{}.tmp",
-            std::process::id(),
-            unique_temp_component(),
-            NATIVE_MODULE_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
-          )
-        })
-      })
-      .collect::<Vec<_>>();
-
-    let names = handles
-      .into_iter()
-      .map(|handle| handle.join().expect("temp name thread should not panic"))
-      .collect::<Vec<_>>();
-    let unique_names = names.iter().cloned().collect::<HashSet<_>>();
-
-    assert_eq!(unique_names.len(), names.len());
-  }
-
-  #[test]
-  fn store_add_limits() {
-    let short_paths = (0..(STORE_ADD_BATCH_SIZE + 1))
-      .map(|index| format!("/tmp/hull/{index}"))
-      .collect::<Vec<_>>();
-    let short_batches = store_add_batches(&short_paths);
-    assert_eq!(short_batches.len(), 2);
-    assert_eq!(short_batches[0].len(), STORE_ADD_BATCH_SIZE);
-    assert_eq!(short_batches[1].len(), 1);
-
-    let long_path = format!("/tmp/hull/{}", "x".repeat(STORE_ADD_ARG_BYTES_LIMIT / 2));
-    let long_paths = vec![long_path.clone(), long_path.clone(), long_path];
-    let long_batches = store_add_batches(&long_paths);
-    assert!(long_batches.len() > 1);
-    assert!(long_batches.iter().all(|batch| {
-      batch.iter().map(|path| path.len() + 1).sum::<usize>() <= STORE_ADD_ARG_BYTES_LIMIT
-    }));
-  }
-
   fn problem_with_artifacts() -> ProblemSpec {
     ProblemSpec {
       name: "aPlusB".to_string(),
       tick_limit: 1,
       memory_limit: 1,
+      file_size_limit: 1,
       full_score: 1.0,
       checker: ProgramSpec {
         src: None,

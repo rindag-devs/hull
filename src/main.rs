@@ -13,19 +13,30 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
+//! Hull command-line application and runtime implementation.
+
 use anyhow::Result;
 use clap::Parser;
 use cli::Opts;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+/// Command-line argument model.
 pub mod cli;
+/// Command implementations.
 pub mod cmd;
+/// Human-readable value formatting.
 pub mod format;
+/// Interactive terminal progress rendering.
 pub mod interactive;
+/// Nix command construction and execution.
 pub mod nix;
+/// Host platform defaults.
 pub mod platform;
+/// Command-line judging reports.
 pub mod report;
+/// Deterministic Wasm execution.
 pub mod runner;
+/// Problem analysis and packaging runtime.
 pub mod runtime;
 
 fn main() -> Result<()> {

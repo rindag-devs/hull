@@ -27,6 +27,7 @@
 
   tickLimit = 1000 * 10000000;
   memoryLimit = 512 * 1024 * 1024;
+  fileSizeLimit = 1024 * 1024 * 1024;
 
   solutions =
     let

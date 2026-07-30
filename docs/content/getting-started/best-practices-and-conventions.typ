@@ -123,6 +123,8 @@ Keep component tests short and focused on plausible defects, such as a missing b
 
 For a brute-force solution that is expected to be too slow for larger subtasks, you can write a prediction that accepts either "accepted" (for small cases) or "time_limit_exceeded".
 
+The complete testcase status vocabulary is `accepted`, `wrong_answer`, `partially_correct`, `runtime_error`, `time_limit_exceeded`, `memory_limit_exceeded`, `file_error`, and `internal_error`.
+
 ```nix
 # In problem.nix
 {

@@ -215,6 +215,7 @@ pub fn build_problem(
       }),
       || load_problem_spec(problem),
     )?;
+    options.progress.set_title("Problem", &spec.name);
 
     timings.run_phase("runtime artifact prepare", None, || {
       run_build_commands(
@@ -268,6 +269,7 @@ pub fn build_contest(
       }),
       || load_contest_spec(contest),
     )?;
+    options.progress.set_title("Contest", &contest_spec.name);
 
     timings.run_phase("runtime artifact prepare", None, || {
       run_build_commands(
@@ -276,7 +278,6 @@ pub fn build_contest(
       )
     })?;
 
-    options.progress.set_title("Contest", contest);
     let mut runtime_by_problem = timings.run_phase(
       "runtime analysis",
       Some(DashboardPhase {
@@ -289,7 +290,7 @@ pub fn build_contest(
         } else {
           Some(options.progress.register_group(
             TaskKind::Problem,
-            contest,
+            &contest_spec.name,
             contest_spec.problems.iter().map(|spec| spec.name.clone()),
             None,
           ))
@@ -308,7 +309,7 @@ pub fn build_contest(
               let workspace = RuntimeWorkspace::new()?;
               let problem_progress = options
                 .progress
-                .child_scope(contest)
+                .child_scope(&contest_spec.name)
                 .child_scope(&spec.name);
               let runtime =
                 analyze_problem(spec, &workspace, options.single_job_child(problem_progress))

@@ -20,7 +20,8 @@
   hullPkgs,
 }:
 
-# Judger for traditional batch problems and problems with custom graders.
+# Stdio-only judger for traditional batch problems and linked custom graders.
+# Extra objects are linked into the contestant program and do not create runtime file bindings.
 problem:
 {
   solutionSpecificLanguages ? null,
@@ -28,6 +29,67 @@ problem:
   extraObjects ? [ ],
 }:
 let
+  dynamicString = hull.runWasm.dynamicString;
+  dynamicNumber = hull.runWasm.dynamicNumber;
+  contestantRequest = required_accepted: {
+    report_path = "report.json";
+    files = [
+      {
+        name = "stdin";
+        kind = "regular";
+        host_path = dynamicString "HULL_INPUT_PATH";
+        max_permissions = 4;
+        size_limit = problem.fileSizeLimit;
+      }
+      {
+        name = "stdout";
+        kind = "regular";
+        host_path = "stdout";
+        max_permissions = 2;
+        size_limit = problem.fileSizeLimit;
+      }
+      {
+        name = "stderr";
+        kind = "regular";
+        host_path = "stderr";
+        max_permissions = 2;
+        size_limit = problem.fileSizeLimit;
+      }
+    ];
+    programs = [
+      {
+        name = "solution";
+        wasm_path = dynamicString "HULL_SOLUTION_EXECUTABLE";
+        arguments = [ ];
+        tick_limit = dynamicNumber "HULL_TICK_LIMIT";
+        memory_limit = dynamicNumber "HULL_MEMORY_LIMIT";
+        inherit required_accepted;
+        file_system = {
+          directories = [
+            {
+              path = ".";
+              permissions = 5;
+            }
+          ];
+          bindings = [ ];
+        };
+        initial_descriptors = [
+          {
+            file = "stdin";
+            permissions = 4;
+          }
+          {
+            file = "stdout";
+            permissions = 2;
+          }
+          {
+            file = "stderr";
+            permissions = 2;
+          }
+        ];
+      }
+    ];
+  };
   # Filter languages if specified, and validate that they exist.
   languages =
     if solutionSpecificLanguages == null then
@@ -80,7 +142,7 @@ in
         jq -nc \
           --arg src "$HULL_PREPARED_SOLUTION_SRC_PATH" \
           --arg executable "$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH" \
-          '{ src: $src, executable: { path: $executable, drvPath: null } }' > "$HULL_REPORT_PATH"
+          '{ src: $src, executable: { path: $executable, drv_path: null } }' > "$HULL_REPORT_PATH"
       '';
   };
 
@@ -92,11 +154,7 @@ in
       { targetHull, ... }:
       ''
         ${targetHull.runWasm.script {
-          wasm = "$HULL_SOLUTION_EXECUTABLE";
-          stdin = "$HULL_INPUT_PATH";
-          tickLimit = "$HULL_TICK_LIMIT";
-          memoryLimit = "$HULL_MEMORY_LIMIT";
-          ensureAccepted = true;
+          request = contestantRequest true;
         }}
         mkdir -p "$HULL_OUTPUTS_DIR"
         install -Tm644 stdout "$HULL_OUTPUTS_DIR/output"
@@ -116,28 +174,30 @@ in
       { targetPkgs, targetHull, ... }:
       ''
         ${targetHull.runWasm.script {
-          wasm = "$HULL_SOLUTION_EXECUTABLE";
-          stdin = "$HULL_INPUT_PATH";
-          tickLimit = "$HULL_TICK_LIMIT";
-          memoryLimit = "$HULL_MEMORY_LIMIT";
-          ensureAccepted = false;
+          request = contestantRequest false;
         }}
-        run_status=$(jq -r .status report.json)
+        run_status=$(jq -r '.results[] | select(.program == "solution") | .status' report.json)
         install -Tm644 stdout "$HULL_OUTPUTS_DIR/output"
         run_stdout="$PWD/stdout"
+        answer_path="$HULL_OFFICIAL_OUTPUTS_DIR/output"
 
-        tick=$(jq .tick report.json)
-        memory=$(jq .memory report.json)
-        final_message=$(jq -r .errorMessage report.json)
+        tick=$(jq '.results[] | select(.program == "solution") | .tick' report.json)
+        memory=$(jq '.results[] | select(.program == "solution") | .memory' report.json)
+        final_message=$(jq -r '.results[] | select(.program == "solution") | .error_message // ""' report.json)
         final_status="$run_status"
         final_score=0.0
 
         if [ "$run_status" = "accepted" ]; then
           ${targetHull.check.script {
             checkerWasm = problem.checker.wasm;
-            input = "$HULL_INPUT_PATH";
-            output = "$run_stdout";
-            answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
+            input = targetHull.runWasm.dynamicString "HULL_INPUT_PATH";
+            output = targetHull.runWasm.dynamicString "run_stdout";
+            answer = targetHull.runWasm.dynamicString "answer_path";
+            fileSizeLimits = {
+              input = "tool";
+              output = problem.fileSizeLimit;
+              answer = "tool";
+            };
           }}
           final_status=$(jq -r .status check.json)
           final_score=$(jq -r .score check.json)

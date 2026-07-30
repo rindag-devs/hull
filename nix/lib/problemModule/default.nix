@@ -131,35 +131,35 @@
         in
         {
           checker = {
-            testInputs = lib.mapAttrs (_: _: emptyFile) config.checker.tests;
-            testResults = lib.mapAttrs (_: _: {
+            test_inputs = lib.mapAttrs (_: _: emptyFile) config.checker.tests;
+            test_results = lib.mapAttrs (_: _: {
               status = "internal_error";
               message = "runtime data missing";
               score = 0.0;
-              readerTraceStacks = [ ];
-              evaluatorTraceStacks = [ ];
+              reader_trace_stacks = [ ];
+              evaluator_trace_stacks = [ ];
             }) config.checker.tests;
           };
           validator = {
-            testInputs = lib.mapAttrs (_: _: emptyFile) config.validator.tests;
-            testResults = lib.mapAttrs (_: _: {
+            test_inputs = lib.mapAttrs (_: _: emptyFile) config.validator.tests;
+            test_results = lib.mapAttrs (_: _: {
               status = "internal_error";
               message = "runtime data missing";
-              readerTraceStacks = [ ];
-              readerTraceTree = { };
+              reader_trace_stacks = [ ];
+              reader_trace_tree = { };
               traits = { };
             }) config.validator.tests;
           };
-          testCases = lib.mapAttrs (_: tc: {
+          test_cases = lib.mapAttrs (_: tc: {
             data = {
               input = if tc.inputFile != null then tc.inputFile else emptyFile;
               outputs = emptyDir;
             };
-            inputValidation = {
+            input_validation = {
               status = "internal_error";
               message = "runtime data missing";
-              readerTraceStacks = [ ];
-              readerTraceTree = { };
+              reader_trace_stacks = [ ];
+              reader_trace_tree = { };
               traits = { };
             };
           }) config.testCases;
@@ -169,17 +169,17 @@
               testCaseResults = lib.mapAttrs (_: _: placeholderJudgeResult) config.testCases;
             in
             {
-              inherit testCaseResults;
-              subtaskResults = map (st: {
-                testCases = builtins.listToAttrs (
+              test_case_results = testCaseResults;
+              subtask_results = map (st: {
+                test_cases = builtins.listToAttrs (
                   map (tc: {
                     name = tc.name;
                     value = testCaseResults.${tc.name};
                   }) st.testCases
                 );
                 statuses = [ "internal_error" ];
-                rawScore = 0.0;
-                scaledScore = 0.0;
+                raw_score = 0.0;
+                scaled_score = 0.0;
               }) config.subtasks;
               score = 0.0;
             }
@@ -190,12 +190,18 @@
 
     tickLimit = lib.mkOption {
       type = lib.types.ints.unsigned;
-      description = "The default execution time limit in ticks for solutions. Can be overridden per test case.";
+      description = "The default execution limit in ticks for solutions. Can be overridden per test case.";
     };
 
     memoryLimit = lib.mkOption {
       type = lib.types.ints.unsigned;
-      description = "The default memory limit in bytes for solutions. Can be overridden per test case.";
+      description = "The default byte ceiling used independently for WASM linear memory and the execution stack. Can be overridden per test case.";
+    };
+
+    fileSizeLimit = lib.mkOption {
+      type = lib.types.ints.unsigned;
+      default = 1024 * 1024 * 1024;
+      description = "The byte limit applied independently to every contestant-owned file and pipe. A file is limited by logical size, while a pipe is limited by cumulative transferred bytes. Exceeding the limit produces `file_error`.";
     };
 
     subtasks = lib.mkOption {

@@ -14,17 +14,15 @@
 */
 
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::fs;
 use std::io::Cursor;
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tar::{Archive, Builder, EntryType, Header};
 
-use super::analysis::{run_judge, run_prepare_solution, run_validator};
+use super::analysis::{run_judge, run_prepare_solution};
 use super::types::{
   BundleJudgeProblemSpec, JudgeReport, PreparedSolutionSpec, ProblemSpec, SolutionSpec,
   TestCaseSpec, ValidationReport,
@@ -33,7 +31,6 @@ use super::workspace::RuntimeWorkspace;
 
 /// Canonical filename used for bundled official output archives.
 pub const OFFICIAL_DATA_TAR_NAME: &str = "official-data.tar";
-const OFFICIAL_DATA_TEXT_PREFIX: &str = "HULL_OFFICIAL_DATA_TAR_BASE64_V1\n";
 
 #[derive(Clone, Debug)]
 /// Decoded official testcase data extracted from a bundled archive.
@@ -45,7 +42,7 @@ pub struct LoadedOfficialData {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct OfficialDataMetadata {
   test_case_name: String,
 }
@@ -140,6 +137,7 @@ pub fn make_runtime_problem(
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
+    file_size_limit: problem.file_size_limit,
     full_score: problem.full_score,
     checker: problem.checker.clone(),
     validator: problem.validator.clone(),
@@ -185,7 +183,7 @@ pub fn build_runtime_solutions(
 }
 
 /// Resolves one bundled path relative to the bundle root when needed.
-pub fn resolve_bundled_path(bundle_root: &Path, path: &str) -> String {
+fn resolve_bundled_path(bundle_root: &Path, path: &str) -> String {
   if Path::new(path).is_absolute() {
     path.to_string()
   } else {
@@ -220,39 +218,6 @@ pub fn copy_submission_source(
     )
   })?;
   Ok(target.to_string_lossy().into_owned())
-}
-
-/// Optionally validates one bundled input file before judging.
-pub fn validate_input(
-  runtime_problem: &ProblemSpec,
-  input_path: &Path,
-  validate_input: bool,
-) -> Result<Option<ValidationReport>> {
-  if !validate_input {
-    return Ok(None);
-  }
-  let report = run_validator(runtime_problem, input_path, 1).with_context(|| {
-    format!(
-      "Failed to validate bundled testcase input {} for problem `{}`",
-      input_path.display(),
-      runtime_problem.name
-    )
-  })?;
-  Ok(Some(report))
-}
-
-/// Judges one testcase from explicit bundled input and official-data paths.
-pub fn judge_test_case_from_paths(
-  prepared: &BundlePreparedJudgeContext,
-  test_case: BundleJudgeTestCaseInput<'_>,
-) -> Result<JudgeReport> {
-  judge_test_case_with_parts(
-    &prepared.workspace,
-    &prepared.runtime_problem,
-    &prepared.participant_solution,
-    &prepared.prepared_solution,
-    test_case,
-  )
 }
 
 /// Judges one testcase using an existing prepared bundle runtime context.
@@ -326,7 +291,12 @@ pub fn load_official_data(
     fs::create_dir_all(official_outputs_dir)?;
   }
 
-  let tar_bytes = read_official_data_payload(official_data_tar_path)?;
+  let tar_bytes = fs::read(official_data_tar_path).with_context(|| {
+    format!(
+      "Failed to read official data tar {}",
+      official_data_tar_path.display()
+    )
+  })?;
   let mut archive = Archive::new(Cursor::new(tar_bytes));
   let mut metadata = None;
   let mut validation = None;
@@ -457,7 +427,12 @@ pub fn pack_official_data_tar(
   let tar_bytes = builder
     .into_inner()
     .context("Failed to extract official data tar bytes")?;
-  write_official_data_payload(target_path, &tar_bytes)
+  fs::write(target_path, tar_bytes).with_context(|| {
+    format!(
+      "Failed to write official data tar {}",
+      target_path.display()
+    )
+  })
 }
 
 fn append_outputs_to_tar(
@@ -491,144 +466,6 @@ fn append_outputs_to_tar(
       })?;
   }
   Ok(())
-}
-
-/// Packs a directory tree into a tar payload.
-pub fn pack_directory_to_tar(root_dir: &Path) -> Result<Vec<u8>> {
-  let mut builder = Builder::new(Vec::new());
-  append_directory_to_tar(&mut builder, root_dir, root_dir)?;
-  builder
-    .finish()
-    .context("Failed to finalize directory tar")?;
-  builder
-    .into_inner()
-    .context("Failed to extract directory tar bytes")
-}
-
-/// Unpacks a tar payload into the destination directory.
-pub fn unpack_directory_from_tar(tar_bytes: &[u8], dest_dir: &Path) -> Result<()> {
-  fs::create_dir_all(dest_dir)?;
-  let mut archive = Archive::new(Cursor::new(tar_bytes));
-  archive
-    .unpack(dest_dir)
-    .with_context(|| format!("Failed to unpack tar payload into {}", dest_dir.display()))
-}
-
-/// Reads one armored text file into bytes.
-pub fn read_armored_payload(path: &Path) -> Result<Vec<u8>> {
-  let content = fs::read_to_string(path)
-    .with_context(|| format!("Failed to read armored payload {}", path.display()))?;
-  let encoded = content.lines().collect::<String>();
-  base64::engine::general_purpose::STANDARD
-    .decode(encoded)
-    .with_context(|| format!("Failed to decode armored payload {}", path.display()))
-}
-
-/// Writes bytes as a line-wrapped base64 text file.
-pub fn write_armored_payload(path: &Path, bytes: &[u8]) -> Result<()> {
-  if let Some(parent) = path.parent() {
-    fs::create_dir_all(parent)?;
-  }
-  let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-  let mut armored = String::new();
-  for chunk in encoded.as_bytes().chunks(76) {
-    armored.push_str(std::str::from_utf8(chunk).context("Base64 chunk was not UTF-8")?);
-    armored.push('\n');
-  }
-  fs::write(path, armored)
-    .with_context(|| format!("Failed to write armored payload {}", path.display()))
-}
-
-fn append_directory_to_tar(
-  builder: &mut Builder<Vec<u8>>,
-  root_dir: &Path,
-  current_dir: &Path,
-) -> Result<()> {
-  for entry in fs::read_dir(current_dir)
-    .with_context(|| format!("Failed to read directory {}", current_dir.display()))?
-  {
-    let entry = entry?;
-    let path = entry.path();
-    let file_type = entry.file_type()?;
-    if file_type.is_dir() {
-      append_directory_to_tar(builder, root_dir, &path)?;
-      continue;
-    }
-    if !file_type.is_file() {
-      continue;
-    }
-    let relative = path
-      .strip_prefix(root_dir)
-      .with_context(|| format!("Failed to relativize path {}", path.display()))?;
-    builder
-      .append_path_with_name(&path, relative)
-      .with_context(|| format!("Failed to append file {} to tar payload", path.display()))?;
-  }
-  Ok(())
-}
-
-/// Reads one bundled official-data payload, decoding armored text when needed.
-pub fn read_official_data_payload(official_data_path: &Path) -> Result<Vec<u8>> {
-  let payload = fs::read(official_data_path).with_context(|| {
-    format!(
-      "Failed to read official data payload {}",
-      official_data_path.display()
-    )
-  })?;
-  if official_data_path.extension() == Some(OsStr::new("tar")) {
-    return Ok(payload);
-  }
-  let text = String::from_utf8(payload).with_context(|| {
-    format!(
-      "Official data payload {} is neither tar nor UTF-8 armored text",
-      official_data_path.display()
-    )
-  })?;
-  let encoded = text
-    .strip_prefix(OFFICIAL_DATA_TEXT_PREFIX)
-    .with_context(|| {
-      format!(
-        "Official data payload {} is missing armored prefix",
-        official_data_path.display()
-      )
-    })?
-    .replace('\n', "");
-  base64::engine::general_purpose::STANDARD
-    .decode(encoded)
-    .with_context(|| {
-      format!(
-        "Failed to decode armored official data {}",
-        official_data_path.display()
-      )
-    })
-}
-
-/// Writes one bundled official-data payload as raw tar or armored text.
-pub fn write_official_data_payload(target_path: &Path, tar_bytes: &[u8]) -> Result<()> {
-  if let Some(parent) = target_path.parent() {
-    fs::create_dir_all(parent)?;
-  }
-  if target_path.extension() == Some(OsStr::new("tar")) {
-    return fs::write(target_path, tar_bytes).with_context(|| {
-      format!(
-        "Failed to write binary official data tar {}",
-        target_path.display()
-      )
-    });
-  }
-  let encoded = base64::engine::general_purpose::STANDARD.encode(tar_bytes);
-  let mut armored = String::with_capacity(OFFICIAL_DATA_TEXT_PREFIX.len() + encoded.len() + 1);
-  armored.push_str(OFFICIAL_DATA_TEXT_PREFIX);
-  for chunk in encoded.as_bytes().chunks(76) {
-    armored.push_str(std::str::from_utf8(chunk).context("Base64 output was not UTF-8")?);
-    armored.push('\n');
-  }
-  fs::write(target_path, armored).with_context(|| {
-    format!(
-      "Failed to write armored official data payload {}",
-      target_path.display()
-    )
-  })
 }
 
 fn sanitize_path_component(value: &str) -> String {

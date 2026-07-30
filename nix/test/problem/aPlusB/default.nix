@@ -16,6 +16,7 @@
 
   tickLimit = 100 * 10000000;
   memoryLimit = 128 * 1024 * 1024;
+  fileSizeLimit = 64;
 
   includes = [
     cplib
@@ -198,6 +199,13 @@
         subtaskPredictions = {
           "0" = unac;
           "1" = unac;
+        };
+      };
+      fileErrorStdout = {
+        src = ./solution/file-error-stdout.20.cpp;
+        subtaskPredictions = {
+          "0" = { statuses, ... }: statuses == [ "file_error" ];
+          "1" = { statuses, ... }: statuses == [ "file_error" ];
         };
       };
     };

@@ -5,12 +5,10 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
-async-trait = "0.1.89"
-base64 = "0.22"
 cap-std = "3"
 clap = { version = "4", features = ["derive"] }
 comfy-table = "7"
-console = "0.16"
+futures = "0.3"
 rand = "0.10"
 ratatui = { version = "0.30", features = ["scrolling-regions"] }
 rayon = "1"
@@ -25,12 +23,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.26"
 tree-sitter-c = "0.24"
 tree-sitter-cpp = "0.23"
-wasi-common = "46"
+wiggle = { version = "47", default-features = false, features = ["wasmtime", "wasmtime_async", "witx"] }
 
 [dependencies.wasmtime]
-version = "46"
+version = "47"
 default-features = false
-features = ["anyhow", "cranelift", "runtime", "std", "wat"]
-
-[build-dependencies]
-cc = "*"
+features = ["anyhow", "async", "component-model", "cranelift", "runtime", "std", "wat"]

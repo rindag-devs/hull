@@ -13,14 +13,23 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
+/// Problem build command.
 pub mod build;
+/// Contest build command.
 pub mod build_contest;
 /// Source compilation commands and shared options.
 pub mod compile;
+/// Exported judge-system helper commands.
 pub mod integration_judge;
+/// Ad-hoc source judging command.
 pub mod judge;
+/// Source include-path rewriting command.
 pub mod patch;
+/// Local source execution command.
 pub mod run;
+/// Deterministic WASIp1 session command.
 pub mod run_wasm;
+/// Source-comment configuration extraction command.
 pub mod source_config;
+/// Generated-testcase stress command.
 pub mod stress;

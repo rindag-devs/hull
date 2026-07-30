@@ -84,7 +84,7 @@
 #import "translation/" + language + ".typ" as translation
 
 #set document(
-  title: titlecase(hull.display-name.at(language)),
+  title: titlecase(hull.display_name.at(language)),
   author: "Hull Build System",
 )
 
@@ -94,7 +94,7 @@
     grid(
       columns: (1fr, auto),
       // Left side: Contest display name
-      text(size: 10pt, titlecase(hull.display-name.at(language))),
+      text(size: 10pt, titlecase(hull.display_name.at(language))),
       // Right side: Current problem's display name and name
       text(size: 10pt, current-problem-title.get()),
     )
@@ -385,7 +385,7 @@
     center,
     heading(
       level: 1,
-      [#titlecase(problem.display-name.at(language)) (#raw(problem.name))],
+      [#titlecase(problem.display_name.at(language)) (#raw(problem.name))],
     ),
   )
 
@@ -412,7 +412,7 @@
       render-case-vis(
         i,
         sample.input,
-        sample.input-validation.reader-trace-tree,
+        sample.input_validation.reader_trace_tree,
       )
 
       if sample.outputs.len() == 1 {
@@ -428,7 +428,7 @@
         }
       }
 
-      render-graph-vis(i, sample.input-validation.reader-trace-tree)
+      render-graph-vis(i, sample.input_validation.reader_trace_tree)
 
       if language in sample.descriptions {
         heading(level: 2, titlecase(translation.sample-0-description(i)))
@@ -467,7 +467,7 @@
         .enumerate()
         .map(((id, st)) => {
           (
-            ([#id], $#str(calc.round(st.full-score * 100, digits: 4))$)
+            ([#id], $#str(calc.round(st.full_score * 100, digits: 4))$)
               + problem
                 .traits
                 .keys()
@@ -497,16 +497,16 @@
   set par(justify: false, leading: 0.4em, spacing: 1.2em)
 
   let first-column-width = if hull.problems.len() <= 3 { 25% } else { 1.2fr }
-  let tick-or-time-limit = if render.ticks-per-ms == none {
+  let tick-or-time-limit = if render.ticks_per_ms == none {
     (
       [*#titlecase(translation.tick-limit)*],
-      ..problems.map(p => translation.ticks(p.tick-limit)),
+      ..problems.map(p => translation.ticks(p.tick_limit)),
     )
   } else {
     (
       [*#titlecase(translation.time-limit)*],
       ..problems.map(p => translation.milliseconds(
-        p.tick-limit / render.ticks-per-ms,
+        p.tick_limit / render.ticks_per_ms,
       )),
     )
   }
@@ -514,7 +514,7 @@
   table(
     columns: (first-column-width,) + (1fr,) * problems.len(),
     [*#titlecase(translation.problem-name)*], ..problems.map(p => titlecase(
-      p.display-name.at(language),
+      p.display_name.at(language),
     )),
     [*#titlecase(translation.directory)*], ..problems.map(p => raw(
       breakable-text(p.name),
@@ -522,13 +522,18 @@
     ..tick-or-time-limit,
     [*#titlecase(translation.memory-limit)*], ..problems.map(
       p => translation.bytes(
-        p.memory-limit,
+        p.memory_limit,
       ),
     ),
+    [*#titlecase(translation.file-size-limit)*], ..problems.map(
+      p => translation.bytes(p.file_size_limit),
+    ),
     [*#titlecase(translation.full-score)*], ..problems.map(
-      p => [$#(calc.round(p.full-score * 100, digits: 4))$],
+      p => [$#(calc.round(p.full_score * 100, digits: 4))$],
     ),
   )
+
+  text(size: 0.9em, style: "italic", translation.limit-semantics)
 
   [*#titlecase(translation.source-program-file-name)*]
 
@@ -537,9 +542,9 @@
     ..render
       .languages
       .map(lang => (
-        ([*#titlecase(translation.for-0-language(lang.display-name))*],)
+        ([*#titlecase(translation.for-0-language(lang.display_name))*],)
           + problems.map(p => raw(breakable-text(
-            p.name + lang.file-name-suffix,
+            p.name + lang.file_name_suffix,
           )))
       ))
       .flatten(),
@@ -553,8 +558,8 @@
       .languages
       .map(lang => (
         (
-          [*#titlecase(translation.for-0-language(lang.display-name))*],
-          [#raw(lang.display-compile-arguments)],
+          [*#titlecase(translation.for-0-language(lang.display_name))*],
+          [#raw(lang.display_compile_arguments)],
         )
       ))
       .flatten(),
@@ -562,7 +567,7 @@
 }
 
 #align(center, heading(level: 1, text(size: 1.2em, titlecase(
-  hull.display-name.at(language),
+  hull.display_name.at(language),
 ))))
 
 #problem-table(hull.problems)
@@ -573,7 +578,7 @@
 
 #for (problem-id, problem) in hull.problems.enumerate() {
   current-problem-title.update(
-    titlecase(problem.display-name.at(language))
+    titlecase(problem.display_name.at(language))
       + " ("
       + raw(problem.name)
       + ")",

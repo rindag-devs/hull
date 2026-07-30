@@ -74,15 +74,15 @@ hull compile -o - solution/std.23.cpp > solution.wasm
 
 == Running a Solution
 
-`hull run` uses the same problem, language, and source compilation options as `hull compile`, then executes the resulting WASM module in Hull's runner.
+`hull run` uses the same problem, language, and source compilation options as `hull compile`, then executes the resulting source WASM module with Hull's Wasmtime-backed WASI Preview 1 runner.
 
 ```bash
 hull run -p example -l cpp.23 solution/std.23.cpp
 ```
 
-Arguments after the source path are passed to the program. Prefix arguments that start with `-` with a `--` separator. Use `--tick-limit`, `--memory-limit`, and `--show-status` to control and inspect execution.
+Arguments after the source path are passed to the program. Prefix arguments that start with `-` with a `--` separator. Use `--tick-limit`, `--memory-limit`, and `--file-size-limit` to override the tick, memory, and independent stdout/stderr byte limits; omitted local limits use Hull's tool ceilings. Use `--show-status` to print the snake_case execution status, tick use, and peak linear memory. Standard input, output, and error remain connected to the invoking terminal or redirections.
 
-The program can access only its working directory. It defaults to the directory where Hull was started; use `--cwd` to select another host directory:
+The program receives capability-scoped access to its working directory and cannot access host paths outside it. The directory defaults to where Hull was started; use `--cwd` to select another host directory:
 
 ```bash
 hull run --cwd sandbox solution/std.23.cpp

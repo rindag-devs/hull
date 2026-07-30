@@ -36,21 +36,25 @@ pub struct Opts {
   #[arg(long, global = true, default_value = "auto", value_parser = parse_interactive_mode)]
   pub interactive: InteractiveMode,
 
+  /// Command to execute.
   #[command(subcommand)]
   pub command: Command,
 }
 
+/// Top-level Hull commands.
 #[derive(Subcommand)]
 pub enum Command {
   #[command(
     about = "Analyze one problem and package a target",
     long_about = "Load one problem from the current flake, realize its runtime artifacts, run validator/checker/solution analysis, and then package the selected problem target with `nix build`."
   )]
+  /// Analyzes and packages one problem.
   Build(BuildOpts),
   #[command(
     about = "Analyze a contest and package a target",
     long_about = "Load one contest from the current flake, realize runtime artifacts for every problem in it, analyze each problem, and then package the selected contest target with `nix build`."
   )]
+  /// Analyzes and packages one contest.
   BuildContest(BuildContestOpts),
   #[command(
     about = "Compile a source file to WASM",
@@ -62,21 +66,25 @@ pub enum Command {
     about = "Judge one source file as an ad-hoc solution",
     long_about = "Treat the given source file as an extra solution for the selected problem, run the full problem analysis for it, and print either a human-readable or JSON judging report."
   )]
+  /// Judges one source file against a problem.
   Judge(JudgeOpts),
   #[command(
     about = "Patch source code with a regex rewrite",
     long_about = "Parse a C or C++ source file, apply a regex replacement to the path inside each `#include \"...\"` string literal, and write the patched file to a new path."
   )]
+  /// Rewrites include paths in a source file.
   Patch(PatchOpts),
   #[command(
     about = "Compile a source file and run its WASM",
-    long_about = "Compile one source file in the selected problem context to a WebAssembly executable, cache a native module for it, and run it with optional tick, memory, and argv overrides."
+    long_about = "Compile one source file in the selected problem context to a WebAssembly executable and run it with optional tick, memory, inherited-stream file-size, and argv overrides."
   )]
+  /// Compiles and runs one source file.
   Run(RunOpts),
   #[command(
-    about = "Run a WASM module in Hull's sandbox",
-    long_about = "Execute a WebAssembly module directly with Hull's runner, configurable stdio, tick and memory limits, optional sandbox files, and a JSON run report."
+    about = "Run a deterministic WASIp1 session",
+    long_about = "Execute one deterministic WASIp1 session from a strict JSON request. The request declares source WASM programs, regular files and pipes, filesystem bindings, initial descriptors, tick, memory, per-file size limits, required acceptance, and the report path."
   )]
+  /// Runs one deterministic WASIp1 session.
   RunWasm(RunWasmOpts),
   /// Extracts Hull configuration from source comments.
   SourceConfig(SourceConfigOpts),
@@ -86,6 +94,7 @@ pub enum Command {
   )]
   /// Runs judge-system integration helpers.
   IntegrationJudge {
+    /// Judge-system helper to execute.
     #[command(subcommand)]
     command: IntegrationJudgeCommand,
   },
@@ -93,6 +102,7 @@ pub enum Command {
     about = "Search for hacks with generated test cases",
     long_about = "Run a generator repeatedly, build one temporary test case per generated input, judge the selected solutions against the problem's main correct solution, and stop when a non-accepted result is found."
   )]
+  /// Searches for failing generated testcases.
   Stress(StressOpts),
 }
 
@@ -157,6 +167,12 @@ mod tests {
       "cpp.20",
       "--cwd",
       "sandbox",
+      "--tick-limit",
+      "100",
+      "--memory-limit",
+      "200",
+      "--file-size-limit",
+      "300",
       "solution.20.cpp",
       "argument",
     ])
@@ -166,6 +182,9 @@ mod tests {
       Command::Run(RunOpts {
         source,
         cwd,
+        tick_limit,
+        memory_limit,
+        file_size_limit,
         args,
         ..
       })
@@ -173,7 +192,25 @@ mod tests {
           && source.language.as_deref() == Some("cpp.20")
           && source.src_path == "solution.20.cpp"
           && cwd.as_deref() == Some(std::path::Path::new("sandbox"))
+          && tick_limit == Some(100)
+          && memory_limit == Some(200)
+          && file_size_limit == Some(300)
           && args == ["argument"]
+    ));
+  }
+
+  #[test]
+  fn run_limits_are_optional() {
+    let opts = Opts::try_parse_from(["hull", "run", "solution.20.cpp"])
+      .expect("run command parses without limit overrides");
+    assert!(matches!(
+      opts.command,
+      Command::Run(RunOpts {
+        tick_limit: None,
+        memory_limit: None,
+        file_size_limit: None,
+        ..
+      })
     ));
   }
 

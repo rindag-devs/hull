@@ -93,6 +93,17 @@
 
           rustToolchain = rustToolchainFor pkgs;
           craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
+          cleanHullCargoSource =
+            cargoLib:
+            pkgs.lib.cleanSourceWith {
+              src = pkgs.lib.cleanSource self;
+              filter =
+                path: type:
+                cargoLib.filterCargoSources path type
+                || pkgs.lib.hasSuffix ".witx" (toString path)
+                || pkgs.lib.hasSuffix ".c" (toString path);
+              name = "hull-cargo-source";
+            };
 
           mkTargetHullPkgs =
             targetSystem:
@@ -135,7 +146,7 @@
               };
 
               default = targetCraneLib.buildPackage {
-                src = targetCraneLib.cleanCargoSource self;
+                src = cleanHullCargoSource targetCraneLib;
                 cargoExtraArgs = "--target ${rustTarget}";
                 doCheck = false;
                 strictDeps = true;
@@ -204,8 +215,11 @@
             };
             optionsDocs = hull.docs.options;
             default = craneLib.buildPackage {
-              src = craneLib.cleanCargoSource self;
-              nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
+              src = cleanHullCargoSource craneLib;
+              nativeBuildInputs = [
+                pkgs.makeBinaryWrapper
+                hullPkgs.wasm32-wasi-wasip1.clang
+              ];
               postInstall = ''
                 wrapProgram $out/bin/hull \
                   --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix-output-monitor ]}

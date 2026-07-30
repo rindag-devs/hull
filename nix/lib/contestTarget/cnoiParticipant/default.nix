@@ -126,7 +126,15 @@ assert lib.assertMsg (
             mkdir -p ${dataPathPrefix}
             cp ${tc.data.input} ${dataPathPrefix}/input
             cp -r ${tc.data.outputs} ${dataPathPrefix}/outputs
-            cp ${pkgs.writeText "${problem.name}-${tc.name}-input-validation.json" (builtins.toJSON tc.inputValidation)} ${dataPathPrefix}/input-validation.json
+            cp ${
+              pkgs.writeText "${problem.name}-${tc.name}-input-validation.json" (
+                builtins.toJSON {
+                  inherit (tc.inputValidation) status message traits;
+                  reader_trace_stacks = tc.inputValidation.readerTraceStacks;
+                  reader_trace_tree = tc.inputValidation.readerTraceTree;
+                }
+              )
+            } ${dataPathPrefix}/input-validation.json
           ''
         ) samples;
 
@@ -223,15 +231,15 @@ assert lib.assertMsg (
             ...
           }:
           {
-            displayName = displayName;
-            fileNameSuffix = fileNameSuffix;
-            hullLanguage = hullLanguage;
+            display_name = displayName;
+            file_name_suffix = fileNameSuffix;
+            hull_language = hullLanguage;
           }
         ) languages;
         problems = map (problem: {
           name = problem.config.name;
-          fullScore = problem.config.fullScore;
-          metadataPath = "problems/${problem.config.name}.json";
+          full_score = problem.config.fullScore;
+          metadata_path = "problems/${problem.config.name}.json";
         }) problems;
       };
 
@@ -244,34 +252,35 @@ assert lib.assertMsg (
           let
             metadata = {
               name = problem.config.name;
-              tickLimit = problem.config.tickLimit;
-              memoryLimit = problem.config.memoryLimit;
-              fullScore = problem.config.fullScore;
+              tick_limit = problem.config.tickLimit;
+              memory_limit = problem.config.memoryLimit;
+              file_size_limit = problem.config.fileSizeLimit;
+              full_score = problem.config.fullScore;
               judger = {
-                prepareSolutionRunner = {
+                prepare_solution_runner = {
                   path = builtins.unsafeDiscardStringContext (
                     lib.getExe (retargetRunner problem.config.judger.prepareSolution)
                   );
-                  drvPath = null;
+                  drv_path = null;
                 };
-                generateOutputsRunner = null;
-                judgeRunner = {
+                generate_outputs_runner = null;
+                judge_runner = {
                   path = builtins.unsafeDiscardStringContext (
                     lib.getExe (retargetRunner problem.config.judger.judge)
                   );
-                  drvPath = null;
+                  drv_path = null;
                 };
               };
-              testCases = map (tc: {
+              test_cases = map (tc: {
                 name = tc.name;
-                tickLimit = tc.tickLimit;
-                memoryLimit = tc.memoryLimit;
+                tick_limit = tc.tickLimit;
+                memory_limit = tc.memoryLimit;
                 groups = tc.groups;
-                traitHints = tc.traitHints;
+                trait_hints = tc.traitHints;
               }) problem.config.samples;
               subtasks = map (st: {
-                fullScore = st.fullScore;
-                scoringMethod = st.scoringMethod;
+                full_score = st.fullScore;
+                scoring_method = st.scoringMethod;
                 traits = st.traits;
               }) problem.config.subtasks;
             };
@@ -399,7 +408,7 @@ assert lib.assertMsg (
             ) statements}
           '';
           renderJSONContent = {
-            ticks-per-ms = ticksPerMs;
+            ticks_per_ms = ticksPerMs;
             languages = map (
               {
                 displayName,
@@ -408,10 +417,10 @@ assert lib.assertMsg (
                 hullLanguage,
               }:
               {
-                display-name = displayName;
-                file-name-suffix = fileNameSuffix;
-                display-compile-arguments = displayCompileArguments;
-                hull-language = hullLanguage;
+                display_name = displayName;
+                file_name_suffix = fileNameSuffix;
+                display_compile_arguments = displayCompileArguments;
+                hull_language = hullLanguage;
               }
             ) languages;
           };

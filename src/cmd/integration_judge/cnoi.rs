@@ -70,7 +70,7 @@ struct ProblemReport {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct InputValidation {
   traits: BTreeMap<String, bool>,
 }
@@ -199,6 +199,7 @@ fn evaluate_problem(
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
+    file_size_limit: problem.file_size_limit,
     full_score: problem.full_score,
     checker: ProgramSpec {
       src: None,
@@ -396,4 +397,39 @@ fn find_participant_source(
   }
 
   Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn file_error_remains_file_error() {
+    let report = CliReport {
+      score: 0.0,
+      full_score: 100.0,
+      problems: vec![ProblemReport {
+        name: "sample".to_string(),
+        score: 0.0,
+        full_score: 100.0,
+        subtask_results: vec![JudgeCliSubtaskResult {
+          full_score: 100.0,
+          scaled_score: 0.0,
+          statuses: vec![JudgeStatus::FileError],
+        }],
+        test_case_results: BTreeMap::from([(
+          "sample".to_string(),
+          JudgeCliTestCaseResult {
+            status: JudgeStatus::FileError,
+            score: 0.0,
+            tick: 1,
+            memory: 2,
+          },
+        )]),
+      }],
+    };
+    let json = serde_json::to_string(&report).unwrap();
+    assert!(json.contains(r#""status":"file_error""#));
+    assert!(!json.contains("Output Limit Exceeded"));
+  }
 }

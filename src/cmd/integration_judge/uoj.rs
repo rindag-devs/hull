@@ -87,7 +87,7 @@ pub struct UojOpts {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 struct UojLanguageConfig {
   uoj_to_hull_language_map: HashMap<String, Option<String>>,
 }
@@ -398,6 +398,7 @@ fn write_result(
     name: problem.name.clone(),
     tick_limit: problem.tick_limit,
     memory_limit: problem.memory_limit,
+    file_size_limit: problem.file_size_limit,
     full_score: problem.full_score,
     checker: problem.checker.clone(),
     validator: problem.validator.clone(),
@@ -1141,11 +1142,8 @@ fn subtask_status(statuses: &[JudgeStatus], raw_score: f64) -> String {
   if raw_score >= 1.0 {
     return "Accepted".to_string();
   }
-  if let Some(status) = statuses
-    .iter()
-    .find(|status| **status != JudgeStatus::Accepted)
-  {
-    return to_uoj_info(status);
+  if let Some(status) = JudgeStatus::aggregate(statuses.iter().copied()) {
+    return to_uoj_info(&status);
   }
   "Accepted".to_string()
 }
@@ -1158,6 +1156,7 @@ fn to_uoj_info(status: &JudgeStatus) -> String {
     JudgeStatus::RuntimeError => "Runtime Error",
     JudgeStatus::TimeLimitExceeded => "Time Limit Exceeded",
     JudgeStatus::MemoryLimitExceeded => "Memory Limit Exceeded",
+    JudgeStatus::FileError => "Output Limit Exceeded",
     JudgeStatus::InternalError => "Judgment Failed",
   }
   .to_string()
@@ -1202,27 +1201,28 @@ mod tests {
     let problem: BundleJudgeProblemSpec = serde_json::from_str(
       r#"{
         "name": "aplusb",
-        "tickLimit": 1000,
-        "memoryLimit": 268435456,
-        "fullScore": 100.0,
-        "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drvPath": null } },
-        "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drvPath": null } },
+        "tick_limit": 1000,
+        "memory_limit": 268435456,
+        "file_size_limit": 1073741824,
+        "full_score": 100.0,
+        "checker": { "src": null, "wasm": { "path": "/checker.wasm", "drv_path": null } },
+        "validator": { "src": null, "wasm": { "path": "/validator.wasm", "drv_path": null } },
         "judger": {
-          "prepareSolutionRunner": { "path": "/prepare", "drvPath": null },
-          "generateOutputsRunner": { "path": "/generate", "drvPath": null },
-          "judgeRunner": { "path": "/judge", "drvPath": null }
+          "prepare_solution_runner": { "path": "/prepare", "drv_path": null },
+          "generate_outputs_runner": { "path": "/generate", "drv_path": null },
+          "judge_runner": { "path": "/judge", "drv_path": null }
         },
-        "mainCorrectSolution": "std",
+        "main_correct_solution": "std",
         "subtasks": [],
         "solutions": [
           {
             "name": "std",
             "src": "solutions/std.cpp",
-            "mainCorrectSolution": true,
-            "participantVisibility": false
+            "main_correct_solution": true,
+            "participant_visibility": false
           }
         ],
-        "testCases": []
+        "test_cases": []
       }"#,
     )
     .expect("valid bundled problem spec");
@@ -1253,6 +1253,25 @@ mod tests {
     assert_eq!(
       format_prepare_solution_error(&err),
       "class A{}; is invalid in C89"
+    );
+  }
+
+  #[test]
+  fn file_error_maps_to_external_ole() {
+    assert_eq!(
+      to_uoj_info(&JudgeStatus::FileError),
+      "Output Limit Exceeded"
+    );
+    assert_eq!(
+      subtask_status(
+        &[
+          JudgeStatus::RuntimeError,
+          JudgeStatus::TimeLimitExceeded,
+          JudgeStatus::FileError,
+        ],
+        0.0,
+      ),
+      "Output Limit Exceeded"
     );
   }
 

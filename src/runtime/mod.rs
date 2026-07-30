@@ -25,8 +25,6 @@ pub mod bundle_judge;
 pub mod custom_judge_scheduler;
 /// Runtime metadata loading from flakes and exported bundles.
 pub mod metadata;
-/// WASM sandbox execution.
-pub mod sandbox;
 /// Runtime data models shared by analysis and packaging.
 pub mod types;
 /// Ephemeral filesystem workspace management for runtime jobs.

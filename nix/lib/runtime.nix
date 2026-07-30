@@ -40,12 +40,12 @@ let
     if builtins.isString runner || builtins.isPath runner then
       {
         path = toString runner;
-        drvPath = null;
+        drv_path = null;
       }
     else
       {
         path = lib.getExe runner;
-        drvPath = toString runner.drvPath;
+        drv_path = toString runner.drvPath;
       };
 
   serializeArtifact =
@@ -55,7 +55,7 @@ let
     else
       {
         path = toString artifact;
-        drvPath = if artifact ? drvPath then toString artifact.drvPath else null;
+        drv_path = if artifact ? drvPath then toString artifact.drvPath else null;
       };
 
   withProblemModules =
@@ -100,57 +100,51 @@ let
     in
     {
       name = checkedProblemConfig.name;
-      tickLimit = checkedProblemConfig.tickLimit;
-      memoryLimit = checkedProblemConfig.memoryLimit;
-      fullScore = checkedProblemConfig.fullScore;
+      tick_limit = checkedProblemConfig.tickLimit;
+      memory_limit = checkedProblemConfig.memoryLimit;
+      file_size_limit = checkedProblemConfig.fileSizeLimit;
+      full_score = checkedProblemConfig.fullScore;
       checker = serializeProgram checkedProblemConfig.checker;
       validator = serializeProgram checkedProblemConfig.validator;
       generators = builtins.mapAttrs (_: serializeProgram) checkedProblemConfig.generators;
-      mainCorrectSolution = checkedProblemConfig.mainCorrectSolution.name;
+      main_correct_solution = checkedProblemConfig.mainCorrectSolution.name;
       judger = {
-        prepareSolutionRunner = runnerPath checkedProblemConfig.judger.prepareSolution;
-        generateOutputsRunner = runnerPath checkedProblemConfig.judger.generateOutputs;
-        judgeRunner = runnerPath checkedProblemConfig.judger.judge;
+        prepare_solution_runner = runnerPath checkedProblemConfig.judger.prepareSolution;
+        generate_outputs_runner = runnerPath checkedProblemConfig.judger.generateOutputs;
+        judge_runner = runnerPath checkedProblemConfig.judger.judge;
       };
-      testCases = map (tc: {
-        inherit (tc)
-          name
-          tickLimit
-          memoryLimit
-          groups
-          traitHints
-          ;
-        inputFile = if tc.inputFile == null then null else toString tc.inputFile;
+      test_cases = map (tc: {
+        inherit (tc) name groups;
+        tick_limit = tc.tickLimit;
+        memory_limit = tc.memoryLimit;
+        trait_hints = tc.traitHints;
+        input_file = if tc.inputFile == null then null else toString tc.inputFile;
         generator = tc.generator;
         arguments = tc.arguments;
       }) (builtins.attrValues checkedProblemConfig.testCases);
       subtasks = map (st: {
-        inherit (st) fullScore scoringMethod traits;
+        full_score = st.fullScore;
+        scoring_method = st.scoringMethod;
+        inherit (st) traits;
       }) checkedProblemConfig.subtasks;
       solutions = map (solution: {
-        inherit (solution)
-          name
-          mainCorrectSolution
-          participantVisibility
-          ;
+        inherit (solution) name;
+        main_correct_solution = solution.mainCorrectSolution;
+        participant_visibility = solution.participantVisibility;
         src = toString solution.src;
       }) selectedSolutions;
-      checkerTests =
+      checker_tests =
         if includeTests then
           map (test: {
-            inherit (test)
-              name
-              outputName
-              outputSolution
-              generator
-              arguments
-              ;
-            inputFile = if test.inputFile == null then null else toString test.inputFile;
-            outputPath = if test.outputFile == null then null else toString test.outputFile;
+            inherit (test) name generator arguments;
+            output_name = test.outputName;
+            output_solution = test.outputSolution;
+            input_file = if test.inputFile == null then null else toString test.inputFile;
+            output_path = if test.outputFile == null then null else toString test.outputFile;
           }) (builtins.attrValues checkedProblemConfig.checker.tests)
         else
           [ ];
-      validatorTests =
+      validator_tests =
         if includeTests then
           map (test: {
             inherit (test)
@@ -158,7 +152,7 @@ let
               generator
               arguments
               ;
-            inputFile = if test.inputFile == null then null else toString test.inputFile;
+            input_file = if test.inputFile == null then null else toString test.inputFile;
           }) (builtins.attrValues checkedProblemConfig.validator.tests)
         else
           [ ];

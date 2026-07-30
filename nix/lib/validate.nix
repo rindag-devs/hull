@@ -31,15 +31,71 @@ let
     }:
     let
       runScript = hull.runWasm.script {
-        wasm = validatorWasm;
-        stdin = input;
-        arguments = [ "--reader-trace-level=${toString readerTraceLevel}" ];
+        request = {
+          report_path = "validator-run-report.json";
+          files = [
+            {
+              name = "input";
+              kind = "regular";
+              host_path = input;
+              max_permissions = 4;
+              size_limit = "tool";
+            }
+            {
+              name = "validator_stdout";
+              kind = "regular";
+              host_path = "stdout";
+              max_permissions = 2;
+              size_limit = "tool";
+            }
+            {
+              name = "validator_stderr";
+              kind = "regular";
+              host_path = "stderr";
+              max_permissions = 2;
+              size_limit = "tool";
+            }
+          ];
+          programs = [
+            {
+              name = "validator";
+              wasm_path = toString validatorWasm;
+              arguments = [ "--reader-trace-level=${toString readerTraceLevel}" ];
+              tick_limit = "tool";
+              memory_limit = "tool";
+              required_accepted = true;
+              file_system = {
+                directories = [
+                  {
+                    path = ".";
+                    permissions = 5;
+                  }
+                ];
+                bindings = [ ];
+              };
+              initial_descriptors = [
+                {
+                  file = "input";
+                  permissions = 4;
+                }
+                {
+                  file = "validator_stdout";
+                  permissions = 2;
+                }
+                {
+                  file = "validator_stderr";
+                  permissions = 2;
+                }
+              ];
+            }
+          ];
+        };
       };
     in
     ''
       ${runScript}
       ${pkgs.jq}/bin/jq -c \
-        '{ status: .status, message: .message, readerTraceStacks: (.reader_trace_stacks // []), readerTraceTree: (.reader_trace_tree // {}), traits: (.traits // {}) }' \
+        '{ status: .status, message: .message, reader_trace_stacks: (.reader_trace_stacks // []), reader_trace_tree: (.reader_trace_tree // {}), traits: (.traits // {}) }' \
         stderr > validation.json
     '';
 in

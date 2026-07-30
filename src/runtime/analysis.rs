@@ -24,7 +24,6 @@ use rayon::{ThreadPoolBuilder, prelude::*};
 use tracing::{error, info};
 
 use super::artifact::realize_artifact;
-use super::sandbox::run_wasm_for_stdio;
 use super::types::{
   ArtifactSpec, CheckerReport, CheckerRuntimeData, JudgeReport, JudgeStatus, PreparedSolutionSpec,
   ProblemSpec, RuntimeData, RuntimeOptions, RuntimeSolutionData, RuntimeTestCaseData,
@@ -33,14 +32,11 @@ use super::types::{
 };
 use super::workspace::RuntimeWorkspace;
 use crate::interactive::{ProblemProgressHandle, TaskHandle, TaskItemReport, TaskKind};
-use crate::runner::RunStatus;
-
-/// Default tick limit for tools.
-pub const TOOL_TICK_LIMIT: u64 = 10u64.pow(18);
-/// Default linear memory limit for tools.
-pub const TOOL_MEMORY_LIMIT: u64 = u32::MAX as u64;
-/// Maximum stdout and stderr bytes captured from tools.
-pub const TOOL_OUTPUT_LIMIT: usize = usize::MAX;
+use crate::runner::{
+  DirectoryBinding, DirectoryPermissions, File, FileBinding, FilePermissions, FileSizeLimit,
+  FileSystem, InitialDescriptor, ProgramRequest, ProgramResult, RunStatus, SessionRequest,
+  TOOL_MEMORY_LIMIT, TOOL_TICK_LIMIT, ToolLimit, run_session,
+};
 
 type TestCaseRunMap = BTreeMap<String, (RuntimeTestCaseData, BTreeMap<String, JudgeReport>)>;
 type TestCaseTraitsMap = BTreeMap<String, BTreeMap<String, bool>>;
@@ -50,6 +46,7 @@ struct JudgerInvocation<'a> {
   mode: &'a str,
   input_path: &'a Path,
   test_case: &'a TestCaseSpec,
+  file_size_limit: u64,
   solution_name: &'a str,
   prepared_solution: &'a PreparedSolutionSpec,
   outputs_dir: &'a Path,
@@ -432,7 +429,6 @@ fn run_checker_tests(
           !report.status.is_fatal(),
           TaskItemReport {
             status: Some(report.status.to_string()),
-            score: Some(report.score),
             ..TaskItemReport::default()
           },
         );
@@ -604,7 +600,6 @@ fn run_test_cases(
                   status: Some(report.status.to_string()),
                   tick: Some(report.tick),
                   memory: Some(report.memory),
-                  score: Some(report.score),
                   ..TaskItemReport::default()
                 },
               );
@@ -728,7 +723,8 @@ fn ensure_test_case_input_is_valid(test_case_name: &str, report: &ValidationRepo
 fn ensure_generator_succeeded(
   generator_name: &str,
   temp_name: &str,
-  result: &crate::runtime::sandbox::WasmRunResult,
+  result: &ProgramResult,
+  stderr: &[u8],
 ) -> Result<()> {
   if result.status == RunStatus::Accepted {
     return Ok(());
@@ -739,9 +735,55 @@ fn ensure_generator_succeeded(
     generator_name,
     temp_name,
     result.status,
-    result.error_message,
-    String::from_utf8_lossy(&result.stderr).trim()
+    result.error_message.as_deref().unwrap_or_default(),
+    String::from_utf8_lossy(stderr).trim()
   )
+}
+
+fn regular_file(
+  name: &str,
+  path: PathBuf,
+  max_permissions: FilePermissions,
+  size_limit: FileSizeLimit,
+) -> File {
+  File::regular(name, Some(path), max_permissions, size_limit)
+}
+
+fn tool_file(name: &str, path: PathBuf, max_permissions: FilePermissions) -> File {
+  regular_file(
+    name,
+    path,
+    max_permissions,
+    FileSizeLimit::Tool(ToolLimit::Tool),
+  )
+}
+
+fn descriptor(file: Option<&str>, permissions: FilePermissions) -> InitialDescriptor {
+  InitialDescriptor {
+    file: file.map(str::to_string),
+    permissions,
+  }
+}
+
+fn run_single_tool(request: SessionRequest) -> Result<ProgramResult> {
+  let mut report = run_session(request);
+  if report.results.len() != 1 {
+    bail!(
+      "Tool session returned {} program results instead of one",
+      report.results.len()
+    );
+  }
+  Ok(report.results.remove(0))
+}
+
+fn read_tool_output(path: &Path, description: &str) -> Result<Vec<u8>> {
+  match fs::read(path) {
+    Ok(output) => Ok(output),
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+    Err(error) => {
+      Err(error).with_context(|| format!("Failed to read {description} {}", path.display()))
+    }
+  }
 }
 
 fn register_progress_group<I>(
@@ -777,25 +819,48 @@ pub fn run_validator(
       .context("Validator metadata is missing `wasm`")?,
   )?;
 
-  let result = run_wasm_for_stdio(
-    &validator_wasm,
-    Some(input_path),
-    &[format!("--reader-trace-level={reader_trace_level}")],
-    TOOL_TICK_LIMIT,
-    TOOL_MEMORY_LIMIT,
-    TOOL_OUTPUT_LIMIT,
-    &[],
-  )?;
+  let work_dir = tempfile::tempdir().context("Failed to create validator report directory")?;
+  let stdout_path = work_dir.path().join("stdout");
+  let stderr_path = work_dir.path().join("report.json");
+  let result = run_single_tool(SessionRequest {
+    report_path: work_dir.path().join("session.json"),
+    files: vec![
+      tool_file("input", input_path.to_path_buf(), FilePermissions::Read),
+      tool_file("stdout", stdout_path, FilePermissions::Write),
+      tool_file("stderr", stderr_path.clone(), FilePermissions::Write),
+    ],
+    programs: vec![ProgramRequest {
+      name: "validator".to_string(),
+      wasm_path: PathBuf::from(validator_wasm),
+      arguments: vec![format!("--reader-trace-level={reader_trace_level}")],
+      tick_limit: TOOL_TICK_LIMIT,
+      memory_limit: TOOL_MEMORY_LIMIT,
+      required_accepted: false,
+      file_system: FileSystem {
+        directories: vec![DirectoryBinding {
+          path: ".".to_string(),
+          permissions: DirectoryPermissions::ReadExecute,
+        }],
+        bindings: Vec::new(),
+      },
+      initial_descriptors: vec![
+        descriptor(Some("input"), FilePermissions::Read),
+        descriptor(Some("stdout"), FilePermissions::Write),
+        descriptor(Some("stderr"), FilePermissions::Write),
+      ],
+    }],
+  })?;
+  let stderr = read_tool_output(&stderr_path, "validator report")?;
 
-  if result.status != RunStatus::Accepted && result.stderr.is_empty() {
+  if result.status != RunStatus::Accepted && stderr.is_empty() {
     bail!(
       "Validator runner failed with status {:?}: {}",
       result.status,
-      result.error_message
+      result.error_message.as_deref().unwrap_or_default()
     );
   }
 
-  serde_json::from_slice(&result.stderr).context("Failed to parse validator report JSON")
+  serde_json::from_slice(&stderr).context("Failed to parse validator report JSON")
 }
 
 fn run_checker(
@@ -812,35 +877,61 @@ fn run_checker(
       .context("Checker metadata is missing `wasm`")?,
   )?;
 
-  let mount = vec![
-    (input_path.to_path_buf(), "input".to_string()),
-    (output_path.to_path_buf(), "output".to_string()),
-    (answer_path.to_path_buf(), "answer".to_string()),
-  ];
-
-  let result = run_wasm_for_stdio(
-    &checker_wasm,
-    None,
-    &[
-      "input".to_string(),
-      "output".to_string(),
-      "answer".to_string(),
+  let work_dir = tempfile::tempdir().context("Failed to create checker report directory")?;
+  let stdout_path = work_dir.path().join("stdout");
+  let stderr_path = work_dir.path().join("report.json");
+  let result = run_single_tool(SessionRequest {
+    report_path: work_dir.path().join("session.json"),
+    files: vec![
+      tool_file("input", input_path.to_path_buf(), FilePermissions::Read),
+      tool_file("output", output_path.to_path_buf(), FilePermissions::Read),
+      tool_file("answer", answer_path.to_path_buf(), FilePermissions::Read),
+      tool_file("stdout", stdout_path, FilePermissions::Write),
+      tool_file("stderr", stderr_path.clone(), FilePermissions::Write),
     ],
-    TOOL_TICK_LIMIT,
-    TOOL_MEMORY_LIMIT,
-    TOOL_OUTPUT_LIMIT,
-    &mount,
-  )?;
+    programs: vec![ProgramRequest {
+      name: "checker".to_string(),
+      wasm_path: PathBuf::from(checker_wasm),
+      arguments: vec![
+        "input".to_string(),
+        "output".to_string(),
+        "answer".to_string(),
+      ],
+      tick_limit: TOOL_TICK_LIMIT,
+      memory_limit: TOOL_MEMORY_LIMIT,
+      required_accepted: false,
+      file_system: FileSystem {
+        directories: vec![DirectoryBinding {
+          path: ".".to_string(),
+          permissions: DirectoryPermissions::ReadExecute,
+        }],
+        bindings: ["input", "output", "answer"]
+          .into_iter()
+          .map(|path| FileBinding {
+            path: path.to_string(),
+            file: path.to_string(),
+            permissions: FilePermissions::Read,
+          })
+          .collect(),
+      },
+      initial_descriptors: vec![
+        descriptor(None, FilePermissions::Read),
+        descriptor(Some("stdout"), FilePermissions::Write),
+        descriptor(Some("stderr"), FilePermissions::Write),
+      ],
+    }],
+  })?;
+  let stderr = read_tool_output(&stderr_path, "checker report")?;
 
-  if result.status != RunStatus::Accepted && result.stderr.is_empty() {
+  if result.status != RunStatus::Accepted && stderr.is_empty() {
     bail!(
       "Checker runner failed with status {:?}: {}",
       result.status,
-      result.error_message
+      result.error_message.as_deref().unwrap_or_default()
     );
   }
 
-  serde_json::from_slice(&result.stderr).context("Failed to parse checker report JSON")
+  serde_json::from_slice(&stderr).context("Failed to parse checker report JSON")
 }
 
 /// Runs the configured judger to generate official outputs for one test case.
@@ -891,6 +982,7 @@ pub fn run_generate_outputs(
     mode: "generateOutputs",
     input_path: &input_path,
     test_case,
+    file_size_limit: problem.file_size_limit,
     solution_name,
     prepared_solution,
     outputs_dir: &outputs_dir,
@@ -922,7 +1014,9 @@ pub fn run_prepare_solution(
   let prepared_executable_path = work_dir.join("prepared-executable");
 
   let runner = realize_artifact(&problem.judger.prepare_solution_runner)?;
-  let output = Command::new(&runner)
+  let mut command = Command::new(&runner);
+  command
+    .env_clear()
     .current_dir(&work_dir)
     .env("HULL_SOLUTION_NAME", &solution.name)
     .env("HULL_SOLUTION_SRC", &solution.src)
@@ -931,7 +1025,9 @@ pub fn run_prepare_solution(
       "HULL_PREPARED_SOLUTION_EXECUTABLE_PATH",
       &prepared_executable_path,
     )
-    .env("HULL_REPORT_PATH", &report_path)
+    .env("HULL_REPORT_PATH", &report_path);
+  set_module_cache_environment(&mut command);
+  let output = command
     .output()
     .with_context(|| format!("Failed to execute prepareSolution {}", runner))?;
 
@@ -996,6 +1092,7 @@ pub fn run_judge(
     mode: "judge",
     input_path: &input_path,
     test_case,
+    file_size_limit: problem.file_size_limit,
     solution_name,
     prepared_solution,
     outputs_dir: &outputs_dir,
@@ -1025,11 +1122,11 @@ pub fn run_judge(
 }
 
 fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<Output> {
-  // The packaged runners write helper files into their working directory, so
-  // each invocation gets an isolated sandbox directory.
+  // Packaged runners write helper files into a separate working directory for each invocation.
   let runner = realize_artifact(invocation.runner)?;
   let mut command = Command::new(&runner);
   command
+    .env_clear()
     .current_dir(invocation.work_dir)
     .env("HULL_MODE", invocation.mode)
     .env("HULL_TESTCASE_NAME", &invocation.test_case.name)
@@ -1043,8 +1140,13 @@ fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<Output> {
       "HULL_MEMORY_LIMIT",
       invocation.test_case.memory_limit.to_string(),
     )
+    .env(
+      "HULL_FILE_SIZE_LIMIT",
+      invocation.file_size_limit.to_string(),
+    )
     .env("HULL_SOLUTION_SRC", &invocation.prepared_solution.src)
     .env("HULL_OUTPUTS_DIR", invocation.outputs_dir);
+  set_module_cache_environment(&mut command);
 
   if let Some(executable) = &invocation.prepared_solution.executable {
     command.env("HULL_SOLUTION_EXECUTABLE", realize_artifact(executable)?);
@@ -1077,6 +1179,12 @@ fn run_judger_script(invocation: JudgerInvocation<'_>) -> Result<Output> {
   }
 
   Ok(output)
+}
+
+fn set_module_cache_environment(command: &mut Command) {
+  if let Some(cache) = crate::runner::module_cache_directory() {
+    command.env("HULL_WASMTIME_CACHE_DIR", cache);
+  }
 }
 
 fn judger_output_details(output: &Output) -> String {
@@ -1177,21 +1285,40 @@ fn resolve_test_input(
     .and_then(|program| program.wasm.as_ref())
     .with_context(|| format!("Generator `{}` is missing `wasm` metadata", generator_name))?;
   let generator_wasm = realize_artifact(generator_wasm)?;
-  let result = run_wasm_for_stdio(
-    &generator_wasm,
-    None,
-    arguments.unwrap_or(&[]),
-    TOOL_TICK_LIMIT,
-    TOOL_MEMORY_LIMIT,
-    TOOL_OUTPUT_LIMIT,
-    &[],
-  )?;
-  ensure_generator_succeeded(generator_name, temp_name, &result)?;
   let path = workspace
     .case_dir("input", &format!("{}-{temp_name}", problem.name))?
     .join("input.txt");
-  fs::write(&path, result.stdout)
-    .with_context(|| format!("Failed to write generated input {}", path.display()))?;
+  let work_dir = tempfile::tempdir().context("Failed to create generator report directory")?;
+  let stderr_path = work_dir.path().join("stderr");
+  let result = run_single_tool(SessionRequest {
+    report_path: work_dir.path().join("session.json"),
+    files: vec![
+      tool_file("stdout", path.clone(), FilePermissions::Write),
+      tool_file("stderr", stderr_path.clone(), FilePermissions::Write),
+    ],
+    programs: vec![ProgramRequest {
+      name: "generator".to_string(),
+      wasm_path: PathBuf::from(generator_wasm),
+      arguments: arguments.unwrap_or(&[]).to_vec(),
+      tick_limit: TOOL_TICK_LIMIT,
+      memory_limit: TOOL_MEMORY_LIMIT,
+      required_accepted: false,
+      file_system: FileSystem {
+        directories: vec![DirectoryBinding {
+          path: ".".to_string(),
+          permissions: DirectoryPermissions::ReadExecute,
+        }],
+        bindings: Vec::new(),
+      },
+      initial_descriptors: vec![
+        descriptor(None, FilePermissions::Read),
+        descriptor(Some("stdout"), FilePermissions::Write),
+        descriptor(Some("stderr"), FilePermissions::Write),
+      ],
+    }],
+  })?;
+  let stderr = read_tool_output(&stderr_path, "generator stderr")?;
+  ensure_generator_succeeded(generator_name, temp_name, &result, &stderr)?;
   Ok(path)
 }
 
@@ -1218,6 +1345,7 @@ mod tests {
       name: "p".to_string(),
       tick_limit: 1,
       memory_limit: 1,
+      file_size_limit: 1,
       full_score: 1.0,
       checker: ProgramSpec {
         src: None,

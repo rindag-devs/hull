@@ -18,7 +18,7 @@
     ./include
   ];
 
-  judger = hull.judger.stdioInteraction config { realTimeLimitSeconds = 10; };
+  judger = hull.judger.stdioInteraction config { };
 
   checker.src = ./interactor.23.cpp;
 

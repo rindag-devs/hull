@@ -10,6 +10,7 @@
 - Solution predictions
 - Time limits
 - Memory limits
+- File-size limits
 
 ## Coverage Model
 
@@ -67,7 +68,7 @@ For a single-subtask ICPC-style problem, roughly 20 to 100 testcases is often ap
 
 ## Solution Predictions
 
-Assign expected outcomes for the main correct solution, pure brute force, intermediate solutions, and realistic wrong solutions. Predictions should describe intentional subtask behavior, including accepted, time-limited, memory-limited, or wrong-answer outcomes as appropriate.
+Assign expected outcomes for the main correct solution, pure brute force, intermediate solutions, and realistic wrong solutions. Use the exact status strings `accepted`, `wrong_answer`, `partially_correct`, `runtime_error`, `time_limit_exceeded`, `memory_limit_exceeded`, `file_error`, and `internal_error` in predictions.
 
 If measured outcomes disagree with predictions, do not mechanically edit the prediction. Investigate whether the implementation is wrong, a testcase has unexpected traits, a subtask is poorly designed, data is weak, limits are wrong, or the proposed complexity distinction does not exist. Change the underlying design when it is the cause.
 
@@ -81,6 +82,10 @@ Do not tighten a limit merely to compensate for weak data. If correct and incorr
 
 ## Memory Limits
 
-Hull's `problem.nix` memory limit is measured in bytes.
+Hull's `problem.nix` memory limit is measured in bytes and bounds WASM linear memory and the execution stack independently.
 
 Set memory generously unless reducing asymptotic memory is itself a worthwhile part of the task. Data-structure-heavy problems often need substantial headroom. If a high-memory approach is intentionally excluded because the lower-memory idea is meaningful, measure peak use and consider a looser partial-scoring subtask rather than relying on a brittle threshold.
+
+## File-Size Limits
+
+Hull's `problem.nix` `fileSizeLimit` is measured in bytes and applies independently to each contestant-controlled regular file or pipe. A regular file is limited by logical length, including its initial contents; a pipe is limited by cumulative successful writes. Do not set `fileSizeLimit` explicitly unless the problem has unusual file requirements; the default is suitable for nearly all problems. When an override is needed, calibrate it from legitimate worst-case files and streams and include `file_error` in predictions when overflow is intentional.

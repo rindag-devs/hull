@@ -83,6 +83,17 @@ require_executable() {
   test -x "$1"
 }
 
+require_file_size_metadata() {
+  jq -e '.file_size_limit == 64' "$1" >/dev/null
+}
+
+require_cnoi_file_size_metadata() {
+  package=$1
+  metadata=$(find "$package/.selfeval-bundle/nix/store" -path '*/problems/aPlusB.json' -print)
+  test "$(printf '%s\n' "$metadata" | grep -c .)" -eq 1
+  require_file_size_metadata "$metadata"
+}
+
 require_machines() {
   directory=$1
   machine=$2
@@ -202,9 +213,10 @@ test_hydro() {
 
   mkdir "$root/bundle"
   extract_zstd_archive "$root/package/testdata/hull-bundle.tar.zst" "$root/bundle" "$root"
+  require_file_size_metadata "$root/bundle/bundle/problem.json"
   mkdir "$root/work"
   cp "$root/bundle/bundle/solutions/std.20.cpp" "$root/work/foo.cpp"
-  hydro_language=$(jq -r '[.hydroToHullLanguageMap | to_entries[] | select(.value == "cpp.20") | .key][0] // empty' \
+  hydro_language=$(jq -r '[.hydro_to_hull_language_map | to_entries[] | select(.value == "cpp.20") | .key][0] // empty' \
     "$root/bundle/bundle/hydro-language-map.json")
   test -n "$hydro_language"
   bash_path=$(command -v bash)
@@ -218,12 +230,24 @@ test_hydro() {
   cc "$root/package/testdata/checker.c" -o "$root/checker"
   "$root/checker" /dev/null "$root/work/report.txt" /dev/null /dev/null "$root/work/score.txt" "$root/work/message.txt"
   grep -Fx '100' "$root/work/score.txt" >/dev/null
+
+  mkdir "$root/file-error-work"
+  cp "$root/bundle/bundle/solutions/file-error-stdout.20.cpp" "$root/file-error-work/foo.cpp"
+  (
+    cd "$root/file-error-work"
+    PATH=/nonexistent HYDRO_LANG="$hydro_language" "$bash_path" "$root/package/testdata/compile.sh"
+    if PATH=/nonexistent "$bash_path" "$root/package/testdata/execute.sh" >report.txt 2>error.txt; then
+      exit 1
+    fi
+  )
+  grep -Fx 'file_error' "$root/file-error-work/error.txt" >/dev/null
 }
 
 test_lemon() {
   root=$1
   build_target "$root" "lemon$local_suffix"
   check_lemon_structure "$root/package"
+  require_file_size_metadata "$root/package/data/aPlusB/problem.json"
 
   mkdir "$root/submission" "$root/result"
   cp "$root/package/source/std/aPlusB/aPlusB.cpp" "$root/submission/aPlusB.cpp"
@@ -240,12 +264,28 @@ test_lemon() {
   "$root/package/data/_hull/lemon-special-judge" \
     /dev/null "$root/result/report.txt" /dev/null 100 "$root/result/score.txt" "$root/result/message.txt"
   grep -Fx '100' "$root/result/score.txt" >/dev/null
+
+  mkdir "$root/file-error-submission"
+  cp "$root/package/source/fileErrorStdout/aPlusB/aPlusB.cpp" "$root/file-error-submission/aPlusB.cpp"
+  (
+    cd "$root/file-error-submission"
+    "$root/package/data/_hull/lemon-custom-compiler" aPlusB.cpp
+    : >error.txt
+    : >"$root/result/file-error-report.txt"
+    "$root/package/data/_hull/lemon-custom-watcher" \
+      HullBundle aPlusB.hullbundle '' "$root/result/file-error-report.txt" error.txt \
+      1 100 128 1000 0 fallback.txt
+    test ! -e "$root/result/file-error-report.txt"
+    test ! -e fallback.txt
+    grep -Fi 'file' error.txt >/dev/null
+  )
 }
 
 test_uoj() {
   root=$1
   build_target "$root" "uoj$local_suffix"
   check_uoj_structure "$root/package"
+  require_file_size_metadata "$root/package/hull-bundle/problem.json"
   require_static_machine "$root/package/judger" "$local_machine"
   require_static_machine "$root/package/busybox" "$local_machine"
   require_static_machine "$root/package/zstd" "$local_machine"
@@ -288,6 +328,7 @@ test_cnoi() {
   build_contest_target "$root" "$local_cnoi_target"
   require_executable "$root/package/selfeval"
   require_machines "$root/package/.selfeval-bundle/nix/store" "$local_machine"
+  require_cnoi_file_size_metadata "$root/package"
 
   mkdir -p "$root/participant/aPlusB"
   cp nix/test/problem/aPlusB/solution/std.20.cpp "$root/participant/aPlusB/aPlusB.cpp"
@@ -332,6 +373,7 @@ test_cross_cnoi() {
   build_contest_target "$root" "$cross_cnoi_target"
   require_executable "$root/package/selfeval"
   require_machines "$root/package/.selfeval-bundle/nix/store" "$cross_machine"
+  require_cnoi_file_size_metadata "$root/package"
 }
 
 run_named_test() {

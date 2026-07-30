@@ -67,12 +67,8 @@ pub enum InteractiveMode {
 pub enum PhaseKind {
   /// Nix is evaluating expressions.
   NixEval,
-  /// Nix is preparing runtime inputs.
-  NixPrepare,
   /// Hull is running runtime analysis.
   Runtime,
-  /// Nix is building final outputs.
-  NixBuild,
 }
 
 /// Identifies the kind of task represented by a progress group.
@@ -114,8 +110,6 @@ pub struct TaskItemReport {
   pub tick: Option<u64>,
   /// Optional consumed memory in bytes.
   pub memory: Option<u64>,
-  /// Optional score associated with the item.
-  pub score: Option<f64>,
 }
 
 /// Settings used to initialize interactive output.
@@ -325,8 +319,8 @@ pub fn suspend_live_render() -> LiveRenderSuspendGuard {
   LiveRenderSuspendGuard { active: true }
 }
 
-/// Creates an interactive progress dashboard for a problem.
-pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
+/// Creates an interactive progress dashboard with an optional configured name.
+pub fn create_progress(label: &str, name: Option<&str>) -> ProblemProgressHandle {
   let enabled = current_settings().enabled();
   let (terminal, viewport_height) = if enabled {
     create_terminal()
@@ -338,8 +332,8 @@ pub fn create_problem_progress(name: &str) -> ProblemProgressHandle {
   let inner = Arc::new(Mutex::new(InteractiveState {
     enabled,
     suspended: false,
-    title_label: "Problem".to_string(),
-    title_name: Some(name.to_string()),
+    title_label: label.to_string(),
+    title_name: name.map(str::to_owned),
     phase: None,
     roots: BTreeMap::new(),
     terminal,
@@ -1317,9 +1311,7 @@ fn task_label(kind: TaskKind) -> &'static str {
 fn phase_label(kind: PhaseKind) -> &'static str {
   match kind {
     PhaseKind::NixEval => "Nix eval",
-    PhaseKind::NixPrepare => "Nix prepare",
     PhaseKind::Runtime => "Runtime",
-    PhaseKind::NixBuild => "Nix build",
   }
 }
 

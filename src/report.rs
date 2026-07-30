@@ -28,9 +28,13 @@ use crate::runtime::types::{
 #[serde(rename_all = "snake_case")]
 /// Serializable CLI judging summary shared by `judge` and `integration-judge cnoi`.
 pub struct JudgeCliReport {
+  /// Total scaled score awarded to the solution.
   pub score: f64,
+  /// Maximum score configured for the problem.
   pub full_score: f64,
+  /// Per-subtask summaries in configured order.
   pub subtask_results: Vec<JudgeCliSubtaskResult>,
+  /// Per-testcase summaries indexed by testcase name.
   pub test_case_results: HashMap<String, JudgeCliTestCaseResult>,
 }
 
@@ -38,8 +42,11 @@ pub struct JudgeCliReport {
 #[serde(rename_all = "snake_case")]
 /// One subtask entry in a CLI judging summary.
 pub struct JudgeCliSubtaskResult {
+  /// Maximum score configured for the subtask.
   pub full_score: f64,
+  /// Score awarded after applying the subtask weight.
   pub scaled_score: f64,
+  /// Verdicts of matching testcases in configured order.
   pub statuses: Vec<JudgeStatus>,
 }
 
@@ -47,9 +54,13 @@ pub struct JudgeCliSubtaskResult {
 #[serde(rename_all = "snake_case")]
 /// One testcase entry in a CLI judging summary.
 pub struct JudgeCliTestCaseResult {
+  /// Final testcase verdict.
   pub status: JudgeStatus,
+  /// Normalized testcase score.
   pub score: f64,
+  /// Deterministic ticks consumed by the solution.
   pub tick: u64,
+  /// Peak linear-memory usage in bytes.
   pub memory: u64,
 }
 
@@ -178,16 +189,7 @@ impl JudgeCliReport {
 }
 
 fn get_subtask_status(statuses: &[JudgeStatus]) -> Option<JudgeStatus> {
-  if statuses.is_empty() {
-    return None;
-  }
-  Some(
-    statuses
-      .iter()
-      .find(|status| **status != JudgeStatus::Accepted)
-      .copied()
-      .unwrap_or(JudgeStatus::Accepted),
-  )
+  JudgeStatus::aggregate(statuses.iter().copied())
 }
 
 fn colorize_status(status: Option<JudgeStatus>, text: &str) -> Cell {
@@ -196,9 +198,9 @@ fn colorize_status(status: Option<JudgeStatus>, text: &str) -> Cell {
     Some(JudgeStatus::WrongAnswer) => Cell::new(text).fg(Color::Red),
     Some(JudgeStatus::PartiallyCorrect) => Cell::new(text).fg(Color::Cyan),
     Some(JudgeStatus::RuntimeError) => Cell::new(text).fg(Color::Magenta),
-    Some(JudgeStatus::TimeLimitExceeded | JudgeStatus::MemoryLimitExceeded) => {
-      Cell::new(text).fg(Color::Yellow)
-    }
+    Some(
+      JudgeStatus::TimeLimitExceeded | JudgeStatus::MemoryLimitExceeded | JudgeStatus::FileError,
+    ) => Cell::new(text).fg(Color::Yellow),
     Some(JudgeStatus::InternalError) => Cell::new(text).fg(Color::Grey),
     None => Cell::new(text),
   }

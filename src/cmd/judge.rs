@@ -26,6 +26,7 @@ use crate::runtime::types::RuntimeOptions;
 use crate::runtime::workspace::RuntimeWorkspace;
 
 #[derive(Parser)]
+/// Options for judging one source file against a problem.
 pub struct JudgeOpts {
   /// Path to the source file to judge.
   pub src_path: String,
@@ -47,6 +48,7 @@ pub struct JudgeOpts {
   pub stop_on_failure: bool,
 }
 
+/// Executes the ad-hoc source judging command.
 pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   let src_path_abs = PathBuf::from(&judge_opts.src_path)
     .canonicalize()
@@ -56,7 +58,7 @@ pub fn run(judge_opts: &JudgeOpts) -> Result<()> {
   let ad_hoc_name = "__hullAdHoc".to_string();
 
   let workspace = RuntimeWorkspace::new()?;
-  let progress = interactive::create_problem_progress(&problem.name);
+  let progress = interactive::create_progress("Problem", Some(&problem.name));
   let runtime = analyze_problem(
     &problem,
     &workspace,

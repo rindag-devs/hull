@@ -16,80 +16,92 @@
 {
   hullPkgs,
   lib,
+  pkgs,
   ...
 }:
 
 let
+  markerName = "_hull_run_wasm_dynamic";
+
+  dynamic = type: environment: {
+    "${markerName}" = {
+      inherit type environment;
+    };
+  };
+
+  isDynamic = value: builtins.isAttrs value && builtins.hasAttr markerName value;
+  collectDynamic =
+    path: value:
+    if isDynamic value then
+      [
+        {
+          inherit path;
+          inherit (value.${markerName}) type environment;
+        }
+      ]
+    else if builtins.isList value then
+      lib.concatLists (lib.imap0 (index: collectDynamic (path ++ [ index ])) value)
+    else if builtins.isAttrs value then
+      lib.concatLists (lib.mapAttrsToList (name: collectDynamic (path ++ [ name ])) value)
+    else
+      [ ];
+
+  eraseDynamic =
+    value:
+    if isDynamic value then
+      null
+    else if builtins.isList value then
+      map eraseDynamic value
+    else if builtins.isAttrs value then
+      lib.mapAttrs (_: eraseDynamic) value
+    else
+      value;
+
   script =
-    {
-      wasm,
-      arguments ? [ ],
-      argumentsRaw ? null,
-      inputFiles ? { },
-      outputFiles ? [ ],
-      stdin ? null,
-      tickLimit ? null,
-      memoryLimit ? null,
-      ensureAccepted ? false,
-    }:
-
+    { request }:
     let
-      mkLimitArg =
-        name: limit: lib.optionalString (limit != null) ''--${name}-limit="${toString limit}"'';
-
-      mkFileArg =
-        name: files:
-        lib.concatMapStringsSep " " (fileName: "--${name}-file ${lib.escapeShellArg fileName}") files;
-
-      stdinArg = lib.optionalString (stdin != null) ''--stdin-path="${stdin}"'';
-
-      tickLimitArg = mkLimitArg "tick" tickLimit;
-
-      memoryLimitArg = mkLimitArg "memory" memoryLimit;
-
-      copyInputFilesCommand = lib.concatMapAttrsStringSep "\n" (
-        name: file: ''cp "${file}" ${lib.escapeShellArg name}''
-      ) inputFiles;
-
-      copyOutputFilesCommand = lib.concatMapStringsSep "\n" (
-        name: ''cp ${lib.escapeShellArg name} "$output_dir/outputFiles/"''
-      ) outputFiles;
-
-      # --read-file a.txt --read-file b.txt ...
-      inputFileArg = mkFileArg "read" (builtins.attrNames inputFiles);
-
-      # --write-file a.txt --write-file b.txt ...
-      outputFileArg = mkFileArg "write" outputFiles;
-
-      ensureAcceptedArg = lib.optionalString ensureAccepted "--ensure-accepted";
-
-      argumentsArg =
-        if argumentsRaw != null then
-          "-- ${argumentsRaw}"
+      substitutions = collectDynamic [ ] request;
+      template = pkgs.writeText "run-wasm-request-template.json" (builtins.toJSON (eraseDynamic request));
+      applySubstitution =
+        index:
+        {
+          path,
+          type,
+          environment,
+        }:
+        let
+          input = if index == 0 then template else "$PWD/.run-wasm-request-${toString index}.json";
+          output = "$PWD/.run-wasm-request-${toString (index + 1)}.json";
+          environmentReference = "$" + "{" + environment + "}";
+          jqArgument =
+            if type == "string" then
+              "--arg value \"${environmentReference}\""
+            else if type == "number" then
+              "--argjson value \"${environmentReference}\""
+            else
+              throw "unsupported run-wasm dynamic scalar type `${type}`";
+        in
+        ''
+          ${lib.getExe pkgs.jq} ${jqArgument} \
+            ${lib.escapeShellArg "setpath(${builtins.toJSON path}; $value)"} \
+            "${input}" > "${output}"
+        '';
+      substitutionsScript = lib.concatImapStrings (index: applySubstitution (index - 1)) substitutions;
+      finalRequest =
+        if substitutions == [ ] then
+          template
         else
-          lib.optionalString (arguments != [ ]) "-- ${lib.escapeShellArgs arguments}";
+          "$PWD/.run-wasm-request-${toString (builtins.length substitutions)}.json";
     in
     ''
-      (
-        output_dir=$PWD
-        workdir=$(mktemp -d)
-        trap 'rm -rf "$workdir"' EXIT
-
-        mkdir -p "$output_dir/outputFiles"
-        cd "$workdir"
-
-        ${copyInputFilesCommand}
-
-        ${lib.getExe hullPkgs.default} run-wasm "${wasm}" \
-          ${stdinArg} --stdout-path="$output_dir/stdout" --stderr-path="$output_dir/stderr" \
-          ${tickLimitArg} ${memoryLimitArg} ${inputFileArg} ${outputFileArg} ${ensureAcceptedArg} \
-          --report-path="$output_dir/report.json" \
-          ${argumentsArg}
-
-        ${copyOutputFilesCommand}
-      )
+      ${substitutionsScript}
+      cp "${finalRequest}" "$PWD/run-wasm-request.json"
+      ${lib.getExe hullPkgs.default} run-wasm "$PWD/run-wasm-request.json"
     '';
 in
 {
   inherit script;
+
+  dynamicString = dynamic "string";
+  dynamicNumber = dynamic "number";
 }

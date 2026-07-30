@@ -129,6 +129,7 @@ let
       ${exportPathEnv "HULL_INPUT_PATH" testCase.data.input}
       ${exportEnv "HULL_TICK_LIMIT" (toString testCase.tickLimit)}
       ${exportEnv "HULL_MEMORY_LIMIT" (toString testCase.memoryLimit)}
+      ${exportEnv "HULL_FILE_SIZE_LIMIT" (toString problem.fileSizeLimit)}
       ${exportPathEnv "HULL_SOLUTION_SRC" preparedSolution.src}
       ${exportOptionalEnv "HULL_SOLUTION_EXECUTABLE" ((preparedSolution.executable or { }).path or null)}
 

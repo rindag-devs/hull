@@ -23,6 +23,7 @@ lint:
   nix flake check --no-build
   cargo check
   cargo test
+  RUSTDOCFLAGS="-D missing_docs" cargo doc --no-deps
   cargo clippy --all-targets --all-features -- -D warnings
   biome check .
   cargo check --manifest-path nix/lib/problemTarget/uoj/supervisor/Cargo.toml

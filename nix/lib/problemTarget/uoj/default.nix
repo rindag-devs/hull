@@ -133,55 +133,56 @@ assert lib.assertMsg (
 
       metadata = {
         name = problem.name;
-        tickLimit = problem.tickLimit;
-        memoryLimit = problem.memoryLimit;
-        fullScore = problem.fullScore;
+        tick_limit = problem.tickLimit;
+        memory_limit = problem.memoryLimit;
+        file_size_limit = problem.fileSizeLimit;
+        full_score = problem.fullScore;
         checker = {
           src = null;
           wasm = {
             path = builtins.unsafeDiscardStringContext (toString problem.checker.wasm);
-            drvPath = null;
+            drv_path = null;
           };
         };
         validator = {
           src = null;
           wasm = {
             path = builtins.unsafeDiscardStringContext (toString problem.validator.wasm);
-            drvPath = null;
+            drv_path = null;
           };
         };
         judger = {
-          prepareSolutionRunner = {
+          prepare_solution_runner = {
             path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.prepareSolution);
-            drvPath = null;
+            drv_path = null;
           };
-          generateOutputsRunner = {
+          generate_outputs_runner = {
             path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.generateOutputs);
-            drvPath = null;
+            drv_path = null;
           };
-          judgeRunner = {
+          judge_runner = {
             path = builtins.unsafeDiscardStringContext (lib.getExe targetJudger.judge);
-            drvPath = null;
+            drv_path = null;
           };
         };
-        mainCorrectSolution = problem.mainCorrectSolution.name;
-        testCases = map (tc: {
+        main_correct_solution = problem.mainCorrectSolution.name;
+        test_cases = map (tc: {
           name = tc.name;
-          tickLimit = tc.tickLimit;
-          memoryLimit = tc.memoryLimit;
+          tick_limit = tc.tickLimit;
+          memory_limit = tc.memoryLimit;
           groups = tc.groups;
-          traitHints = tc.traitHints;
+          trait_hints = tc.traitHints;
         }) allTestCases;
         subtasks = map (st: {
-          fullScore = st.fullScore;
-          scoringMethod = st.scoringMethod;
+          full_score = st.fullScore;
+          scoring_method = st.scoringMethod;
           traits = st.traits;
         }) problem.subtasks;
         solutions = map (solution: {
           name = solution.name;
           src = "solutions/${baseNameOf (toString solution.src)}";
-          mainCorrectSolution = solution.mainCorrectSolution;
-          participantVisibility = solution.participantVisibility;
+          main_correct_solution = solution.mainCorrectSolution;
+          participant_visibility = solution.participantVisibility;
         }) (builtins.attrValues problem.solutions);
       };
 
@@ -197,10 +198,18 @@ assert lib.assertMsg (
           mkdir -p "$tmpdir/outputs"
           cp ${
             pkgs.writeText "${tc.name}-official-data-metadata.json" (
-              builtins.toJSON { testCaseName = tc.name; }
+              builtins.toJSON { test_case_name = tc.name; }
             )
           } "$tmpdir/official-data-metadata.json"
-          cp ${pkgs.writeText "${tc.name}-input-validation.json" (builtins.toJSON tc.inputValidation)} "$tmpdir/validation.json"
+          cp ${
+            pkgs.writeText "${tc.name}-input-validation.json" (
+              builtins.toJSON {
+                inherit (tc.inputValidation) status message traits;
+                reader_trace_stacks = tc.inputValidation.readerTraceStacks;
+                reader_trace_tree = tc.inputValidation.readerTraceTree;
+              }
+            )
+          } "$tmpdir/validation.json"
           cp -r ${tc.data.outputs}/. "$tmpdir/outputs/"
           tar -C "$tmpdir" -cf "$out" official-data-metadata.json validation.json outputs
         '';
@@ -212,7 +221,7 @@ assert lib.assertMsg (
         cp ${
           pkgs.writeText "hull-uoj-languageConfig-${problem.name}.json" (
             builtins.toJSON {
-              uojToHullLanguageMap = uojToHullLanguageMap;
+              uoj_to_hull_language_map = uojToHullLanguageMap;
             }
           )
         } $out/uoj-language-config.json

@@ -18,6 +18,7 @@ Visit the [documentation home page][docs] to learn more.
 ## Features
 
 - **Reproducible problem pipelines.** Nix definitions connect programs, generated data, validation, official outputs, solution predictions, documents, and packages in one buildable problem model.
+- **Deterministic WASIp1 execution.** Hull runs authoritative source WASM with explicit tick, memory, filesystem, standard-stream, and per-resource file-size contracts, including deterministic multi-program interaction.
 - **First-class [Typst integration](https://hull.aberter0x3f.top/advanced/document-generation-with-typst/).** Build multilingual statements, technical overviews, and contest booklets from analyzed problem data, with automatic samples, subtasks, and validator-backed visualizations.
 - **Programmable [judging workflows](https://hull.aberter0x3f.top/advanced/custom-judgers/).** Use built-in batch, interactive, and answer-only models, or define a custom judger for multi-stage evaluation, custom protocols, and specialized scoring.
 - **Extensible [problem and contest targets](https://hull.aberter0x3f.top/advanced/problem-and-contest-targets/).** Package for supported judge systems and participant environments, or write a custom target for a project-specific output format.

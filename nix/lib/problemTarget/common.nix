@@ -43,7 +43,15 @@
           mkdir -p ${dirPrefix}
           cp ${tc.data.input} ${dirPrefix}/input
           cp -r ${tc.data.outputs} ${dirPrefix}/outputs
-          echo ${lib.escapeShellArg (builtins.toJSON tc.inputValidation)} > $out/data/${tc.name}/input-validation.json
+          echo ${
+            lib.escapeShellArg (
+              builtins.toJSON {
+                inherit (tc.inputValidation) status message traits;
+                reader_trace_stacks = tc.inputValidation.readerTraceStacks;
+                reader_trace_tree = tc.inputValidation.readerTraceTree;
+              }
+            )
+          } > $out/data/${tc.name}/input-validation.json
         ''
       ) (builtins.attrValues testCases);
 
@@ -89,7 +97,15 @@
             tcName: result:
             let
               dirPrefix = "$out/solution/${solName}/test-case-result/${tcName}";
-              resultJSON = builtins.toJSON (builtins.removeAttrs result [ "outputs" ]);
+              resultJSON = builtins.toJSON {
+                inherit (result)
+                  status
+                  score
+                  message
+                  tick
+                  memory
+                  ;
+              };
             in
             ''
               mkdir -p ${dirPrefix}
@@ -103,7 +119,11 @@
               { testCases, ... }@result:
               let
                 dirPrefix = "$out/solution/${solName}/subtask-result/${builtins.toString index}";
-                reportJSON = builtins.toJSON (builtins.removeAttrs result [ "testCases" ]);
+                reportJSON = builtins.toJSON {
+                  inherit (result) statuses;
+                  raw_score = result.rawScore;
+                  scaled_score = result.scaledScore;
+                };
                 linkTestCasesCommand = lib.concatMapAttrsStringSep "\n" (
                   tcName: tc: "ln -sr $out/solution/${solName}/test-case-result/${tcName} ${dirPrefix}/${tcName}"
                 ) testCases;

@@ -108,8 +108,9 @@
     ("accepted", ("AC", green)),
     ("wrong_answer", ("WA", red)),
     ("partially_correct", ("PC", aqua)),
-    ("time_limit_exceeded", ("TLE", yellow)),
     ("memory_limit_exceeded", ("MLE", yellow)),
+    ("file_error", ("FE", yellow)),
+    ("time_limit_exceeded", ("TLE", yellow)),
     ("runtime_error", ("RE", purple)),
     ("internal_error", ("IE", gray)),
   )
@@ -142,9 +143,10 @@
   columns: (150pt, 1fr),
   rows: auto,
   gutter: 1em,
-  [Full Score:], $#strfmt("{:.3}", problem.at("full-score"))$,
-  [Default Tick Limit:], ticks(problem.at("tick-limit")),
-  [Default Memory Limit:], bytes(problem.at("memory-limit")),
+  [Full Score:], $#strfmt("{:.3}", problem.at("full_score"))$,
+  [Default Tick Limit:], ticks(problem.at("tick_limit")),
+  [Default Memory Limit:], bytes(problem.at("memory_limit")),
+  [Default File Size Limit:], bytes(problem.at("file_size_limit")),
   [Build Date:], [#datetime.today().display("[year]-[month]-[day]")],
 )
 
@@ -188,7 +190,7 @@
   table.hline(),
   // Body
   ..problem
-    .at("test-cases")
+    .at("test_cases")
     .pairs()
     .map(((name, tc)) => (
       raw(name, lang: "txt"),
@@ -212,7 +214,7 @@
 
 #let all_trait_names = problem.traits.keys().sorted()
 #let test_case_pairs = (
-  problem.at("test-cases").pairs().sorted(key: p => p.at(0))
+  problem.at("test_cases").pairs().sorted(key: p => p.at(0))
 )
 
 #table(
@@ -232,7 +234,7 @@
       (
         raw(name, lang: "txt"),
         ..all_trait_names.map(trait_name => {
-          let actual_traits = tc.at("actual-traits")
+          let actual_traits = tc.at("actual_traits")
           let (symbol, color) = if actual_traits.keys().contains(trait_name) {
             if actual_traits.at(trait_name) {
               (sym.checkmark, green.lighten(60%))
@@ -269,7 +271,7 @@
     .enumerate()
     .map(((i, st)) => (
       [#i],
-      strfmt("{:.3}", st.at("full-score")),
+      strfmt("{:.3}", st.at("full_score")),
       {
         let traits = st
           .traits
@@ -282,7 +284,7 @@
           text(gray)[(none)]
         }
       },
-      st.at("test-cases").map(name => raw(name, lang: "txt")).join(", "),
+      st.at("test_cases").map(name => raw(name, lang: "txt")).join(", "),
     ))
     .flatten(),
 )
@@ -290,7 +292,7 @@
 #pagebreak()
 = Solutions Analysis
 
-#let test-case-names = problem.at("test-cases").keys().sorted()
+#let test-case-names = problem.at("test_cases").keys().sorted()
 #let solution-names = problem.solutions.keys().sorted()
 
 #table(
@@ -308,7 +310,7 @@
     // The rest of the header cells are the solution names.
     ..solution-names.map(name => {
       let sol = problem.solutions.at(name)
-      let is_main = sol.at("main-correct-solution")
+      let is_main = sol.at("main_correct_solution")
       // Use a smaller font and add a star for the main solution.
       text(
         size: 0.8em,
@@ -334,7 +336,7 @@
           let result = problem
             .solutions
             .at(sol_name)
-            .at("test-case-results")
+            .at("test_case_results")
             .at(tc_name)
           status-badge(result.status)
         }),
@@ -356,7 +358,7 @@
     .map(((i, st)) => (
       [#i],
       ..solution-names.map(sol => {
-        let score = problem.solutions.at(sol).subtask-results.at(i).scaled-score
+        let score = problem.solutions.at(sol).subtask_results.at(i).scaled_score
         strfmt("{:.3}", score)
       }),
     ))
@@ -372,8 +374,8 @@
     .map(sol_name => {
       let sol = problem.solutions.at(sol_name)
       let total_score = sol
-        .at("subtask-results")
-        .map(st => st.at("scaled-score"))
+        .at("subtask_results")
+        .map(st => st.at("scaled_score"))
         .sum(default: 0)
       text(weight: "bold", strfmt("{:.3}", total_score))
     })

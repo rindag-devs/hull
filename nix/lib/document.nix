@@ -27,6 +27,7 @@ let
       traits,
       tickLimit,
       memoryLimit,
+      fileSizeLimit,
       testCases,
       subtasks,
       fullScore,
@@ -35,11 +36,12 @@ let
     }:
     {
       inherit name traits;
-      display-name = displayName;
-      tick-limit = tickLimit;
-      memory-limit = memoryLimit;
-      full-score = fullScore;
-      test-cases = lib.mapAttrs (
+      display_name = displayName;
+      tick_limit = tickLimit;
+      memory_limit = memoryLimit;
+      file_size_limit = fileSizeLimit;
+      full_score = fullScore;
+      test_cases = lib.mapAttrs (
         _:
         {
           generator,
@@ -52,9 +54,9 @@ let
         }:
         {
           inherit generator arguments groups;
-          tick-limit = tickLimit;
-          memory-limit = memoryLimit;
-          actual-traits = inputValidation.traits;
+          tick_limit = tickLimit;
+          memory_limit = memoryLimit;
+          actual_traits = inputValidation.traits;
         }
       ) testCases;
       # Sample is used to display directly on the document.
@@ -73,10 +75,10 @@ let
           outputs = lib.mapAttrs (fileName: _: builtins.readFile (data.outputs + "/" + fileName)) (
             builtins.readDir data.outputs
           );
-          input-validation = {
+          input_validation = {
             inherit (inputValidation) status traits;
-            reader-trace-stacks = inputValidation.readerTraceStacks;
-            reader-trace-tree = inputValidation.readerTraceTree;
+            reader_trace_stacks = inputValidation.readerTraceStacks;
+            reader_trace_tree = inputValidation.readerTraceTree;
           };
         }
       ) (lib.filterAttrs (_: { groups, ... }: builtins.elem "sample" groups) testCases);
@@ -89,8 +91,8 @@ let
         }:
         {
           inherit traits;
-          full-score = fullScore;
-          test-cases = map ({ name, ... }: name) testCases;
+          full_score = fullScore;
+          test_cases = map ({ name, ... }: name) testCases;
         }
       ) subtasks;
       solutions = lib.mapAttrs (
@@ -102,8 +104,8 @@ let
           ...
         }:
         {
-          main-correct-solution = mainCorrectSolution;
-          test-case-results = lib.mapAttrs (
+          main_correct_solution = mainCorrectSolution;
+          test_case_results = lib.mapAttrs (
             _:
             {
               score,
@@ -123,7 +125,7 @@ let
                 ;
             }
           ) testCaseResults;
-          subtask-results = map (
+          subtask_results = map (
             {
               rawScore,
               scaledScore,
@@ -132,8 +134,8 @@ let
             }:
             {
               inherit statuses;
-              raw-score = rawScore;
-              scaled-score = scaledScore;
+              raw_score = rawScore;
+              scaled_score = scaledScore;
             }
           ) subtaskResults;
         }
@@ -192,7 +194,7 @@ in
       generatedJSON = builtins.toFile generatedJSONName (
         builtins.toJSON {
           inherit (contest) name;
-          display-name = contest.displayName;
+          display_name = contest.displayName;
           problems = map (p: mkProblemOverview p.config) contest.problems;
         }
       );

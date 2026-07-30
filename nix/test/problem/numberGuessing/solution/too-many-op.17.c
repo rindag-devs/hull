@@ -1,11 +1,13 @@
 #include <stdio.h>
 
 int main() {
-  for (int i = 0; i <= 1000; ++i) {
+  int n;
+  scanf("%d", &n);
+  for (int i = 0; i <= 50; ++i) {
     puts("Q 1");
     fflush(stdout);
+    char response[64];
+    if (scanf("%1s", response) != 1) break;
   }
-  puts("Q 1");
-  fflush(stdout);
   return 0;
 }

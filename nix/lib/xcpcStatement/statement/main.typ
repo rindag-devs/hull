@@ -289,17 +289,22 @@
 }
 
 #let render-problem(problem, statement) = [
-  = #titlecase(problem.display-name.at(language))
+  = #titlecase(problem.display_name.at(language))
 
   #grid(
     columns: (auto, auto),
     inset: 0% + 3pt,
     [#titlecase(translation.tick-limit):],
-    translation.ticks(problem.tick-limit),
+    translation.ticks(problem.tick_limit),
 
     [#titlecase(translation.memory-limit):],
-    translation.bytes(problem.memory-limit),
+    translation.bytes(problem.memory_limit),
+
+    [#titlecase(translation.file-size-limit):],
+    translation.bytes(problem.file_size_limit),
   )
+
+  #text(size: 0.9em, style: "italic", translation.limit-semantics)
 
   #line(length: 100%)
 
@@ -336,7 +341,7 @@
           render-case-vis(
             idx,
             sample.input,
-            sample.input-validation.reader-trace-tree,
+            sample.input_validation.reader_trace_tree,
           ),
         ),
         ..sample
@@ -348,7 +353,7 @@
           ))
       )
 
-      render-graph-vis(sample.input-validation.reader-trace-tree)
+      render-graph-vis(sample.input_validation.reader_trace_tree)
 
       if language in sample.descriptions {
         [=== #titlecase(translation.description)]
@@ -389,7 +394,7 @@
         .enumerate()
         .map(((id, st)) => {
           (
-            ([#id], $#str(st.full-score)$)
+            ([#id], $#str(st.full_score)$)
               + problem
                 .traits
                 .keys()

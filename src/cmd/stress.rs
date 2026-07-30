@@ -25,18 +25,22 @@ use crate::{
   format::{format_size, format_tick},
   interactive,
   platform::default_parallelism,
-  runner::RunStatus,
+  runner::{
+    DirectoryBinding, DirectoryPermissions, File, FilePermissions, FileSizeLimit, FileSystem,
+    InitialDescriptor, ProgramRequest, RunStatus, SessionRequest, TOOL_MEMORY_LIMIT,
+    TOOL_TICK_LIMIT, ToolLimit, run_session,
+  },
   runtime::{
-    analysis::{TOOL_MEMORY_LIMIT, TOOL_OUTPUT_LIMIT, TOOL_TICK_LIMIT, analyze_problem},
+    analysis::analyze_problem,
     artifact::realize_artifact,
     metadata::load_problem_spec,
-    sandbox::run_wasm_for_stdio,
     types::{JudgeStatus, ProblemSpec, RuntimeOptions, ScoringMethod, SubtaskSpec, TestCaseSpec},
     workspace::RuntimeWorkspace,
   },
 };
 
 #[derive(Parser)]
+/// Options for generated-testcase stress testing.
 pub struct StressOpts {
   /// Standard solution name. Defaults to the problem's `mainCorrectSolution`.
   #[arg(long, short)]
@@ -95,6 +99,7 @@ struct JudgeRunResult {
   message: String,
 }
 
+/// Executes stress testing until its round limit or a failure.
 pub fn run(opts: &StressOpts) -> Result<()> {
   let mut generator_args: Vec<String> = Vec::new();
   let mut args_iter = opts.args.iter();
@@ -108,7 +113,7 @@ pub fn run(opts: &StressOpts) -> Result<()> {
   let jobs = opts.jobs.unwrap_or_else(default_parallelism).max(1);
 
   let mut problem = load_problem_spec(&opts.problem)?;
-  let progress = interactive::create_problem_progress(&problem.name);
+  let progress = interactive::create_progress("Problem", Some(&problem.name));
   let available_solutions = problem
     .solutions
     .iter()
@@ -330,26 +335,84 @@ fn generate_input(
   workspace_root: &std::path::Path,
   test_case_name: &str,
 ) -> Result<std::path::PathBuf> {
-  let result = run_wasm_for_stdio(
-    generator_wasm,
-    None,
-    arguments,
-    TOOL_TICK_LIMIT,
-    TOOL_MEMORY_LIMIT,
-    TOOL_OUTPUT_LIMIT,
-    &[],
-  )?;
+  let path = workspace_root.join(format!("generated-input-{test_case_name}.txt"));
+  let report_dir =
+    tempfile::tempdir().context("Failed to create stress generator report directory")?;
+  let stderr_path = report_dir.path().join("stderr");
+  let request = SessionRequest {
+    report_path: report_dir.path().join("session.json"),
+    files: vec![
+      File::regular(
+        "stdout",
+        Some(path.clone()),
+        FilePermissions::Write,
+        FileSizeLimit::Tool(ToolLimit::Tool),
+      ),
+      File::regular(
+        "stderr",
+        Some(stderr_path.clone()),
+        FilePermissions::Write,
+        FileSizeLimit::Tool(ToolLimit::Tool),
+      ),
+    ],
+    programs: vec![ProgramRequest {
+      name: "generator".to_string(),
+      wasm_path: std::path::PathBuf::from(generator_wasm),
+      arguments: arguments.to_vec(),
+      tick_limit: TOOL_TICK_LIMIT,
+      memory_limit: TOOL_MEMORY_LIMIT,
+      required_accepted: false,
+      file_system: FileSystem {
+        directories: vec![DirectoryBinding {
+          path: ".".to_string(),
+          permissions: DirectoryPermissions::ReadExecute,
+        }],
+        bindings: Vec::new(),
+      },
+      initial_descriptors: vec![
+        InitialDescriptor {
+          file: None,
+          permissions: FilePermissions::Read,
+        },
+        InitialDescriptor {
+          file: Some("stdout".to_string()),
+          permissions: FilePermissions::Write,
+        },
+        InitialDescriptor {
+          file: Some("stderr".to_string()),
+          permissions: FilePermissions::Write,
+        },
+      ],
+    }],
+  };
+  let mut session_report = run_session(request);
+  if session_report.results.len() != 1 {
+    anyhow::bail!(
+      "Stress generator session returned {} program results instead of one",
+      session_report.results.len()
+    );
+  }
+  let result = session_report.results.remove(0);
+  let stderr = match std::fs::read(&stderr_path) {
+    Ok(stderr) => stderr,
+    Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+    Err(error) => {
+      return Err(error).with_context(|| {
+        format!(
+          "Failed to read stress generator stderr {}",
+          stderr_path.display()
+        )
+      });
+    }
+  };
   if result.status != RunStatus::Accepted {
     anyhow::bail!(
       "Generator failed while preparing stress input `{}` with status {:?}: {}\nStderr:\n{}",
       test_case_name,
       result.status,
-      result.error_message,
-      String::from_utf8_lossy(&result.stderr).trim()
+      result.error_message.as_deref().unwrap_or_default(),
+      String::from_utf8_lossy(&stderr).trim()
     );
   }
-  let path = workspace_root.join(format!("generated-input-{test_case_name}.txt"));
-  std::fs::write(&path, result.stdout)
-    .with_context(|| format!("Failed to write generated stress input {}", path.display()))?;
   Ok(path)
 }

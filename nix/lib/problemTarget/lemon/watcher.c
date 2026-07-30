@@ -506,6 +506,12 @@ int main(int argc, char **argv) {
     }
     fclose(error_fp);
   }
+  if (strcmp(status_str, "file_error") == 0) {
+    remove(effective_output_path);
+    exit_code = 0;
+    goto cleanup;
+  }
+
   if (copy_file(report_txt_path, effective_output_path) != 0) {
     fprintf(stderr, "failed to copy final watcher plain report\n");
     goto cleanup;

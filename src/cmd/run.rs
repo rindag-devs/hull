@@ -13,25 +13,15 @@
   not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::{
-  fs,
-  path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use cap_std::{ambient_authority, fs::Dir};
 use clap::Parser;
 use tracing::info;
-use wasi_common::{
-  WasiDir, WasiFile,
-  pipe::{ReadPipe, WritePipe},
-  sync::dir::Dir as WasiSyncDir,
-};
 
 use crate::{
   cmd::compile::{SourceCompileOpts, compile_source},
-  runner,
-  runtime::artifact::cache_native_module,
+  runner::{self, LocalProgramRequest},
 };
 
 /// Options for compiling and running one source file.
@@ -49,6 +39,12 @@ pub struct RunOpts {
   #[arg(long, short)]
   pub memory_limit: Option<u64>,
 
+  /// Limit bytes written to each inherited stdout and stderr stream.
+  ///
+  /// Ambient regular files exposed by `--cwd` are not subject to this limit.
+  #[arg(long)]
+  pub file_size_limit: Option<usize>,
+
   /// Print execution status details such as tick and memory to stderr.
   #[arg(long)]
   pub show_status: bool,
@@ -65,38 +61,29 @@ pub struct RunOpts {
 /// Compiles and runs one source file in Hull's WASM runtime.
 pub fn run(opts: &RunOpts) -> Result<()> {
   let wasm_path = compile_source(&opts.source)?;
-
-  info!("Precompiling program");
-  let cwasm_path = cache_native_module(&wasm_path)?;
-  let cwasm_bytes = fs::read(&cwasm_path)
-    .with_context(|| format!("Failed to read executable artifact from {}", cwasm_path))?;
-
-  let stdin: Box<dyn WasiFile> = Box::new(ReadPipe::new(std::io::stdin()));
-  let stdout: Box<dyn WasiFile> = Box::new(WritePipe::new(std::io::stdout()));
-  let stderr: Box<dyn WasiFile> = Box::new(WritePipe::new(std::io::stderr()));
-
   let cwd = resolve_cwd(opts.cwd.as_deref())?;
-  let preopened_dir = Some(preopen_cwd(&cwd)?);
 
   info!("Running program");
-  let result = runner::run(
-    &cwasm_bytes,
-    &opts.args,
-    opts.tick_limit.unwrap_or(10u64.pow(18)),
-    opts.memory_limit.unwrap_or(u32::MAX as u64),
-    [stdin, stdout, stderr],
-    preopened_dir,
-  );
+  let result = runner::run_local(LocalProgramRequest {
+    wasm_path: PathBuf::from(wasm_path),
+    arguments: opts.args.clone(),
+    tick_limit: opts.tick_limit.unwrap_or(runner::TOOL_TICK_LIMIT),
+    memory_limit: opts.memory_limit.unwrap_or(runner::TOOL_MEMORY_LIMIT),
+    file_size_limit: opts.file_size_limit.unwrap_or(runner::TOOL_FILE_SIZE_LIMIT),
+    cwd: Some(cwd),
+  })?;
 
   // Show status if requested
   if opts.show_status {
     use crate::format::{format_size, format_tick};
-    eprintln!("Status: {:?}", result.status);
-    eprintln!("Exit code: {}", result.exit_code);
+    eprintln!("Status: {}", result.status);
+    if let Some(exit_code) = result.exit_code {
+      eprintln!("Exit code: {exit_code}");
+    }
     eprintln!("Tick: {}", format_tick(result.tick));
     eprintln!("Memory: {}", format_size(result.memory));
-    if !result.error_message.is_empty() {
-      eprintln!("Error message:\n{}", result.error_message);
+    if let Some(error_message) = result.error_message {
+      eprintln!("Error message:\n{error_message}");
     }
   }
 
@@ -116,19 +103,9 @@ fn resolve_cwd(cwd: Option<&Path>) -> Result<PathBuf> {
   Ok(cwd)
 }
 
-fn preopen_cwd(cwd: &Path) -> Result<Box<dyn WasiDir>> {
-  let dir = Dir::open_ambient_dir(cwd, ambient_authority())
-    .with_context(|| format!("Failed to open working directory {}", cwd.display()))?;
-  Ok(Box::new(WasiSyncDir::from_cap_std(dir)))
-}
-
 #[cfg(test)]
 mod tests {
-  use std::io;
-
   use super::*;
-  use crate::runner::{self, RunStatus};
-  use wasi_common::pipe::{ReadPipe, WritePipe};
 
   #[test]
   fn explicit_cwd() {
@@ -148,67 +125,5 @@ mod tests {
   fn rejects_file_cwd() {
     let file = tempfile::NamedTempFile::new().unwrap();
     assert!(resolve_cwd(Some(file.path())).is_err());
-  }
-
-  #[test]
-  fn cwd_access() {
-    let root = tempfile::tempdir().unwrap();
-    let sandbox = root.path().join("sandbox");
-    fs::create_dir(&sandbox).unwrap();
-    fs::write(sandbox.join("a.txt"), "inside").unwrap();
-    fs::write(root.path().join("outside.txt"), "outside").unwrap();
-    #[cfg(unix)]
-    std::os::unix::fs::symlink("../outside.txt", sandbox.join("escape.txt")).unwrap();
-
-    for (path, follow_symlinks, should_open) in [
-      ("a.txt", false, true),
-      ("./a.txt", false, true),
-      ("../outside.txt", false, false),
-      ("etc/passwd", false, false),
-      #[cfg(unix)]
-      ("escape.txt", true, false),
-    ] {
-      let condition = if should_open { "i32.ne" } else { "i32.eq" };
-      let lookup_flags = u8::from(follow_symlinks);
-      let wasm = format!(
-        r#"(module
-          (import "wasi_snapshot_preview1" "path_open"
-            (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
-          (import "wasi_snapshot_preview1" "proc_exit" (func $proc_exit (param i32)))
-          (memory (export "memory") 1)
-          (data (i32.const 0) "{path}")
-          (func (export "_start")
-            i32.const 3
-            i32.const {lookup_flags}
-            i32.const 0
-            i32.const {path_len}
-            i32.const 0
-            i64.const 2
-            i64.const 0
-            i32.const 0
-            i32.const 32
-            call $path_open
-            i32.const 0
-            {condition}
-            if
-              i32.const 1
-              call $proc_exit
-            end))"#,
-        path_len = path.len()
-      );
-      let result = runner::run(
-        wasm.as_bytes(),
-        &[],
-        1_000_000,
-        1 << 20,
-        [
-          Box::new(ReadPipe::new(io::empty())),
-          Box::new(WritePipe::new(io::sink())),
-          Box::new(WritePipe::new(io::sink())),
-        ],
-        Some(preopen_cwd(&sandbox).unwrap()),
-      );
-      assert_eq!(result.status, RunStatus::Accepted, "path: {path}");
-    }
   }
 }

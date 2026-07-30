@@ -21,6 +21,7 @@ use crate::runtime::build::build_contest;
 use crate::runtime::types::RuntimeOptions;
 
 #[derive(Parser)]
+/// Options for analyzing and packaging one contest.
 pub struct BuildContestOpts {
   /// Contest name to analyze and package, e.g. `day1`.
   #[arg(long, short, default_value = "default")]
@@ -47,8 +48,9 @@ pub struct BuildContestOpts {
   pub nix_args: Vec<String>,
 }
 
+/// Executes the contest build command.
 pub fn run(build_opts: &BuildContestOpts) -> Result<()> {
-  let progress = interactive::create_problem_progress(&build_opts.contest);
+  let progress = interactive::create_progress("Contest", None);
   build_contest(
     &build_opts.contest,
     &build_opts.target,

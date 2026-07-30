@@ -70,7 +70,7 @@ nix develop
 Inside this shell:
 
 - The `hull` command-line interface (CLI) is available in your `PATH`.
-- All necessary compilers (e.g., `wasm32-wasi-wasip1-clang++`) and tools are ready to use.
+- Compilers such as `wasm32-wasi-wasip1-clang++` produce WASI Preview 1 source WASM modules for Hull's Wasmtime-backed runner.
 - Environment variables are set up for seamless integration with libraries like `cplib`.
 
 Run Hull commands inside this shell.

@@ -1,18 +1,18 @@
 {
   "name": "example-contest",
-  "display-name": {
+  "display_name": {
     "en": "example contest",
     "zh": "示例比赛"
   },
   "problems": [
     {
-      "display-name": {
+      "display_name": {
         "en": "major",
         "zh": "众数"
       },
-      "full-score": 1.0,
-      "memory-limit": 1073741824,
-      "tick-limit": 10000000000,
+      "full_score": 1,
+      "memory_limit": 1073741824,
+      "tick_limit": 10000000000,
       "name": "major",
       "samples": [
         {
@@ -20,8 +20,8 @@
           "outputs": {
             "output": "1\n3\n-1\n3\n-1\n"
           },
-          "input-validation": {
-            "reader-trace-tree": {}
+          "input_validation": {
+            "reader_trace_tree": {}
           },
           "descriptions": {}
         },
@@ -30,34 +30,34 @@
           "outputs": {
             "output": "-1\n2\n2\n4\n"
           },
-          "input-validation": {
-            "reader-trace-tree": {}
+          "input_validation": {
+            "reader_trace_tree": {}
           },
           "descriptions": {}
         }
       ],
       "solutions": {
         "example": {
-          "main-correct-solution": true,
-          "subtask-results": [
+          "main_correct_solution": true,
+          "subtask_results": [
             {
-              "raw-score": 1.0,
-              "scaled-score": 0.5,
+              "raw_score": 1,
+              "scaled_score": 0.5,
               "statuses": [
                 "accepted"
               ]
             },
             {
-              "raw-score": 1.0,
-              "scaled-score": 0.5,
+              "raw_score": 1,
+              "scaled_score": 0.5,
               "statuses": [
                 "accepted"
               ]
             }
           ],
-          "test-case-results": {
+          "test_case_results": {
             "example": {
-              "score": 1.0,
+              "score": 1,
               "status": "accepted",
               "message": "example",
               "tick": 0,
@@ -68,21 +68,21 @@
       },
       "subtasks": [
         {
-          "full-score": 0.15,
+          "full_score": 0.15,
           "traits": {
             "n_le_300": true,
             "no_op2": true
           }
         },
         {
-          "full-score": 0.2,
+          "full_score": 0.2,
           "traits": {
             "n_le_4e3": true,
             "no_op2": true
           }
         },
         {
-          "full-score": 0.05,
+          "full_score": 0.05,
           "traits": {
             "n_le_1e5": true,
             "n_is_1_and_no_op4": true,
@@ -91,34 +91,34 @@
           }
         },
         {
-          "full-score": 0.05,
+          "full_score": 0.05,
           "traits": {
             "n_le_1e5": true,
             "n_is_1_and_no_op4": true
           }
         },
         {
-          "full-score": 0.05,
+          "full_score": 0.05,
           "traits": {
             "n_le_1e5": true,
             "only_1_and_2": true
           }
         },
         {
-          "full-score": 0.1,
+          "full_score": 0.1,
           "traits": {
             "n_le_1e5": true,
             "no_op2": true
           }
         },
         {
-          "full-score": 0.05,
+          "full_score": 0.05,
           "traits": {
             "n_le_1e5": true
           }
         },
         {
-          "full-score": 0.05,
+          "full_score": 0.05,
           "traits": {
             "n_is_1_and_no_op4": true,
             "only_1_and_2": true,
@@ -126,25 +126,25 @@
           }
         },
         {
-          "full-score": 0.05,
+          "full_score": 0.05,
           "traits": {
             "n_is_1_and_no_op4": true
           }
         },
         {
-          "full-score": 0.05,
+          "full_score": 0.05,
           "traits": {
             "only_1_and_2": true
           }
         },
         {
-          "full-score": 0.1,
+          "full_score": 0.1,
           "traits": {
             "no_op2": true
           }
         },
         {
-          "full-score": 0.1,
+          "full_score": 0.1,
           "traits": {}
         }
       ],
@@ -185,23 +185,24 @@
             "zh": "没有类型 $2$ 的操作．"
           }
         }
-      }
+      },
+      "file_size_limit": 1073741824
     },
     {
-      "display-name": {
+      "display_name": {
         "en": "MST",
         "zh": "最小生成树"
       },
-      "full-score": 1.0,
-      "memory-limit": 536870912,
+      "full_score": 1,
+      "memory_limit": 536870912,
       "name": "exampleProblem2",
       "samples": [
         {
           "descriptions": {},
           "input": "3\n5 10\n1 2 3\n2 3 2\n2 4 5\n4 5 1\n1 5 5\n5 4 1\n1 3 4\n5 3 2\n4 3 3\n1 1 2\n5 10\n1 2 4\n2 3 4\n2 4 2\n1 5 4\n2 3 1\n4 2 2\n4 1 5\n1 3 3\n1 1 2\n5 5 2\n5 10\n1 2 5\n2 3 3\n1 4 0\n3 5 5\n3 3 5\n1 1 5\n1 3 1\n3 3 2\n4 5 5\n4 3 5\n",
-          "input-validation": {
-            "reader-trace-stacks": [],
-            "reader-trace-tree": {
+          "input_validation": {
+            "reader_trace_stacks": [],
+            "reader_trace_tree": {
               "children": [
                 {
                   "children": [
@@ -1762,9 +1763,9 @@
             "zh": "边权均为 1，因此可以选择任何生成树．"
           },
           "input": "3\n5 10\n1 2 1\n1 3 1\n1 4 1\n4 5 1\n5 2 1\n2 1 1\n5 3 1\n1 4 1\n5 4 1\n2 1 1\n5 10\n1 2 1\n1 3 1\n3 4 1\n1 5 1\n2 1 1\n3 4 1\n4 1 1\n1 1 1\n3 3 1\n2 4 1\n5 10\n1 2 1\n2 3 1\n1 4 1\n1 5 1\n3 2 1\n5 3 1\n3 2 1\n4 4 1\n2 4 1\n5 4 1\n",
-          "input-validation": {
-            "reader-trace-stacks": [],
-            "reader-trace-tree": {
+          "input_validation": {
+            "reader_trace_stacks": [],
+            "reader_trace_tree": {
               "children": [
                 {
                   "children": [
@@ -3322,24 +3323,24 @@
       ],
       "solutions": {
         "std": {
-          "main-correct-solution": true,
-          "subtask-results": [
+          "main_correct_solution": true,
+          "subtask_results": [
             {
-              "raw-score": 1,
-              "scaled-score": 0.5,
+              "raw_score": 1,
+              "scaled_score": 0.5,
               "statuses": [
                 "accepted"
               ]
             },
             {
-              "raw-score": 1,
-              "scaled-score": 0.5,
+              "raw_score": 1,
+              "scaled_score": 0.5,
               "statuses": [
                 "accepted"
               ]
             }
           ],
-          "test-case-results": {
+          "test_case_results": {
             "max": {
               "memory": 16121856,
               "message": "",
@@ -3373,8 +3374,8 @@
       },
       "subtasks": [
         {
-          "full-score": 0.5,
-          "test-cases": [
+          "full_score": 0.5,
+          "test_cases": [
             "maxUnweighted",
             "smallUnweighted"
           ],
@@ -3383,8 +3384,8 @@
           }
         },
         {
-          "full-score": 0.5,
-          "test-cases": [
+          "full_score": 0.5,
+          "test_cases": [
             "max",
             "maxUnweighted",
             "small",
@@ -3393,9 +3394,9 @@
           "traits": {}
         }
       ],
-      "test-cases": {
+      "test_cases": {
         "max": {
-          "actual-traits": {
+          "actual_traits": {
             "w_eq_1": false
           },
           "arguments": [
@@ -3410,11 +3411,11 @@
           ],
           "generator": "rand",
           "groups": [],
-          "memory-limit": 536870912,
-          "tick-limit": 10000000000
+          "memory_limit": 536870912,
+          "tick_limit": 10000000000
         },
         "maxUnweighted": {
-          "actual-traits": {
+          "actual_traits": {
             "w_eq_1": true
           },
           "arguments": [
@@ -3429,11 +3430,11 @@
           ],
           "generator": "rand",
           "groups": [],
-          "memory-limit": 536870912,
-          "tick-limit": 10000000000
+          "memory_limit": 536870912,
+          "tick_limit": 10000000000
         },
         "small": {
-          "actual-traits": {
+          "actual_traits": {
             "w_eq_1": false
           },
           "arguments": [
@@ -3450,11 +3451,11 @@
           "groups": [
             "sample"
           ],
-          "memory-limit": 536870912,
-          "tick-limit": 10000000000
+          "memory_limit": 536870912,
+          "tick_limit": 10000000000
         },
         "smallUnweighted": {
-          "actual-traits": {
+          "actual_traits": {
             "w_eq_1": true
           },
           "arguments": [
@@ -3471,11 +3472,11 @@
           "groups": [
             "sample"
           ],
-          "memory-limit": 536870912,
-          "tick-limit": 10000000000
+          "memory_limit": 536870912,
+          "tick_limit": 10000000000
         }
       },
-      "tick-limit": 10000000000,
+      "tick_limit": 10000000000,
       "traits": {
         "w_eq_1": {
           "descriptions": {
@@ -3483,7 +3484,8 @@
             "zh": "对于每座潜在的桥梁，$w=1$．"
           }
         }
-      }
+      },
+      "file_size_limit": 1073741824
     }
   ]
 }

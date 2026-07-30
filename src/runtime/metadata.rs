@@ -21,6 +21,7 @@ use anyhow::{Context, Result};
 use super::types::{BundleContestSpec, BundleJudgeProblemSpec, ContestSpec, ProblemSpec};
 use crate::nix::{EvalCommand, get_flake_url};
 
+/// Evaluates one problem selector into runtime metadata.
 pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
   let flake_ref = get_flake_url()?;
   let expr = format!(
@@ -41,6 +42,7 @@ pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
   serde_json::from_str(&output).context("Failed to parse runtime problem metadata JSON")
 }
 
+/// Evaluates one contest selector into runtime metadata.
 pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
   let flake_ref = get_flake_url()?;
   let expr = format!(
@@ -61,6 +63,7 @@ pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
   serde_json::from_str(&output).context("Failed to parse runtime contest metadata JSON")
 }
 
+/// Evaluates problem metadata with one source path added as an ad-hoc solution.
 pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<ProblemSpec> {
   let flake_ref = get_flake_url()?;
   let expr = format!(
@@ -82,6 +85,7 @@ pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<Proble
   serde_json::from_str(&output).context("Failed to parse ad-hoc runtime problem metadata JSON")
 }
 
+/// Loads a contest manifest from an exported judging bundle.
 pub fn load_bundle_contest_spec(bundle_root: &Path) -> Result<BundleContestSpec> {
   let manifest_path = bundle_root.join("contest.json");
   let content = fs::read_to_string(&manifest_path).with_context(|| {
@@ -93,6 +97,7 @@ pub fn load_bundle_contest_spec(bundle_root: &Path) -> Result<BundleContestSpec>
   serde_json::from_str(&content).context("Failed to parse bundle contest manifest JSON")
 }
 
+/// Loads problem judging metadata at a bundle-relative path.
 pub fn load_bundle_judge_problem_spec(
   bundle_root: &Path,
   relative_path: &str,

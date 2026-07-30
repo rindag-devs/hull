@@ -62,11 +62,17 @@ problem: {
     text =
       { targetHull, ... }:
       ''
+        answer_path="$HULL_OFFICIAL_OUTPUTS_DIR/output"
         ${targetHull.check.script {
           checkerWasm = problem.checker.wasm;
-          input = "$HULL_INPUT_PATH";
-          output = "$HULL_SOLUTION_SRC";
-          answer = "$HULL_OFFICIAL_OUTPUTS_DIR/output";
+          input = targetHull.runWasm.dynamicString "HULL_INPUT_PATH";
+          output = targetHull.runWasm.dynamicString "HULL_SOLUTION_SRC";
+          answer = targetHull.runWasm.dynamicString "answer_path";
+          fileSizeLimits = {
+            input = "tool";
+            output = problem.fileSizeLimit;
+            answer = "tool";
+          };
         }}
 
         final_status=$(jq -r .status check.json)

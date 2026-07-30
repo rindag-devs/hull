@@ -132,6 +132,7 @@ impl Replacer {
 }
 
 #[derive(Parser)]
+/// Options for rewriting include paths in one source file.
 pub struct PatchOpts {
   /// Path to the input source file.
   pub input_path: String,
@@ -159,6 +160,7 @@ pub struct PatchOpts {
   pub flags: Option<String>,
 }
 
+/// Executes the source include-path rewrite.
 pub fn run(opts: &PatchOpts) -> Result<()> {
   // Initialize the replacer
   let replacer = Replacer::new(

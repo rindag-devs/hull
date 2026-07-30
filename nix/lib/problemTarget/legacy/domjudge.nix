@@ -146,6 +146,7 @@ let
             limits = {
               time_limit = problem.tickLimit / (ticksPerMs * 1000.0);
               memory = memoryLimit / (1024 * 1024);
+              output = builtins.div (problem.fileSizeLimit + 1023) 1024;
             };
           };
 

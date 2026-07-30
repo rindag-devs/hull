@@ -14,7 +14,7 @@
 
 ## Documentation Discovery
 
-Discover exact option names and schemas through the Hull documentation-discovery skill and generated problem option references rather than inferring options from examples. Read the online best-practices page as Typst source at `https://hull.aberter0x3f.top/.well-known/agent-typst/getting-started/best-practices-and-conventions.typ`, not as HTML.
+Discover exact option names and schemas through the Hull documentation-discovery skill and generated problem option references rather than inferring options from examples. Read the online best-practices page as Typst source at `https://hull.aberter0x3f.top/.well-known/agent-typst/getting-started/best-practices-and-conventions.typ`, not as HTML. For a custom judger or direct `hull.runWasm.script` request, read `https://hull.aberter0x3f.top/.well-known/agent-typst/advanced/custom-judgers.typ` before editing the configuration; that page is the schema and runtime-semantics authority.
 
 ## Workspace Initialization
 
@@ -54,7 +54,7 @@ Read each requested target's documentation independently. Do not transfer grader
 
 ## Limits And Units
 
-Set the time limit in Hull ticks and the memory limit in bytes. Use the defaults from `SKILL.md` before calibration.
+Set the tick limit in Hull ticks and the memory and file-size limits in bytes. The memory value bounds WASM linear memory and the execution stack independently. The file-size value applies independently to each contestant-owned regular file or pipe. Use the defaults from `SKILL.md` before calibration.
 
 Keep component-specific and target-specific limits consistent with the problem-level intent. Confirm generated option types and units instead of assuming traditional seconds or mebibytes.
 
@@ -67,6 +67,6 @@ Before building, inspect the effective configuration for:
 - Checker selection matching output semantics.
 - Validator, generator, and shared include registration.
 - Groups, traits, subtasks, scores, and solution predictions.
-- Tick and byte units.
+- Tick, memory-byte, and file-size-byte units.
 - Private program visibility and necessary public documents/interfaces.
 - Only requested targets.
