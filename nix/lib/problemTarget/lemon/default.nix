@@ -58,6 +58,7 @@
       targetHullPkgs = targetHullPkgsForSystem targetSystem;
       targetPkgs = targetPkgsForSystem targetSystem;
       targetHull = targetHullForSystem targetSystem;
+      targetGnutar = targetPkgs.gnutar;
       nixUserChroot = targetHullPkgs.nix-user-chroot;
       retargetRunner =
         runner:
@@ -202,6 +203,7 @@
           targetJudger.prepareSolution
           targetJudger.generateOutputs
           targetJudger.judge
+          targetGnutar
         ];
       };
 
@@ -256,6 +258,7 @@
 
       nixUserChrootStorePath = builtins.unsafeDiscardStringContext (toString nixUserChroot);
       nixUserChrootRelative = "/nix/store/${baseNameOf nixUserChrootStorePath}/bin/nix-user-chroot";
+      targetGnutarRelative = builtins.unsafeDiscardStringContext (lib.getExe targetGnutar);
       bundleJudgeRunnerRelative = "/nix/store/${baseNameOf (builtins.unsafeDiscardStringContext (toString judgeRunner))}/bin/hull-lemon-integration-judge-runner-${problem.name}";
 
       staticStdenv =
@@ -308,6 +311,9 @@
           fi
           self_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
           data_root=$(CDPATH= cd -- "$self_dir/.." && pwd)
+          runtime_nix="$data_root/_hull/nix"
+          nix_user_chroot="$runtime_nix/store${lib.removePrefix "/nix/store" nixUserChrootRelative}"
+          cwd=$(pwd)
           src="$1"
           base="''${src%.*}"
           problem_name=$(basename "$base")
@@ -321,18 +327,28 @@
             rm -rf "$tmpdir"
           }
           trap cleanup EXIT
-          mkdir -p "$tmpdir/root"
-          mkdir -p "$tmpdir/root/bundle" "$tmpdir/root/runtime-nix/store"
+          mkdir -p "$tmpdir/root/bundle" "$tmpdir/root/runtime-nix"
           cp -r "$data_root/$problem_name"/. "$tmpdir/root/bundle/"
           printf '%s\n' "$problem_name" > "$tmpdir/root/problem-name"
-          # Preserve symlinks for the bundled /nix/store layout, but intentionally
-          # break hardlinks so the final tarball does not rely on archive hardlink
-          # extraction semantics across host platforms.
-          cp -R -P "$data_root/_hull/nix/store"/. "$tmpdir/root/runtime-nix/store/"
           submission_name=$(basename "$src")
           printf '%s\n' "$submission_name" > "$tmpdir/root/submission-name"
           cp "$src" "$tmpdir/root/$submission_name"
-          tar -C "$tmpdir/root" -cf "$base.hullbundle" .
+          "$nix_user_chroot" \
+            -m "$tmpdir:hull-temp" \
+            -m "$cwd:hull-work" \
+            -n "$runtime_nix" \
+            -- ${targetGnutarRelative} \
+            -C /hull-temp/root -cf "/hull-work/$base.hullbundle" .
+          # Append the runtime directly to avoid materializing a second copy. Preserve symlinks,
+          # but store hardlinks as separate files so extraction does not depend on hardlink support.
+          "$nix_user_chroot" \
+            -m "$cwd:hull-work" \
+            -n "$runtime_nix" \
+            -- ${targetGnutarRelative} \
+            --hard-dereference \
+            --transform='flags=r;s|^\./|./runtime-nix/store/|;s|^\.$|./runtime-nix/store|' \
+            -C /nix/store \
+            -rf "/hull-work/$base.hullbundle" .
         '';
         checkPhase = ''
           runHook preCheck

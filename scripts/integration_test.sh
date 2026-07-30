@@ -27,13 +27,19 @@ esac
 build_target() {
   root=$1
   target=$2
+  package_mode=${3:-copy}
   cargo run -- build -p test.aPlusB --target "$target" \
     --out-link "$root/artifact" --stop-on-failure
   test -L "$root/artifact"
-  mkdir "$root/package"
   if [ -d "$root/artifact" ]; then
+    if [ "$package_mode" = symlink ]; then
+      ln -s "$(readlink -f "$root/artifact")" "$root/package"
+      return
+    fi
+    mkdir "$root/package"
     cp -R -P "$root/artifact"/. "$root/package"/
   else
+    mkdir "$root/package"
     7zz x -o"$root/package" "$root/artifact" >/dev/null
   fi
 }
@@ -245,7 +251,7 @@ test_hydro() {
 
 test_lemon() {
   root=$1
-  build_target "$root" "lemon$local_suffix"
+  build_target "$root" "lemon$local_suffix" symlink
   check_lemon_structure "$root/package"
   require_file_size_metadata "$root/package/data/aPlusB/problem.json"
 
@@ -264,6 +270,7 @@ test_lemon() {
   "$root/package/data/_hull/lemon-special-judge" \
     /dev/null "$root/result/report.txt" /dev/null 100 "$root/result/score.txt" "$root/result/message.txt"
   grep -Fx '100' "$root/result/score.txt" >/dev/null
+  rm "$root/submission/aPlusB.hullbundle"
 
   mkdir "$root/file-error-submission"
   cp "$root/package/source/fileErrorStdout/aPlusB/aPlusB.cpp" "$root/file-error-submission/aPlusB.cpp"
