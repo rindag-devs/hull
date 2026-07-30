@@ -135,8 +135,9 @@ pub fn run(opts: &StressOpts) -> Result<()> {
   if !missing_solutions.is_empty() {
     anyhow::bail!("Unknown stress solutions: {}", missing_solutions.join(", "));
   }
+  let main_correct_solution = problem.main_correct_solution.clone();
   problem.solutions.retain(|solution| {
-    solution.name == problem.main_correct_solution || solutions_to_test.contains(&solution.name)
+    solution.name == main_correct_solution || solutions_to_test.contains(&solution.name)
   });
 
   let generator_wasm = problem

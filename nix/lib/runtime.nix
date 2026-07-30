@@ -58,6 +58,31 @@ let
         drv_path = if artifact ? drvPath then toString artifact.drvPath else null;
       };
 
+  serializeRuntimeFile =
+    file:
+    if file == null then
+      null
+    else
+      toString (
+        if builtins.isPath file then
+          builtins.path {
+            path = file;
+            name = baseNameOf file;
+          }
+        else
+          file
+      );
+
+  writeMetadata =
+    name: metadata: anchors:
+    let
+      # Keep runner and WASM artifacts on the existing realization path. Only
+      # the lightweight runtime-file anchors belong to the metadata closure.
+      json = builtins.unsafeDiscardStringContext (builtins.toJSON metadata);
+      anchorContext = builtins.getContext (builtins.toJSON anchors);
+    in
+    pkgs.writeText name (builtins.appendContext json anchorContext);
+
   withProblemModules =
     problemConfig: extraModules:
     pkgs.lib.evalModules {
@@ -97,6 +122,26 @@ let
       selectedSolutions = builtins.filter (solution: builtins.elem solution.name solutionNames) (
         builtins.attrValues checkedProblemConfig.solutions
       );
+      runtimeFiles = builtins.filter (file: file != null) (
+        map (solution: serializeRuntimeFile solution.src) selectedSolutions
+        ++ map (testCase: serializeRuntimeFile testCase.inputFile) (
+          builtins.attrValues checkedProblemConfig.testCases
+        )
+        ++ lib.optionals includeTests (
+          map (test: serializeRuntimeFile test.inputFile) (
+            builtins.attrValues checkedProblemConfig.checker.tests
+          )
+          ++ map (test: serializeRuntimeFile test.outputFile) (
+            builtins.attrValues checkedProblemConfig.checker.tests
+          )
+          ++ map (test: serializeRuntimeFile test.inputFile) (
+            builtins.attrValues checkedProblemConfig.validator.tests
+          )
+        )
+      );
+      runtimeFilesAnchor = pkgs.writeText "hull-problem-${checkedProblemConfig.name}-runtime-files.json" (
+        builtins.toJSON runtimeFiles
+      );
     in
     {
       name = checkedProblemConfig.name;
@@ -118,7 +163,7 @@ let
         tick_limit = tc.tickLimit;
         memory_limit = tc.memoryLimit;
         trait_hints = tc.traitHints;
-        input_file = if tc.inputFile == null then null else toString tc.inputFile;
+        input_file = serializeRuntimeFile tc.inputFile;
         generator = tc.generator;
         arguments = tc.arguments;
       }) (builtins.attrValues checkedProblemConfig.testCases);
@@ -131,16 +176,17 @@ let
         inherit (solution) name;
         main_correct_solution = solution.mainCorrectSolution;
         participant_visibility = solution.participantVisibility;
-        src = toString solution.src;
+        src = serializeRuntimeFile solution.src;
       }) selectedSolutions;
+      runtime_files_anchor = toString runtimeFilesAnchor;
       checker_tests =
         if includeTests then
           map (test: {
             inherit (test) name generator arguments;
             output_name = test.outputName;
             output_solution = test.outputSolution;
-            input_file = if test.inputFile == null then null else toString test.inputFile;
-            output_path = if test.outputFile == null then null else toString test.outputFile;
+            input_file = serializeRuntimeFile test.inputFile;
+            output_path = serializeRuntimeFile test.outputFile;
           }) (builtins.attrValues checkedProblemConfig.checker.tests)
         else
           [ ];
@@ -152,7 +198,7 @@ let
               generator
               arguments
               ;
-            input_file = if test.inputFile == null then null else toString test.inputFile;
+            input_file = serializeRuntimeFile test.inputFile;
           }) (builtins.attrValues checkedProblemConfig.validator.tests)
         else
           [ ];
@@ -219,6 +265,24 @@ let
       includeTests = false;
     };
 
+  problemMetadataFile =
+    problemConfig: options:
+    let
+      metadata = problemMetadata problemConfig options;
+    in
+    writeMetadata "hull-problem-${problemConfig.name}-runtime-metadata.json" metadata [
+      metadata.runtime_files_anchor
+    ];
+
+  adHocProblemMetadataFile =
+    problemConfig: srcPath:
+    let
+      metadata = adHocProblemMetadata problemConfig srcPath;
+    in
+    writeMetadata "hull-problem-${problemConfig.name}-ad-hoc-runtime-metadata.json" metadata [
+      metadata.runtime_files_anchor
+    ];
+
   contestMetadata = contest: {
     name = contest.config.name;
     problems = map (
@@ -229,14 +293,26 @@ let
       problemMetadata evaluated.config { }
     ) contest.config.problems;
   };
+
+  contestMetadataFile =
+    contest:
+    let
+      metadata = contestMetadata contest;
+    in
+    writeMetadata "hull-contest-${contest.config.name}-runtime-metadata.json" metadata (
+      map (problem: problem.runtime_files_anchor) metadata.problems
+    );
 in
 {
   inherit
     adHocProblemMetadata
+    adHocProblemMetadataFile
     buildContestTarget
     buildProblemTarget
     contestMetadata
+    contestMetadataFile
     problemMetadata
+    problemMetadataFile
     withProblemRuntimeData
     ;
 }

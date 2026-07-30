@@ -14,75 +14,107 @@
 */
 
 use std::fs;
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use serde::de::DeserializeOwned;
+use tempfile::TempDir;
 
 use super::types::{BundleContestSpec, BundleJudgeProblemSpec, ContestSpec, ProblemSpec};
-use crate::nix::{EvalCommand, get_flake_url};
+use crate::nix::{BuildCommand, get_flake_url};
+
+/// Runtime metadata paired with the GC root that keeps its Nix paths alive.
+pub struct LoadedMetadata<T> {
+  value: T,
+  _root: TempDir,
+}
+
+impl<T> Deref for LoadedMetadata<T> {
+  type Target = T;
+
+  fn deref(&self) -> &Self::Target {
+    &self.value
+  }
+}
+
+impl<T> DerefMut for LoadedMetadata<T> {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.value
+  }
+}
+
+fn build_metadata<T>(expr: &str, label: &str) -> Result<LoadedMetadata<T>>
+where
+  T: DeserializeOwned,
+{
+  let root = tempfile::Builder::new()
+    .prefix("hull-runtime-metadata-")
+    .tempdir()
+    .context("Failed to create runtime metadata GC root")?;
+  let out_link = root.path().join("metadata.json");
+  let out_link_string = out_link
+    .to_str()
+    .context("Runtime metadata GC root contains non-UTF-8 characters")?;
+  BuildCommand::new()
+    .impure(true)
+    .expr_stdin(expr)
+    .out_link(out_link_string)
+    .run()
+    .with_context(|| format!("Failed to build {label}"))?;
+  let output = fs::read_to_string(&out_link)
+    .with_context(|| format!("Failed to read {label} from {}", out_link.display()))?;
+  let value = serde_json::from_str(&output).with_context(|| format!("Failed to parse {label}"))?;
+  Ok(LoadedMetadata { value, _root: root })
+}
 
 /// Evaluates one problem selector into runtime metadata.
-pub fn load_problem_spec(problem: &str) -> Result<ProblemSpec> {
+pub fn load_problem_spec(problem: &str) -> Result<LoadedMetadata<ProblemSpec>> {
   let flake_ref = get_flake_url()?;
   let expr = format!(
     r#"
       let
         flake = builtins.getFlake {flake_ref};
       in
-      builtins.toJSON ((flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}}.runtime.problemMetadata flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem}.config {{ }})
+      (flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}}.runtime.problemMetadataFile flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem}.config {{ }}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
   );
-  let output = EvalCommand::new()
-    .impure(true)
-    .expr_stdin(&expr)
-    .run_and_capture_stdout()
-    .context("Failed to execute `nix eval` for runtime problem metadata")?;
-
-  serde_json::from_str(&output).context("Failed to parse runtime problem metadata JSON")
+  build_metadata(&expr, "runtime problem metadata")
 }
 
 /// Evaluates one contest selector into runtime metadata.
-pub fn load_contest_spec(contest: &str) -> Result<ContestSpec> {
+pub fn load_contest_spec(contest: &str) -> Result<LoadedMetadata<ContestSpec>> {
   let flake_ref = get_flake_url()?;
   let expr = format!(
     r#"
       let
         flake = builtins.getFlake {flake_ref};
       in
-      builtins.toJSON ((flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}}.runtime.contestMetadata flake.outputs.hullContests.${{builtins.currentSystem}}.{contest})
+      (flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}}.runtime.contestMetadataFile flake.outputs.hullContests.${{builtins.currentSystem}}.{contest}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
   );
-  let output = EvalCommand::new()
-    .impure(true)
-    .expr_stdin(&expr)
-    .run_and_capture_stdout()
-    .context("Failed to execute `nix eval` for runtime contest metadata")?;
-
-  serde_json::from_str(&output).context("Failed to parse runtime contest metadata JSON")
+  build_metadata(&expr, "runtime contest metadata")
 }
 
 /// Evaluates problem metadata with one source path added as an ad-hoc solution.
-pub fn load_ad_hoc_problem_spec(problem: &str, src_path: &Path) -> Result<ProblemSpec> {
+pub fn load_ad_hoc_problem_spec(
+  problem: &str,
+  src_path: &Path,
+) -> Result<LoadedMetadata<ProblemSpec>> {
   let flake_ref = get_flake_url()?;
   let expr = format!(
     r#"
       let
         flake = builtins.getFlake {flake_ref};
       in
-      builtins.toJSON ((flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}}.runtime.adHocProblemMetadata flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem}.config {src_path})
+      (flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}}.runtime.adHocProblemMetadataFile flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem}.config {src_path}
     "#,
     flake_ref = serde_json::to_string(&flake_ref)?,
     src_path = serde_json::to_string(&src_path.to_string_lossy().into_owned())?,
   );
-  let output = EvalCommand::new()
-    .impure(true)
-    .expr_stdin(&expr)
-    .run_and_capture_stdout()
-    .context("Failed to execute `nix eval` for ad-hoc runtime problem metadata")?;
-
-  serde_json::from_str(&output).context("Failed to parse ad-hoc runtime problem metadata JSON")
+  build_metadata(&expr, "ad-hoc runtime problem metadata")
 }
 
 /// Loads a contest manifest from an exported judging bundle.
