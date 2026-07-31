@@ -30,3 +30,7 @@ Visit the [documentation home page][docs] to learn more.
 [LGPL-3.0-or-later][license]
 
 Copyright (c) 2025-present, rindag-devs
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow and the [Hull Contributor Licence Agreement](CLA.md) that applies to submitted contributions.
