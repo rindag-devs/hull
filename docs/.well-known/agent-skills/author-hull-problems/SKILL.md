@@ -1,6 +1,6 @@
 ---
 name: author-hull-problems
-description: Create, complete, adapt, and verify competitive programming problems for Hull from an idea, a partial draft, an existing problem, or an existing problem workspace. Use when an agent must turn incomplete problem-authoring input into a buildable Hull problem, including formal Typst statements, intended and brute-force solutions, CPLib validators/checkers/generators/interactors, tests, traits, subtasks, targets, generated data, and calibrated resource limits.
+description: Create, complete, adapt, and verify competitive programming problems for Hull from an idea, a partial draft, an existing problem, or an existing problem workspace. Use when an agent must turn incomplete problem-authoring input into a buildable Hull problem, including formal Typst statements and editorials, intended and brute-force solutions, CPLib validators/checkers/generators/interactors, tests, traits, subtasks, targets, generated data, and calibrated resource limits.
 ---
 
 # Author Hull Problems
@@ -13,6 +13,7 @@ Read each reference before working on the corresponding phase:
 
 - Read [problem-design-and-statement.md](references/problem-design-and-statement.md) before defining semantics, constraints, input/output, or statement text.
 - Read [programs-and-cplib.md](references/programs-and-cplib.md) before writing solutions, validators, checkers, generators, interactors, graders, or shared headers.
+- Read [editorial.md](references/editorial.md) before writing or revising an editorial.
 - Read [data-subtasks-and-limits.md](references/data-subtasks-and-limits.md) before designing traits, subtasks, scores, test groups, generators, data, or resource limits.
 - Read [hull-configuration.md](references/hull-configuration.md) before initializing a workspace or editing `flake.nix`, `problem.nix`, targets, visibility, languages, or documents.
 - Read [verification.md](references/verification.md) before testing components, calibrating predictions, building, reviewing, or delivering the problem.
@@ -28,11 +29,11 @@ Apply these defaults unless the user gives a different requirement:
 | Memory limit | `1073741824` bytes (1 GiB). |
 | Scoring | One ICPC-style subtask containing all test cases, with total score `1.0`. |
 | Targets | One `default` target using `hull.problemTarget.common`. |
-| Solutions | C++17. |
-| Non-solution programs | C++23. |
+| Solutions | C++ 17. |
+| Non-solution programs | C++ 23. |
 | Participant visibility | Private, except files participants must receive to solve the problem. |
 
-Do not require the user to provide every field. Generate a missing name, full statement, constraints, solution, standard program, brute-force programs, subtasks, traits, target configuration, tests, or data when enough semantics exist to do so correctly.
+Do not require the user to provide every field. Generate a missing name, full statement, editorial, constraints, solution, standard program, brute-force programs, subtasks, traits, target configuration, tests, or data when enough semantics exist to do so correctly.
 
 ## Coordinate Other Skills And Agents
 
@@ -88,10 +89,14 @@ Apply [data-subtasks-and-limits.md](references/data-subtasks-and-limits.md) to d
 
 Run the solution, data, and performance checks in [verification.md](references/verification.md), then apply the calibration rules in [data-subtasks-and-limits.md](references/data-subtasks-and-limits.md). When evidence invalidates an earlier assumption, return to the earliest affected phase and repeat all downstream checks.
 
-### 9. Build And Verify
+### 9. Write The Editorial
+
+After the algorithms, subtasks, and measured complexities are stable, apply [editorial.md](references/editorial.md) to write the required editorials. By default, provide one in each statement language.
+
+### 10. Build And Verify
 
 Apply [verification.md](references/verification.md) and resolve every unexpected result before delivery.
 
-### 10. Deliver
+### 11. Deliver
 
 Provide the completion evidence listed in [verification.md](references/verification.md). State any unresolved risk explicitly and do not claim completion while a required check remains unverified.

@@ -4,6 +4,7 @@
 
 - Problem contract
 - Statement structure
+- Samples
 - Input and output completeness
 - Mathematical notation
 - Floating-point output
@@ -23,6 +24,7 @@ Define the problem before polishing prose. Record:
 - Whether empty objects are included, whether repetitions are allowed, and whether order matters.
 - Numeric domains, overflow-relevant bounds, precision, and finiteness requirements.
 - Guarantees such as connectivity, existence of an answer, uniqueness, or acyclicity.
+- For an interactive task, the message order, required flushes, query limit, termination rules, invalid-query behavior, scoring, and failure handling.
 
 Check that the intended solution is correct for exactly this contract and that every validator rule follows from it. Do not leave semantic facts exclusively in samples, generator behavior, checker code, or an editorial.
 
@@ -36,7 +38,7 @@ Expand a short draft with this logical order:
 2. State the required computation or construction.
 3. Give the input format and define every field where it appears.
 4. Give the output format and all acceptance conditions.
-5. Design samples and their explanations under [data-subtasks-and-limits.md](data-subtasks-and-limits.md).
+5. Design samples and their explanations under the rules below.
 6. State subtask or constraint information when applicable.
 
 Make each sentence understandable when read in order. Resolve a necessary question immediately or in the next paragraph, not several sections later. Do not force readers to inspect the input format or samples to infer the task.
@@ -44,6 +46,14 @@ Make each sentence understandable when read in order. Resolve a necessary questi
 Use one term for one concept throughout. Do not alternate between near-synonyms such as "cost" and "price" for the same quantity. Never assign a common term a nonstandard meaning without defining it. Define every concept that a contestant may reasonably not know.
 
 Prevent both contradiction and technically self-consistent misreading, including unlikely literal readings. State orientation, endpoints, inclusivity, indexing, duplicates, and tie behavior whenever omission permits a different valid interpretation.
+
+## Samples
+
+Samples must help contestants understand the task. Keep ordinary samples small enough to inspect, but strong enough to expose simple mistakes and likely misreadings of the statement. For a task with multiple operation types, exercise every type across the samples. For a task with multiple possible output categories, demonstrate every category, except that an impossible category need not be fabricated; for example, omit a no-solution sample when every legal input is guaranteed to have a solution even if the output protocol asks contestants to distinguish existence.
+
+Explain samples in enough detail for the difficulty of the statement. A complex or easily misunderstood task needs a detailed walkthrough; a straightforward example needs only information that clarifies behavior rather than restating arithmetic. Keep explanations consistent across all statement languages. Large samples may omit explanations.
+
+Use validator trace tags to make explanations easier to follow when structure matters. CPLib `attach_tag` can mark test-case ranges for alternating colors and can provide `hull/graph` data for automatic tree or graph visualization. Follow [Document Generation with Typst](https://hull.aberter0x3f.top/advanced/document-generation-with-typst/#automatic-sample-visualization) for the supported tags and schema. Add an explanatory image only when it makes the sample materially clearer.
 
 ## Input And Output Completeness
 

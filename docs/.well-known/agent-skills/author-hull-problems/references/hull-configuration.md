@@ -7,6 +7,7 @@
 - Problem identity and documents
 - Programs and languages
 - Visibility
+- Sample groups
 - Groups, traits, and subtasks
 - Targets
 - Limits and units
@@ -28,15 +29,25 @@ Use a concise camelCase machine identifier without spaces or punctuation. Keep d
 
 Statements use Typst. Place source files in the template's document structure and follow the exact pinned documentation for document options. Make statement documents participant-visible as required for distribution; this exception does not imply program visibility.
 
+An editorial is a document under `document/editorial/<language-code>.typ`. Register one for each required editorial language and keep it participant-invisible by default.
+
 ## Programs And Languages
 
-Match physical source suffixes and configured languages to the standards selected under `SKILL.md` and [programs-and-cplib.md](programs-and-cplib.md). Register the main correct solution explicitly and give suboptimal programs meaningful names and solution predictions.
+Match physical source suffixes and configured languages to the standards selected under `SKILL.md` and [programs-and-cplib.md](programs-and-cplib.md). Register the main correct solution explicitly and give suboptimal programs meaningful names.
+
+Register each solution prediction using the exact status `accepted`, `wrong_answer`, `partially_correct`, `runtime_error`, `time_limit_exceeded`, `memory_limit_exceeded`, `file_error`, or `internal_error`.
+
+Configure checkers, interactors, graders, and participant interfaces through the documented Hull mechanisms for each requested target. Keep participant distribution and target-specific packaging in the target configuration rather than encoding them in component programs.
 
 ## Visibility
 
 Do not set participant visibility for solutions, generators, validators, checkers, or interactors by default; omission keeps them private under Hull defaults. Expose only files necessary for participation, such as a grader header, linkable library, or other required interface file.
 
 Use the exact option type documented for each component. Program components and solutions/documents do not necessarily share one visibility type, so never copy a value between component kinds without checking the generated option reference.
+
+## Sample Groups
+
+Both `sample` and `sampleLarge` are testcase groups. Cases in `sample` are automatically embedded in generated statements. Cases in `sampleLarge` are distributed as samples but not embedded in the statement; use it for useful sample data that is too large to display inline.
 
 ## Groups, Traits, And Subtasks
 
@@ -56,6 +67,8 @@ Read each requested target's documentation independently. Do not transfer grader
 
 Set the tick limit in Hull ticks and the memory and file-size limits in bytes. The memory value bounds WASM linear memory and the execution stack independently. The file-size value applies independently to each contestant-owned regular file or pipe. Use the defaults from `SKILL.md` before calibration.
 
+A regular file is limited by logical length, including its initial contents. A pipe is limited by cumulative successful writes.
+
 Keep component-specific and target-specific limits consistent with the problem-level intent. Confirm generated option types and units instead of assuming traditional seconds or mebibytes.
 
 ## Configuration Review
@@ -69,4 +82,5 @@ Before building, inspect the effective configuration for:
 - Groups, traits, subtasks, scores, and solution predictions.
 - Tick, memory-byte, and file-size-byte units.
 - Private program visibility and necessary public documents/interfaces.
+- Participant-invisible editorials for every required editorial language.
 - Only requested targets.
