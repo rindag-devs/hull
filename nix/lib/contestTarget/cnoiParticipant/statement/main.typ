@@ -533,8 +533,6 @@
     ),
   )
 
-  text(size: 0.9em, style: "italic", translation.limit-semantics)
-
   [*#titlecase(translation.source-program-file-name)*]
 
   table(

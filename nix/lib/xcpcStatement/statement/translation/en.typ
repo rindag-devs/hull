@@ -15,7 +15,6 @@
 #let tick-limit = "tick limit"
 #let memory-limit = "memory limit"
 #let file-size-limit = "file size limit"
-#let limit-semantics = [The tick limit bounds executed work. The memory limit bounds WASM linear memory and the execution stack independently. The file size limit applies independently to every contestant-owned file and pipe.]
 #let score = "score"
 #let notes = "note"
 #let graph-visualization = "graph visualization"

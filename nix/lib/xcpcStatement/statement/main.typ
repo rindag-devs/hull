@@ -304,8 +304,6 @@
     translation.bytes(problem.file_size_limit),
   )
 
-  #text(size: 0.9em, style: "italic", translation.limit-semantics)
-
   #line(length: 100%)
 
   #if statement.description != none [

@@ -31,7 +31,6 @@
 #let time-limit = "时间限制"
 #let memory-limit = "内存限制"
 #let file-size-limit = "文件大小限制"
-#let limit-semantics = [时刻限制约束程序执行量。内存限制分别约束 WASM 线性内存与执行栈。文件大小限制分别作用于每个选手程序拥有的文件和管道。]
 #let score = "分数"
 #let notes = "说明"
 #let problem-name = "题目名称"
