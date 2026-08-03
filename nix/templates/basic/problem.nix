@@ -14,9 +14,9 @@
   memoryLimit = 512 * 1024 * 1024;
   fileSizeLimit = 1024 * 1024 * 1024;
 
-  includes = [
+  authoringIncludes = [
     cplib
-    ./include
+    ./authoring-include
   ];
 
   generators.rand.src = ./generator/rand.23.cpp;

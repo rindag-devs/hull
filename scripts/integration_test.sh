@@ -238,7 +238,7 @@ test_hydro() {
   grep -Fx '100' "$root/work/score.txt" >/dev/null
 
   mkdir "$root/file-error-work"
-  cp "$root/bundle/bundle/solutions/file-error-stdout.20.cpp" "$root/file-error-work/foo.cpp"
+  cp "$root/bundle/bundle/solutions/file_error_stdout.20.cpp" "$root/file-error-work/foo.cpp"
   (
     cd "$root/file-error-work"
     PATH=/nonexistent HYDRO_LANG="$hydro_language" "$bash_path" "$root/package/testdata/compile.sh"

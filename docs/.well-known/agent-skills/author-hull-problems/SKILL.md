@@ -30,8 +30,10 @@ Apply these defaults unless the user gives a different requirement:
 | Scoring | One ICPC-style subtask containing all test cases, with total score `1.0`. |
 | Targets | One `default` target using `hull.problemTarget.common`. |
 | Solutions | C++ 17. |
-| Non-solution programs | C++ 23. |
+| Authoring programs | C++ 23. |
 | Participant visibility | Private, except files participants must receive to solve the problem. |
+
+A *program* is either a *solution* or an *authoring* program. Solutions are contestant programs: the intended correct implementation, brute forces, intermediate complexity variants, and deliberately wrong programs. Authoring programs are all other programs: validators, checkers, generators, interactors, graders, and shared headers. Solutions and authoring programs have separate include directories (`solution-include/` and `authoring-include/`) and separate language configurations (`solutionLanguages` and `authoringLanguages`) in `problem.nix`, so a restriction on one role never leaks into the other.
 
 Do not require the user to provide every field. Generate a missing name, full statement, editorial, constraints, solution, standard program, brute-force programs, subtasks, traits, target configuration, tests, or data when enough semantics exist to do so correctly.
 

@@ -18,9 +18,9 @@
   memoryLimit = 128 * 1024 * 1024;
   fileSizeLimit = 64;
 
-  includes = [
+  authoringIncludes = [
     cplib
-    ./include
+    ./authoring-include
   ];
 
   checker = {
@@ -166,7 +166,7 @@
         };
       };
       waUnsigned = {
-        src = ./solution/wa-unsigned.20.cpp;
+        src = ./solution/wa_unsigned.20.cpp;
         subtaskPredictions = {
           "0" = ac;
           "1" = unac;
@@ -181,14 +181,14 @@
         participantVisibility = true;
       };
       mleDynamic = {
-        src = ./solution/mle-dynamic.20.cpp;
+        src = ./solution/mle_dynamic.20.cpp;
         subtaskPredictions = {
           "0" = unac;
           "1" = unac;
         };
       };
       mleStatic = {
-        src = ./solution/mle-static.20.cpp;
+        src = ./solution/mle_static.20.cpp;
         subtaskPredictions = {
           "0" = unac;
           "1" = unac;
@@ -202,7 +202,7 @@
         };
       };
       fileErrorStdout = {
-        src = ./solution/file-error-stdout.20.cpp;
+        src = ./solution/file_error_stdout.20.cpp;
         subtaskPredictions = {
           "0" = { statuses, ... }: statuses == [ "file_error" ];
           "1" = { statuses, ... }: statuses == [ "file_error" ];

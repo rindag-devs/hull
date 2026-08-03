@@ -53,17 +53,30 @@
       default = { };
     };
 
-    includes = lib.mkOption {
+    solutionIncludes = lib.mkOption {
       type = lib.types.listOf lib.types.pathInStore;
-      description = "A list of paths to be added as include directories for compilation.";
+      description = "A list of paths to be added as include directories when compiling solutions.";
       default = [ ];
     };
 
-    languages = lib.mkOption {
+    authoringIncludes = lib.mkOption {
+      type = lib.types.listOf lib.types.pathInStore;
+      description = "A list of paths to be added as include directories when compiling authoring programs.";
+      default = [ ];
+    };
+
+    solutionLanguages = lib.mkOption {
       type = lib.types.attrsOf hull.types.language;
       default = hull.language.commons;
       defaultText = lib.literalExpression "hull.language.commons";
-      description = "The attribute set of available programming languages and their compilation logic.";
+      description = "The attribute set of available programming languages and their compilation logic for solutions.";
+    };
+
+    authoringLanguages = lib.mkOption {
+      type = lib.types.attrsOf hull.types.language;
+      default = hull.language.commons;
+      defaultText = lib.literalExpression "hull.language.commons";
+      description = "The attribute set of available programming languages and their compilation logic for authoring programs.";
     };
 
     judger = lib.mkOption {

@@ -6,9 +6,9 @@
 {
   name = "exampleProblem";
 
-  includes = [
+  authoringIncludes = [
     cplib
-    ./include
+    ./authoring-include
   ];
 
   generators = {

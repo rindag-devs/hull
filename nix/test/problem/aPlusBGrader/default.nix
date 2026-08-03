@@ -16,9 +16,14 @@
   tickLimit = 100 * 10000000;
   memoryLimit = 128 * 1024 * 1024;
 
-  includes = [
+  authoringIncludes = [
     cplib
-    ./include
+    ./authoring-include
+  ];
+
+  # The solution must include the grader header `add.h`.
+  solutionIncludes = [
+    ./solution-include
   ];
 
   judger = hull.judger.batch config { extraObjects = [ ./grader.17.cpp ]; };
@@ -73,7 +78,7 @@
         };
       };
       waUnsigned = {
-        src = ./solution/wa-unsigned.99.c;
+        src = ./solution/wa_unsigned.99.c;
         subtaskPredictions = {
           "0" = unac;
         };
@@ -104,12 +109,12 @@
     default = hull.problemTarget.common;
     hydroLegacy = hull.problemTarget.legacy.hydro.batch {
       graderSrc = ./grader.17.cpp;
-      testDataExtraFiles."add.h" = ./include/add.h;
+      testDataExtraFiles."add.h" = ./solution-include/add.h;
       userExtraFiles = [ "add.h" ];
     };
     lemonLegacy = hull.problemTarget.legacy.lemon.batch {
       graderSrc = ./grader.17.cpp;
-      interactionLib = ./include/add.h;
+      interactionLib = ./solution-include/add.h;
       interactionLibName = "add.h";
       solutionExtNames = lib.mapAttrs (_: _: "cpp") config.solutions;
     };
@@ -118,17 +123,17 @@
     };
     uojLegacy = hull.problemTarget.legacy.uoj.batch {
       graderSrcs.cpp = ./grader.17.cpp;
-      extraRequireFiles."add.h" = ./include/add.h;
+      extraRequireFiles."add.h" = ./solution-include/add.h;
     };
     cmsLegacy = hull.problemTarget.legacy.cms.batch {
       graderSrcs.cpp = ./grader.17.cpp;
-      extraSolFiles."add.h" = ./include/add.h;
+      extraSolFiles."add.h" = ./solution-include/add.h;
     };
     luoguLegacy = hull.problemTarget.legacy.luogu.batch {
       graderSrc = hull.patch {
         problemName = config.name;
         src = ./grader.17.cpp;
-        extraEmbeds = [ ./include/add.h ];
+        extraEmbeds = [ ./solution-include/add.h ];
         includeReplacements = [
           [
             "^add.h$"

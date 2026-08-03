@@ -180,7 +180,7 @@ Example:
 ```nix
 targets.uojLegacy = hull.problemTarget.legacy.uoj.stdioInteraction {
   twoStepInteraction = true;
-  extraRequireFiles."protocol.h" = ./include/protocol.h;
+  extraRequireFiles."protocol.h" = ./solution-include/protocol.h;
 };
 ```
 
@@ -281,7 +281,7 @@ Example:
 ```nix
 targets.lemonLegacy = hull.problemTarget.legacy.lemon.batch {
   graderSrc = ./grader.cpp;
-  interactionLib = ./include/grader.h;
+  interactionLib = ./solution-include/grader.h;
   interactionLibName = "grader.h";
   solutionExtNames.std = "cpp";
 };

@@ -82,7 +82,6 @@ let
           documents,
           generators,
           solutions,
-          includes,
           samples,
           ...
         }@problem:
@@ -220,7 +219,7 @@ let
             problemName = problem.name;
             programName = "cmsChecker";
             src = patchedChecker;
-            compileCommand = checkerCompileCommand includes;
+            compileCommand = checkerCompileCommand problem.authoringIncludes;
             stdenv = (if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem}).pkgsStatic.stdenv;
           };
 

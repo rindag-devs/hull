@@ -80,7 +80,6 @@ let
           memoryLimit,
           mainCorrectSolution,
           generators,
-          includes,
           validator,
           ...
         }@problem:
@@ -126,7 +125,7 @@ let
             problemName = problem.name;
             programName = "kattisChecker";
             src = patchedChecker;
-            compileCommand = checkerCompileCommand includes;
+            compileCommand = checkerCompileCommand problem.authoringIncludes;
             stdenv = (if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem}).pkgsStatic.stdenv;
           };
 

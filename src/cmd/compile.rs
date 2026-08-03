@@ -20,10 +20,19 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use clap::{Args, Parser};
+use clap::{Args, Parser, ValueEnum};
 use tracing::info;
 
 use crate::nix::{BuildCommand, get_flake_url};
+
+/// The program role whose languages and includes apply to compilation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum CompileRole {
+  /// A contestant solution.
+  Solution,
+  /// An authoring program (validator, checker, generator, interactor, grader).
+  Authoring,
+}
 
 /// Source compilation options shared by `compile` and `run`.
 #[derive(Args)]
@@ -31,6 +40,10 @@ pub struct SourceCompileOpts {
   /// Problem name that provides languages and includes for compilation.
   #[arg(long, short, default_value = "default")]
   pub problem: String,
+
+  /// Program role whose languages and includes to use.
+  #[arg(long, short, value_enum, default_value_t = CompileRole::Solution)]
+  pub role: CompileRole,
 
   /// Language name to compile with, e.g. `cpp.20`. Auto-detected if omitted.
   #[arg(long, short)]
@@ -73,23 +86,29 @@ pub fn compile_source(opts: &SourceCompileOpts) -> Result<String> {
   let submodule_query = if opts.submodules { "?submodules=1" } else { "" };
   let final_flake_ref = format!("{}{}", flake_url, submodule_query);
   let problem_name = &opts.problem;
+  let role = match opts.role {
+    CompileRole::Solution => "solution",
+    CompileRole::Authoring => "authoring",
+  };
 
   info!("Compiling source file: {}", opts.src_path);
 
   let nix_expr = format!(
     r#"
-      {{ srcPath, languageName }}:
+      {{ srcPath, languageName, role }}:
       let
         flake = builtins.getFlake "{final_flake_ref}";
         hullLib = (flake.inputs.hull.lib or flake.outputs.lib).${{builtins.currentSystem}};
         problem = flake.outputs.hullProblems.${{builtins.currentSystem}}.{problem_name}.config;
 
+        languages = if role == "authoring" then problem.authoringLanguages else problem.solutionLanguages;
+        includes = if role == "authoring" then problem.authoringIncludes else problem.solutionIncludes;
+
         wasm = hullLib.compile.executable.drv {{
-          languages = problem.languages;
+          inherit languages includes;
           name = "hull-compile-${{builtins.baseNameOf srcPath}}";
           src = (/. + srcPath);
           inherit languageName;
-          includes = problem.includes;
           extraObjects = [];
         }};
       in
@@ -99,7 +118,8 @@ pub fn compile_source(opts: &SourceCompileOpts) -> Result<String> {
   let mut build_cmd = BuildCommand::new()
     .impure(true)
     .expr_stdin(&nix_expr)
-    .argstr("srcPath", src_path_str);
+    .argstr("srcPath", src_path_str)
+    .argstr("role", role);
 
   build_cmd = match &opts.language {
     Some(language) => build_cmd.argstr("languageName", language),

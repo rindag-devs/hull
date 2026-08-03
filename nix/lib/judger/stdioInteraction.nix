@@ -23,24 +23,10 @@
 # Runs the solution and interactor in one deterministic session with bounded in-process pipes.
 # A connected protocol deadlock produces time_limit_exceeded without a wall-clock timeout option.
 problem:
-{
-  solutionSpecificLanguages ? null,
-}:
+{ }:
 let
-  languages =
-    if solutionSpecificLanguages == null then
-      problem.languages
-    else
-      lib.filterAttrs (
-        n: _:
-        (
-          if !(builtins.hasAttr n problem.languages) then
-            throw "Language '${n}' specified in solutionSpecificLanguages is not defined in problem.languages"
-          else
-            true
-        )
-        && (builtins.elem n solutionSpecificLanguages)
-      ) problem.languages;
+  # Languages available to solutions.
+  solutionLanguages = problem.solutionLanguages;
 
   request = {
     report_path = "session-report.json";
@@ -168,10 +154,10 @@ in
       ''
         cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
         ${targetHull.compile.executableMatchScript {
-          inherit languages;
+          languages = solutionLanguages;
           srcExpr = ''"$HULL_SOLUTION_SRC"'';
           outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
-          includes = problem.includes;
+          includes = problem.solutionIncludes;
           extraObjects = [ ];
         }}
         jq -nc \

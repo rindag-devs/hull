@@ -10,7 +10,8 @@
       # Compile the transform program once, as it's used in both generateOutputs and judge.
       transformSrc = ./transform.23.cpp;
       transformWasm = hull.compile.executable.drv {
-        inherit (config) languages includes;
+        languages = config.authoringLanguages;
+        includes = config.authoringIncludes;
         src = transformSrc;
         name = "${config.name}-transform";
         extraObjects = [ ];
@@ -164,10 +165,10 @@
           ''
             cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
             ${targetHull.compile.executableMatchScript {
-              languages = config.languages;
+              languages = config.solutionLanguages;
               srcExpr = ''"$HULL_SOLUTION_SRC"'';
               outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
-              includes = config.includes;
+              includes = config.solutionIncludes;
               extraObjects = [ ];
             }}
             jq -nc \

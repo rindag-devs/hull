@@ -17,9 +17,9 @@
   tickLimit = 1000 * 10000000;
   memoryLimit = 256 * 1024 * 1024;
 
-  includes = [
+  authoringIncludes = [
     cplib
-    ./include
+    ./authoring-include
   ];
 
   checker.src = ./checker.23.cpp;
@@ -88,14 +88,14 @@
         };
       };
       smallOnly = {
-        src = ./solution/small-only.98.cpp;
+        src = ./solution/small_only.98.cpp;
         subtaskPredictions = {
           "0" = ac;
           "1" = unac;
         };
       };
       bruteForce = {
-        src = ./solution/brute-force.98.cpp;
+        src = ./solution/brute_force.98.cpp;
         subtaskPredictions = {
           "0" = pc20;
           "1" = pc20;

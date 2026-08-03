@@ -31,9 +31,32 @@ These options define the fundamental properties of your problem.
 - `memoryLimit`: The default memory limit for solutions, measured in bytes.
 - `fileSizeLimit`: The byte ceiling applied independently to each contestant-controlled regular file or pipe. It defaults to 1 GiB. A regular file is limited by its logical length, including initial contents; a pipe is limited by cumulative successful writes. Exceeding a governed file produces `file_error`.
 
-== Core Programs
+== Programs, Solutions, And Authoring
 
-Hull relies on several key programs to manage the problem's lifecycle. You provide the source code, and Hull handles the compilation and execution within its deterministic environment.
+Hull calls every compiled component a *program*. A program is either a *solution* or an *authoring* program.
+
+- A *solution* is a contestant program: the intended correct implementation, a brute force, an intermediate complexity variant, or a deliberately wrong program.
+- An *authoring* program is any program that supports problem authoring and judging: validators, checkers, generators, interactors, graders, and shared headers.
+
+Solutions and authoring programs have separate include directories and separate language configurations in `problem.nix`, so restricting one role never leaks into the other:
+
+- `solutionIncludes` / `solutionLanguages` apply to solutions. Add a grader header that solutions must include to `solution-include/`.
+- `authoringIncludes` / `authoringLanguages` apply to authoring programs. Add shared definitions such as `problem.23.hpp` to `authoring-include/`.
+
+```nix
+{
+  authoringIncludes = [
+    cplib
+    ./authoring-include
+  ];
+
+  solutionIncludes = [
+    ./solution-include
+  ];
+}
+```
+
+You provide the source code for the core programs, and Hull handles the compilation and execution within its deterministic environment:
 
 ```nix
 {
@@ -45,24 +68,32 @@ Hull relies on several key programs to manage the problem's lifecycle. You provi
 }
 ```
 
-- `checker`: The program responsible for comparing a solution's output against the standard answer to determine correctness. It can award partial scores.
-- `validator`: The program that reads a test case input file and verifies that it conforms to the problem's specified format and constraints. This is a critical step to ensure all test data is valid.
-- `generators`: An attribute set of input generators.
+- `checker`: The authoring program responsible for comparing a solution's output against the standard answer to determine correctness. It can award partial scores.
+- `validator`: The authoring program that reads a test case input file and verifies that it conforms to the problem's specified format and constraints. This is a critical step to ensure all test data is valid.
+- `generators`: An attribute set of input generator authoring programs.
 
 == C and C++ Compilation
 
-`hull.language.c` and `hull.language.cpp` are factories. An empty instance uses Hull's defaults. The standard is derived from the source suffix, such as `.17.c` or `.23.cpp`.
+`hull.language.c` and `hull.language.cpp` are factories. An empty instance uses Hull's defaults. The standard is derived from the source suffix, such as `.17.c` or `.23.cpp`. Configure each role independently through `solutionLanguages` and `authoringLanguages`:
 
 ```nix
 {
-  languages =
+  solutionLanguages =
     hull.language.c { }
     // hull.language.cpp {
       optimize.default = _: "2";
       fastMath.default = _: true;
     };
+
+  authoringLanguages =
+    hull.language.c { }
+    // hull.language.cpp {
+      standardIncludes.default = _: true;
+    };
 }
 ```
+
+A problem that restricts solutions (for example `standardIncludes = false`, which adds `-nostdinc`) sets it only on `solutionLanguages`; authoring programs keep the unrestricted language definition under `authoringLanguages`.
 
 Each factory option has `default = context: value;` and `validate = valueExpression: shellCode;` fields. Overrides are merged by field. The context contains `language` (`"c"` or `"cpp"`) and the suffix-derived `standard`.
 

@@ -13,9 +13,9 @@
     zh = "背诵圆周率";
   };
 
-  includes = [
+  authoringIncludes = [
     cplib
-    ./include
+    ./authoring-include
   ];
 
   judger = hull.judger.answerOnly config;

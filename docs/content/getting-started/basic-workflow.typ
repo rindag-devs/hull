@@ -54,10 +54,16 @@ Use `--json` to print JSON instead of a table.
 
 == Compiling a Solution
 
-`hull compile` compiles one source file to a WebAssembly executable using the selected problem's languages and includes.
+`hull compile` compiles one source file to a WebAssembly executable using the selected problem's `solutionLanguages` and `solutionIncludes`.
 
 ```bash
 hull compile solution/std.23.cpp
+```
+
+Use `--role` (or `-r`) to compile an authoring program instead; `authoring` selects `authoringLanguages` and `authoringIncludes`, while `solution` (the default) selects the solution-side pair:
+
+```bash
+hull compile --role authoring checker.23.cpp
 ```
 
 The default output is `std.wasm` in the working directory. Use `-p` to select a problem, `-l` to select a language instead of detecting it from the source suffix, and `-o` to select another output path:
@@ -74,11 +80,13 @@ hull compile -o - solution/std.23.cpp > solution.wasm
 
 == Running a Solution
 
-`hull run` uses the same problem, language, and source compilation options as `hull compile`, then executes the resulting source WASM module with Hull's Wasmtime-backed WASI Preview 1 runner.
+`hull run` uses the same problem, role, language, and source compilation options as `hull compile`, then executes the resulting source WASM module with Hull's Wasmtime-backed WASI Preview 1 runner.
 
 ```bash
 hull run -p example -l cpp.23 solution/std.23.cpp
 ```
+
+Use `--role authoring` to run an authoring program with the authoring-side languages and includes.
 
 Arguments after the source path are passed to the program. Prefix arguments that start with `-` with a `--` separator. Use `--tick-limit`, `--memory-limit`, and `--file-size-limit` to override the tick, memory, and independent stdout/stderr byte limits; omitted local limits use Hull's tool ceilings. Use `--show-status` to print the snake_case execution status, tick use, and peak linear memory. Standard input, output, and error remain connected to the invoking terminal or redirections.
 

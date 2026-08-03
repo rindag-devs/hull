@@ -75,7 +75,6 @@ let
           subtasks,
           solutions,
           checker,
-          includes,
           ...
         }@problem:
         let
@@ -224,7 +223,7 @@ let
             problemName = problem.name;
             programName = "lemonChecker";
             src = patchedChecker;
-            compileCommand = checkerCompileCommand includes;
+            compileCommand = checkerCompileCommand problem.authoringIncludes;
             stdenv = (if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem}).pkgsStatic.stdenv;
           };
 

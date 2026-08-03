@@ -22,6 +22,18 @@ Recommended naming:
   - Avoid vague names such as `n_is_small`, `trait1`, and `subtask2_property`.
   - Avoid negation in trait names. For example, use `is_tree = false` instead of `is_not_tree = true`.
 
+=== File And Directory Naming
+
+The case of a file or directory name is decided by its content type, in priority order:
+
+- *Code files* follow their language's identifier convention: C/C++ and Rust use `snake_case` (`std_optimized.17.cpp`), Nix uses `camelCase` (`batch.nix`, `problemModule/`), and other languages follow their ecosystem.
+- *Typst documents* and files mainly consumed by Typst use `kebab-case` (`document/statement/en.typ`).
+- *Subprojects* carry their language's rule over the whole subtree; nested subprojects are judged independently.
+- *Generic files and directories* (data, config, samples) use `kebab-case` (`data/hand-1.in`, `compile_flags.txt`).
+- *Machine-interface suffixes* are exempt from case judgment: the dotted `.<version>.<ext>` tail (`std.17.cpp`) is the language-detection interface and is not a word separator.
+- *Conventional names* are exempt: `README.md`, `LICENSE`, `flake.nix`, `Cargo.toml`, `.clang-format`.
+- Code identifiers are not file names: the Nix `name` field stays `camelCase` even though the directory it names uses the content-type rule.
+
 == Directory Structure
 
 Recommended layout:
@@ -30,6 +42,8 @@ A typical problem directory looks like this:
 
 ```text
 .
+├── authoring-include/
+│   └── problem.23.hpp
 ├── data/
 │   └── 1.in
 ├── document/
@@ -38,8 +52,8 @@ A typical problem directory looks like this:
 │       └── ...
 ├── generator/
 │   └── rand.23.cpp
-├── include/
-│   └── problem.23.hpp
+├── solution-include/
+│   └── add.h
 ├── solution/
 │   ├── bf.23.cpp
 │   └── std.23.cpp
@@ -53,10 +67,11 @@ A typical problem directory looks like this:
 └── validator.23.cpp
 ```
 
+- `authoring-include/`: Shared header files, like `problem.23.hpp`, used by authoring programs (checker, validator, interactor). Solutions cannot see this directory.
 - `data/`: Manually created test case input files.
 - `document/`: Source files for generating problem statements (e.g., Typst files).
 - `generator/`: Source code for test data generators.
-- `include/`: Shared header files, like `problem.23.hpp`, used by other components.
+- `solution-include/`: Header files that solutions must include, such as a grader header. Register the directory in `solutionIncludes` in `problem.nix`.
 - `solution/`: Source code for all solutions (correct, incorrect, suboptimal).
 - `checker.23.cpp`: The checker program.
 - `validator.23.cpp`: The validator program.
@@ -65,7 +80,7 @@ A typical problem directory looks like this:
 
 === Sharing Problem Definitions
 
-Keep definitions used by both the checker and validator in the matching `include/problem.*.hpp`, and add `./include` to `includes` in `problem.nix`. This shared header should be the single source of truth for input models, parsing rules, constraint constants, and other reusable problem structures. Interactive problems should use the same approach for definitions shared by the interactor and validator.
+Keep definitions used by both the checker and validator in the matching `authoring-include/problem.*.hpp`, and add `./authoring-include` to `authoringIncludes` in `problem.nix`. This shared header should be the single source of truth for input models, parsing rules, constraint constants, and other reusable problem structures. Interactive problems should use the same approach for definitions shared by the interactor and validator. A grader header that solutions must include goes to `solution-include/` and is registered in `solutionIncludes` instead, keeping solutions restricted to exactly the interface they need.
 
 Keep `checker.*.cpp`, `validator.*.cpp`, and `interactor.*.cpp` as thin entry points that include the shared header and register the relevant component. Do not duplicate input structures, bounds, or parsing logic between these programs: duplicated definitions can drift and cause the checker or interactor to interpret input differently from the validator.
 

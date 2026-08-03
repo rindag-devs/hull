@@ -65,7 +65,7 @@ let
     };
   };
 
-  programOptions =
+  authoringOptions =
     problem:
     { config, ... }:
     {
@@ -77,18 +77,18 @@ let
         type = lib.types.nonEmptyStr;
         description = "The programming language of the source file. It is automatically detected from the file extension.";
         readOnly = true;
-        default = hull.language.matchBaseName (baseNameOf config.src) problem.languages;
-        defaultText = lib.literalExpression "hull.language.matchBaseName (baseNameOf config.src) problem.languages";
+        default = hull.language.matchBaseName (baseNameOf config.src) problem.authoringLanguages;
+        defaultText = lib.literalExpression "hull.language.matchBaseName (baseNameOf config.src) problem.authoringLanguages";
       };
       wasm = lib.mkOption {
         type = lib.types.package;
         readOnly = true;
         description = "The compiled WASM artifact of the program.";
         default = hull.compile.executable.drv {
-          languages = problem.languages;
+          languages = problem.authoringLanguages;
           name = "${problem.name}-program-${builtins.baseNameOf config.src}";
           inherit (config) src;
-          includes = problem.includes;
+          includes = problem.authoringIncludes;
           extraObjects = [ ];
         };
         defaultText = lib.literalExpression "hull.compile.executable.drv { ... }";
@@ -612,7 +612,7 @@ in
   checker =
     problem:
     submodule (args: {
-      options = (programOptions problem args) // {
+      options = (authoringOptions problem args) // {
         tests = lib.mkOption {
           type = attrsOf (checkerTest problem);
           description = "An attribute set of tests for the checker itself.";
@@ -635,7 +635,7 @@ in
   validator =
     problem:
     submodule (args: {
-      options = (programOptions problem args) // {
+      options = (authoringOptions problem args) // {
         tests = lib.mkOption {
           type = attrsOf (validatorTest problem);
           description = "An attribute set of tests for the validator itself.";
@@ -658,7 +658,7 @@ in
   generator =
     problem:
     submodule (args: {
-      options = programOptions problem args;
+      options = authoringOptions problem args;
     });
 
   document = submodule {

@@ -13,13 +13,15 @@
 
 ## Program Roles And Dependencies
 
-Apply the role-based language defaults from `SKILL.md` unless the user specifies otherwise. All correct, brute-force, intermediate, and wrong programs count as solutions; validators, checkers, generators, interactors, graders, and shared headers count as non-solution programs.
+Apply the role-based language defaults from `SKILL.md` unless the user specifies otherwise. A program is either a *solution* or an *authoring* program: solutions are the correct, brute-force, intermediate, and wrong contestant programs; authoring programs are validators, checkers, generators, interactors, graders, and shared headers.
+
+Solutions and authoring programs compile with separate languages and include directories: `solutionIncludes`/`solutionLanguages` and `authoringIncludes`/`authoringLanguages` in `problem.nix`. CPLib and `problem.*.hpp` belong in `authoring-include/` and are reachable only by authoring programs; a solution sees only `solution-include/` and otherwise stays self-contained.
 
 Use CPLib for generators, validators, checkers, and interactors. By default, depend only on CPLib and the C/C++ standard library. Discover the installed CPLib API from the project dependency, Hull documentation, or a user-provided source; never assume a machine-specific checkout path.
 
 ## Shared Problem Definitions
 
-Keep input models, parsing, constraint constants, trait definitions, and reusable problem structures shared by the checker and validator in a matching `problem.*.hpp`. Include the same definitions in an interactor when applicable. Keep component entry points thin. Duplicated bounds or parsers can drift and are forbidden when they express the same contract.
+Keep input models, parsing, constraint constants, trait definitions, and reusable problem structures shared by the checker and validator in a matching `authoring-include/problem.*.hpp`. Include the same definitions in an interactor when applicable. Keep component entry points thin. Duplicated bounds or parsers can drift and are forbidden when they express the same contract.
 
 ## Solution
 
@@ -36,7 +38,7 @@ Do not make suboptimal solutions artificial by inserting sleeps or deliberate fa
 
 Write compact, direct, and performance-conscious code. Use bit operations, `inline`, `__int128`, and appropriate compiler builtins when they materially simplify the algorithm or satisfy its bounds. Do not include `bits/stdc++.h`; include the required standard headers. Do not add recovery logic for invalid input or impossible states that the validator excludes.
 
-By default, keep each solution self-contained; include only standard-library headers and, for special problem types, libraries or headers explicitly required by the statement, such as a provided grader header.
+By default, keep each solution self-contained; include only standard-library headers and, for special problem types, libraries or headers explicitly required by the statement, such as a provided grader header. A grader header goes in `solution-include/` and is registered in `solutionIncludes`; it must not pull in `authoring-include/` content.
 
 Choose I/O from the worst-case data volume. For input large enough that parsing overhead can affect the limit, use a dedicated scanner backed by `fread`. For large output, accumulate text in a buffer and emit it in large blocks with `fwrite`. Use `scanf`/`printf` or unsynchronized `cin`/`cout` only when the maximum I/O volume is comfortably small. Interactive solutions must instead follow the protocol's required flush points and must not defer judge-dependent output.
 

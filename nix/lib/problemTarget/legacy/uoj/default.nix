@@ -91,7 +91,6 @@ let
           documents,
           generators,
           samples,
-          includes,
           mainCorrectSolution,
           ...
         }@problem:

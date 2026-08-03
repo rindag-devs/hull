@@ -13,9 +13,9 @@
     zh = "猜数";
   };
 
-  includes = [
+  authoringIncludes = [
     cplib
-    ./include
+    ./authoring-include
   ];
 
   judger = hull.judger.stdioInteraction config { };
@@ -63,13 +63,13 @@
         };
       };
       tooManyOp = {
-        src = ./solution/too-many-op.17.c;
+        src = ./solution/too_many_op.17.c;
         subtaskPredictions = {
           "0" = wa;
         };
       };
       infinityRead = {
-        src = ./solution/infinity-read.20.cpp;
+        src = ./solution/infinity_read.20.cpp;
         subtaskPredictions = {
           "0" = unac;
         };

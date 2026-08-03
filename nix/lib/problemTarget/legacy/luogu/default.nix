@@ -67,7 +67,7 @@ let
 
       # This command needs to compile `program.code` into `program`, which is a static-linked exetuable
       # for `x86_64-unknown-linux-musl`.
-      programCompileCommand ?
+      authoringCompileCommand ?
         includes:
         let
           includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
@@ -85,7 +85,6 @@ let
           checker,
           validator,
           subtasks,
-          includes,
           ...
         }@problem:
 
@@ -199,7 +198,7 @@ let
               programName = mode;
               src = patchedSrc;
               stdenv = pkgs.pkgsCross.musl64.pkgsStatic.stdenv;
-              compileCommand = programCompileCommand includes;
+              compileCommand = authoringCompileCommand problem.authoringIncludes;
             };
 
           # Wrap a binary into a C program by embedding it as a compressed,

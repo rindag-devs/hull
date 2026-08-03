@@ -116,10 +116,10 @@ Basic skeleton:
           ];
         text = { targetHull, ... }: ''
           ${targetHull.compile.executableMatchScript {
-            languages = config.languages;
+            languages = config.solutionLanguages;
             srcExpr = ''"$HULL_SOLUTION_SRC"'';
             outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
-            includes = config.includes;
+            includes = config.solutionIncludes;
             extraObjects = [ ];
           }}
 
@@ -331,7 +331,7 @@ prepareSolution =
   solution:
   let
     wasm = hull.compile.executable.drv {
-      inherit (config) languages includes;
+      inherit (config) solutionLanguages solutionIncludes;
       src = solution.src;
       name = "${config.name}-solution-${solution.name}";
       extraObjects = [ ];

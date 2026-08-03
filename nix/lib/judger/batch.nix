@@ -24,7 +24,6 @@
 # Extra objects are linked into the contestant program and do not create runtime file bindings.
 problem:
 {
-  solutionSpecificLanguages ? null,
   # List of src for extra (usually grader) objects.
   extraObjects ? [ ],
 }:
@@ -90,29 +89,18 @@ let
       }
     ];
   };
-  # Filter languages if specified, and validate that they exist.
-  languages =
-    if solutionSpecificLanguages == null then
-      problem.languages
-    else
-      lib.filterAttrs (
-        n: _:
-        (
-          if !(builtins.hasAttr n languages) then
-            throw "Language `${n}` specified in solutionSpecificLanguages is not defined in problem.languages"
-          else
-            true
-        )
-        && (builtins.elem n solutionSpecificLanguages)
-      ) problem.languages;
+  # Languages available to solutions.
+  solutionLanguages = problem.solutionLanguages;
 
-  # Pre-compile extra objects (e.g., graders).
+  # Pre-compile extra objects (e.g., graders). Graders are authoring programs
+  # linked into the solution, so they also see the solution-facing interface headers.
   compiledObjects = map (
     src:
     hull.compile.object.drv {
       name = "${problem.name}-${baseNameOf src}";
       inherit src;
-      inherit (problem) languages includes;
+      languages = problem.authoringLanguages;
+      includes = problem.authoringIncludes ++ problem.solutionIncludes;
     }
   ) extraObjects;
 in
@@ -133,10 +121,10 @@ in
       ''
         cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
         ${targetHull.compile.executableMatchScript {
-          inherit languages;
+          languages = solutionLanguages;
           srcExpr = ''"$HULL_SOLUTION_SRC"'';
           outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
-          includes = problem.includes;
+          includes = problem.solutionIncludes;
           extraObjects = compiledObjects;
         }}
         jq -nc \

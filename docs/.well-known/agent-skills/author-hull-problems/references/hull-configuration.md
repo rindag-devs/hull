@@ -5,7 +5,8 @@
 - Documentation discovery
 - Workspace initialization
 - Problem identity and documents
-- Programs and languages
+- Programs, solutions, and authoring
+- File and directory naming
 - Visibility
 - Sample groups
 - Groups, traits, and subtasks
@@ -31,13 +32,34 @@ Statements use Typst. Place source files in the template's document structure an
 
 An editorial is a document under `document/editorial/<language-code>.typ`. Register one for each required editorial language and keep it participant-invisible by default.
 
-## Programs And Languages
+## Programs, Solutions, And Authoring
+
+A *program* is either a *solution* or an *authoring* program. Solutions are contestant programs: the intended correct implementation, brute forces, intermediate complexity variants, and deliberately wrong programs. Authoring programs are all other programs: validators, checkers, generators, interactors, graders, and shared headers.
+
+Solutions and authoring programs are configured independently in `problem.nix`:
+
+- `solutionIncludes` / `solutionLanguages` apply to solutions. A grader header that solutions must include is registered through `solutionIncludes` and placed in `solution-include/`.
+- `authoringIncludes` / `authoringLanguages` apply to authoring programs. Shared definitions such as `problem.23.hpp` are registered through `authoringIncludes` and placed in `authoring-include/`; solutions cannot see them.
+
+A restriction on one role never leaks into the other: for example, `standardIncludes = false` on `solutionLanguages` (adding `-nostdinc`) does not affect authoring compilation.
 
 Match physical source suffixes and configured languages to the standards selected under `SKILL.md` and [programs-and-cplib.md](programs-and-cplib.md). Register the main correct solution explicitly and give suboptimal programs meaningful names.
 
 Register each solution prediction using the exact status `accepted`, `wrong_answer`, `partially_correct`, `runtime_error`, `time_limit_exceeded`, `memory_limit_exceeded`, `file_error`, or `internal_error`.
 
 Configure checkers, interactors, graders, and participant interfaces through the documented Hull mechanisms for each requested target. Keep participant distribution and target-specific packaging in the target configuration rather than encoding them in component programs.
+
+## File And Directory Naming
+
+The case of a file or directory name is decided by its content type, in priority order:
+
+- *Code files* follow their language's identifier convention: C/C++ and Rust use `snake_case` (`std_optimized.17.cpp`), Nix uses `camelCase` (`batch.nix`, `problemModule/`), and other languages follow their ecosystem.
+- *Typst documents* and files mainly consumed by Typst use `kebab-case` (`document/statement/en.typ`).
+- *Subprojects* carry their language's rule over the whole subtree; nested subprojects are judged independently.
+- *Generic files and directories* (data, config, samples) use `kebab-case` (`data/hand-1.in`, `compile_flags.txt`).
+- *Machine-interface suffixes* are exempt from case judgment: the dotted `.<version>.<ext>` tail (`std.17.cpp`) is the language-detection interface and is not a word separator.
+- *Conventional names* are exempt: `README.md`, `LICENSE`, `flake.nix`, `Cargo.toml`, `.clang-format`.
+- Code identifiers are not file names: the Nix `name` field stays `camelCase` even though the directory it names uses the content-type rule.
 
 ## Visibility
 
@@ -78,7 +100,7 @@ Before building, inspect the effective configuration for:
 - Exact source paths and language versions.
 - One unambiguous main correct solution.
 - Checker selection matching output semantics.
-- Validator, generator, and shared include registration.
+- Validator, generator, and authoring-include registration (`authoringIncludes`), plus any solution-facing `solutionIncludes`.
 - Groups, traits, subtasks, scores, and solution predictions.
 - Tick, memory-byte, and file-size-byte units.
 - Private program visibility and necessary public documents/interfaces.
