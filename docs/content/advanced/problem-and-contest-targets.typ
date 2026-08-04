@@ -39,7 +39,7 @@ Define targets in the `targets` attribute set of `problem.nix` or `contest.nix`.
 Problem targets use two API shapes:
 
 - Direct targets are already complete targets, such as `hull.problemTarget.common`, `hull.problemTarget.hydro`, `hull.problemTarget.lemon`, and `hull.problemTarget.uoj`.
-- Legacy judge-format targets are target families under `hull.problemTarget.legacy`. Select a judging branch first, then pass that branch's options: `hull.problemTarget.legacy.hydro.batch { ... }`, `hull.problemTarget.legacy.uoj.stdioInteraction { ... }`, and so on.
+- Legacy judge-format targets are target families under `hull.problemTarget.legacy`. Select a judging branch first. Then pass that branch's options: `hull.problemTarget.legacy.hydro.batch { ... }`, `hull.problemTarget.legacy.uoj.stdioInteraction { ... }`, and so on.
 
 This makes the judging model part of the target path instead of a string option inside the target arguments.
 
@@ -63,7 +63,7 @@ Problem targets operate on a single problem's evaluated configuration.
 
 - *`data/`*: Contains all test case inputs and their corresponding standard answer files.
 - *`solution/`*: Contains detailed judging results for every solution.
-- *`checker.23.cpp`, `validator.23.cpp`, etc.*: Source code for core programs.
+- *`checker.23.cpp`, `validator.23.cpp`, and more*: Source code for core programs.
 - *`overview.pdf`*: An automatically generated technical report of the problem, including test case analysis and solution performance.
 
 Use it directly:
@@ -83,10 +83,10 @@ Prefer these platform targets for ordinary use. Use legacy targets only when a p
 `hull.problemTarget.hydro { ... }` packages one problem as a Hydro bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, a static `proot`, custom judger runners, and problem data.
-- It carries static BusyBox and Zstandard executables for `targetSystem`; supported targets are `x86_64-linux` and `aarch64-linux`.
+- It carries static BusyBox and Zstandard executables for `targetSystem`. Supported targets are `x86_64-linux` and `aarch64-linux`.
 - `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
 - It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Hydro.
-- The Hydro platform must provide `/bin/bash` for the first script invocation; bundle extraction does not depend on host `tar` or `zstd`.
+- The Hydro platform must provide `/bin/bash` for the first script invocation. Bundle extraction does not depend on host `tar` or `zstd`.
 - It requires judge resource limits and language settings that fit the bundled runtime.
 
 ==== `lemon`
@@ -101,7 +101,7 @@ Prefer these platform targets for ordinary use. Use legacy targets only when a p
 `hull.problemTarget.uoj { ... }` packages one problem as a UOJ bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, custom judger runners, problem data, and static BusyBox and Zstandard executables.
-- `targetSystem` selects `x86_64-linux` or `aarch64-linux` and defaults to `x86_64-linux`; the UOJ host must run binaries for the selected architecture.
+- `targetSystem` selects `x86_64-linux` or `aarch64-linux` and defaults to `x86_64-linux`. The UOJ host must run binaries for the selected architecture.
 - `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
 - The UOJ host must run Linux with unprivileged user namespaces enabled for `nix-user-chroot`.
 - Set the problem `extra_config` to `{"dont_use_formatter": true}` before syncing data so UOJ's formatter does not modify packaged binary files.
@@ -171,7 +171,7 @@ Supported branches:
 Important outputs:
 
 - *`problem.conf`*: The main configuration file defining subtasks, scoring, samples, interaction mode, and resource limits.
-- *`<problem-name>1.in`, `<problem-name>1.out`, etc.*: Test data files following UOJ's naming convention.
+- *`<problem-name>1.in`, `<problem-name>1.out`, and more*: Test data files following UOJ's naming convention.
 - *`chk.23.cpp`, `interactor23.cpp`, `val23.cpp`, `std23.cpp`*: Checker, interactor, validator, and main correct solution source examples for the selected branch.
 - *`require/`* and *`download/`*: Judge-side support files and participant-visible files.
 
@@ -249,7 +249,7 @@ Important outputs:
 
 - *`data.zip`*: Luogu upload archive containing `config.yml`, test data, checker wrapper, validator wrapper, and optional grader library.
 - *`scoring-script.txt`*: Score aggregation script generated from Hull subtasks.
-- *`required-tags.json`*: Tags that should be set on Luogu for the selected branch.
+- *`required-tags.json`*: Tags that must be set on Luogu for the selected branch.
 
 Luogu compiles custom programs with an older C++ standard. This target precompiles checker/interactor/validator programs and wraps the binaries into portable C wrappers.
 
@@ -291,7 +291,7 @@ targets.lemonLegacy = hull.problemTarget.legacy.lemon.batch {
 
 Contest targets package multiple problems into one contest output.
 
-Contest targets do not choose a problem target branch directly. They choose a target name from each problem's `targets` set, then package those outputs together. Define branch-specific problem targets in every problem first, then point the contest target at that shared name.
+Contest targets do not choose a problem target branch directly. They choose a target name from each problem's `targets` set. Then they package those outputs together. Define branch-specific problem targets in every problem first. Then point the contest target at that shared name.
 
 For example, each problem can define:
 
@@ -353,19 +353,19 @@ Use it only when a contest package must rely on Lemon's native evaluation model.
 `hull.contestTarget.cnoiParticipant` packages a contestant bundle with statements, samples, participant-visible files, and optional offline self-eval tools.
 
 - It gathers all sample cases from each problem.
-- It includes any participant-visible files (e.g., graders, skeleton code).
+- It includes any participant-visible files (for example, graders, skeleton code).
 - It can build one PDF booklet for all problem statements.
 - `archive` accepts `null | "tar.xz" | "tar.zst" | "zip"` and defaults to `null`; `null` outputs a directory.
 - `xzCompressionLevel` controls `tar.xz` compression, accepts integers from 0 through 9, and defaults to 6.
 - `zstdCompressionLevel` applies to `tar.zst`, accepts integers from 1 through 22, and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
 - `zipCompressionLevel` controls `zip` compression, accepts integers from 0 through 9, and defaults to 9.
-- Archive outputs require the consuming host to provide an extractor for the selected outer format; they do not carry archive bootstrap tools.
+- Archive outputs require the consuming host to provide an extractor for the selected outer format. They do not carry archive bootstrap tools.
 - It accepts `targetSystem`.
 - The default `targetSystem` is `x86_64-linux`.
 
 == Writing a User-Defined Target
 
-User-defined targets can be defined directly in `problem.nix` or `contest.nix`.
+You can define user-defined targets directly in `problem.nix` or `contest.nix`.
 
 === The Target Interface
 
@@ -398,11 +398,11 @@ The structure of a target attribute set is as follows:
 }
 ```
 
-The output of the derivation returned by `__functor` (`$out`) will be the final packaged directory.
+The output of the derivation returned by `__functor` (`$out`) is the final packaged directory.
 
 === User-Defined Problem Target Example
 
-Let's create a simple problem target named `minimal`. This target will package only the test data and the source code of the main correct solution.
+Create a simple problem target named `minimal`. This target packages only the test data and the source code of the main correct solution.
 
 ```nix
 # In problem.nix
@@ -442,7 +442,7 @@ Let's create a simple problem target named `minimal`. This target will package o
 
 === Making Targets Configurable
 
-The functor pattern allows you to create configurable targets. Let's modify our `minimal` target to allow customizing the name of the solution file.
+The functor pattern allows you to create configurable targets. Modify the `minimal` target. Make the name of the solution file configurable.
 
 ```nix
 # In problem.nix
@@ -478,13 +478,13 @@ The functor pattern allows you to create configurable targets. Let's modify our 
 }
 ```
 
-In this advanced example, we wrap the target definition in a function to accept arguments. The `solutionFileName` is passed into the attribute set and can be accessed via `self.solutionFileName` inside the `__functor`. This is the same construction pattern used by Hull's built-in branch constructors such as `hull.problemTarget.legacy.hydro.batch`.
+In this advanced example, wrap the target definition in a function. The function accepts arguments. Pass `solutionFileName` into the attribute set. Access it via `self.solutionFileName` inside the `__functor`. This is the same construction pattern used by Hull's built-in branch constructors such as `hull.problemTarget.legacy.hydro.batch`.
 
 === User-Defined Contest Target Example
 
-The principle for contest targets is identical, but the `config` object received by `__functor` is the contest configuration. It contains a list of problems under `config.problems`.
+The principle for contest targets is identical. The `config` object received by `__functor` is the contest configuration. It contains a list of problems under `config.problems`.
 
-Let's create a user-defined contest target that generates a simple `index.html` file listing all the problems.
+Create a user-defined contest target. It generates a simple `index.html` file listing all the problems.
 
 ```nix
 # In contest.nix
@@ -516,4 +516,4 @@ Let's create a user-defined contest target that generates a simple `index.html` 
 }
 ```
 
-This example demonstrates iterating over `contest.problems`. For each problem `p` in the list, we access its configuration via `p.config` to retrieve its name and display name, which are then written into the `index.html` file.
+This example shows how to iterate over `contest.problems`. For each problem `p` in the list, access its configuration via `p.config`. Retrieve its name and display name. Write them into the `index.html` file.

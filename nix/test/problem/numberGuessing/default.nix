@@ -18,7 +18,7 @@
     ./authoring-include
   ];
 
-  judger = hull.judger.stdioInteraction config { };
+  judger = hull.judger.stdioInteraction config;
 
   checker.src = ./interactor.23.cpp;
 

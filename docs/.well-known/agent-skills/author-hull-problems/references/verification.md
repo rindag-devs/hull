@@ -32,7 +32,7 @@ Use the commands documented by the problem's pinned Hull version. Record exact c
 
 Audit the statement constraints, validator bounds, generator args, and intended-solution assumptions as four representations of one contract. Compare every variable, character set, precision rule, aggregate limit, structural guarantee, indexing rule, and output condition.
 
-Check that checker behavior exactly matches legal output wording, including tolerance boundaries and extra tokens. Check that subtask traits derive from validator-observed properties and that generator invocations satisfy their declared group.
+Make sure that checker behavior exactly matches legal output wording, including tolerance boundaries and extra tokens. Make sure that subtask traits derive from validator-observed properties. Make sure that generator invocations satisfy their declared group.
 
 ## Component Checks
 
@@ -47,7 +47,7 @@ Add short, targeted tests for realistic validator, checker, and interactor defec
 - Floating tolerance just inside and outside the boundary, plus NaN or infinity rejection.
 - Interactive query-limit, malformed-message, flush, and termination behavior.
 
-Do not add all categories mechanically. Each test must correspond to a failure the component could plausibly have.
+Do not add all categories mechanically. Each test must correspond to a failure the component can plausibly have.
 
 Do not enumerate the full input domain, duplicate generator coverage, or add tests that only assert constants or code shape.
 
@@ -55,47 +55,56 @@ Do not enumerate the full input domain, duplicate generator coverage, or add tes
 
 Run the main correct solution on every testcase. Independently verify small cases against a pure brute force where available. Inspect every algorithm branch and every directed data family.
 
-Run pure brute-force, intermediate-complexity, and plausible wrong solutions across all groups. Confirm outcomes agree with the intended subtask design.
+Run pure brute-force, intermediate-complexity, and plausible wrong solutions across all groups. Make sure that outcomes agree with the intended subtask design.
 
-If a measured outcome disagrees with its prediction, do not mechanically edit the prediction. Determine whether the implementation is wrong, a testcase has unexpected traits, a subtask is poorly designed, data is weak, limits are wrong, or the proposed complexity distinction does not exist. Change the underlying design when it is the cause.
+If a measured outcome disagrees with its prediction, do not mechanically edit the prediction. Determine the cause. It can be one of these:
+
+- The implementation is wrong.
+- A testcase has unexpected traits.
+- A subtask is poorly designed.
+- The data is weak.
+- The limits are wrong.
+- The proposed complexity distinction does not exist.
+
+If the underlying design is the cause, change it.
 
 ## Reproducibility
 
-Run representative generator commands at least twice with exactly identical argument sequences and compare output bytes. Also verify that the same semantic arguments written in a different order are not accidentally treated as interchangeable if CPLib derives randomness from the raw command line.
+Run representative generator commands at least twice with exactly identical argument sequences. Compare output bytes. Also make sure that the same semantic arguments in a different order are not interchangeable. This matters if CPLib derives randomness from the raw command line.
 
-Search all authoring programs for nondeterministic or implementation-dependent APIs and inspect whether output depends on unordered iteration, locale, time, uninitialized storage, or host state.
+Search all authoring programs for nondeterministic or implementation-dependent APIs. Determine whether output depends on unordered iteration, locale, time, uninitialized storage, or host state.
 
 ## Performance Calibration
 
-Measure the main correct solution and best result-correct suboptimal implementation on the representative worst cases selected by the data plan. Record tick and memory results rather than relying on aggregate build duration.
+Measure the main correct solution and best result-correct suboptimal implementation on the representative worst cases selected by the data plan. Record tick and memory results. Do not rely on aggregate build duration.
 
 Choose the largest tick limit that still rejects unintended approaches. Give the main correct solution at least a 1.5 times margin on representative worst cases. If the best result-correct suboptimal approach is more than eight times slower, a margin near two times is reasonable. Account for legitimate variation and every intended language or implementation.
 
-Measure peak memory when the memory limit excludes an approach. If the file-size limit is overridden, measure legitimate worst-case files and streams. Verify that intended approaches remain safe and approaches meant to fail remain rejected under every calibrated limit.
+Measure peak memory when the memory limit excludes an approach. If the file-size limit is overridden, measure legitimate worst-case files and streams. Make sure that intended approaches remain safe. Make sure that approaches meant to fail remain rejected under every calibrated limit.
 
 ## Statements, Editorials, And Samples
 
-Build and visually inspect every requested statement language. Check block spacing, list continuity, math rendering, code literals, Chinese punctuation, English ASCII usage, and absence of excessive emphasis.
+Build and visually inspect every requested statement language. Inspect block spacing, list continuity, math rendering, code literals, Chinese punctuation, English ASCII usage, and absence of excessive emphasis.
 
-For each sample, run the validator, main solution, and checker. Verify the displayed input/output, explanation, and configured publication behavior.
+For each sample, run the validator, main solution, and checker. Make sure that the displayed input/output, explanation, and configured publication behavior are correct.
 
 Compare multilingual statements sentence by sentence for matching definitions, constraints, notes, and output rules.
 
-Build and visually inspect every editorial. Check its structure against [editorial.md](editorial.md), verify that its terminology matches the statement, and confirm that every algorithm matches the implemented solution. Verify that each algorithm states its correctness basis and final time and space bounds, with detailed correctness and time-complexity proofs wherever [editorial.md](editorial.md) requires them.
+Build and visually inspect every editorial. Inspect its structure against [editorial.md](editorial.md). Make sure that its terminology matches the statement. Make sure that every algorithm matches the implemented solution. Make sure that each algorithm states its correctness basis and final time and space bounds. Add detailed correctness and time-complexity proofs wherever [editorial.md](editorial.md) requires them.
 
-For a partial-scoring problem, compare every editorial algorithm's expected subtask or score paragraph with the registered solution predictions and measured outcomes. Compare multilingual editorials for the same algorithms, claims, complexities, and expectations.
+For a partial-scoring problem, compare every editorial algorithm's expected subtask or score paragraph with the registered predictions. Compare it also with the measured outcomes. Compare multilingual editorials for the same algorithms, claims, complexities, and expectations.
 
 ## Targets And Packages
 
-Build every user-requested target. Inspect the resulting package or directory through that target's documented consumer path, not only by checking that a derivation exists.
+Build every user-requested target. Inspect the resulting package or directory through that target's documented consumer path. A derivation that exists is not enough.
 
-Confirm that participant-facing output matches the configured visibility and contains every required statement or interface. Verify each target independently and do not infer one platform's success from another's build.
+Make sure that participant-facing output matches the configured visibility. Make sure that it contains every required statement or interface. Verify each target independently. Do not infer one platform's success from another's build.
 
 ## Differential Diagnosis
 
-Do not make differential testing a routine gate. Use it when an unexpected result is reproducible and comparing outputs will help localize the defect.
+Do not make differential testing a routine gate. Use it when an unexpected result is reproducible. Use it when comparing outputs can help localize the defect.
 
-Compare the main correct solution against a program that computes correct answers but has unsuitable complexity for full constraints. Restrict generated cases to sizes both can finish. Minimize a mismatch before changing code. Do not use a second implementation that copies the same algorithm and likely shares the same defect.
+Compare the main correct solution against a program with correct answers but unsuitable complexity for full constraints. Restrict generated cases to sizes both can finish. Minimize a mismatch before you change code. Do not use a second implementation that copies the same algorithm and likely shares the same defect.
 
 ## Completion Evidence
 
@@ -109,4 +118,4 @@ Before declaring completion, provide:
 - The generated artifacts and their locations.
 - Any unresolved limitation or unverified environment, stated explicitly.
 
-Do not claim completion if any requested target, statement or editorial language, component, sample, prediction, or package has not been exercised.
+Do not claim completion while any requested item has not been exercised: target, statement or editorial language, component, sample, prediction, or package.

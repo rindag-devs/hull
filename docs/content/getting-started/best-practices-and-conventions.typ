@@ -13,12 +13,12 @@ Use consistent names and a predictable layout.
 
 Recommended naming:
 
-- *Problem Name, Test Cases, Generators, Solutions*: Use `camelCase` for the machine-readable identifier. This name is often used in directory paths, so avoid spaces or special characters.
+- *Problem Name, Test Cases, Generators, Solutions*: Use `camelCase` for the machine-readable identifier. This name is often used in directory paths. Avoid spaces or special characters.
   - Good: `aPlusB`, `newYearGreeting`.
   - Bad: `A + B Problem`, `new_year_greeting`.
 - *Traits*: Use concise, descriptive `snake_case` names that state the property precisely.
   - For numeric constraints, prefer `variable_comparison_value`, such as `n_le_1000`, `a_ge_100`, or `a_mod_2_eq_0`.
-  - For categorical or structural properties, use an affirmative `is_property` or `variable_is_property` name, such as `is_tree` or `n_is_odd`. Other concise and descriptive names, such as `all_positive`, are also appropriate.
+  - For categorical or structural properties, use an affirmative `is_property` or `variable_is_property` name, such as `is_tree` or `n_is_odd`. You can also use other concise and descriptive names, such as `all_positive`.
   - Avoid vague names such as `n_is_small`, `trait1`, and `subtask2_property`.
   - Avoid negation in trait names. For example, use `is_tree = false` instead of `is_not_tree = true`.
 
@@ -67,9 +67,9 @@ A typical problem directory looks like this:
 └── validator.23.cpp
 ```
 
-- `authoring-include/`: Shared header files, like `problem.23.hpp`, used by authoring programs (checker, validator, interactor). Solutions cannot see this directory.
+- `authoring-include/`: Shared header files, such as `problem.23.hpp`, used by authoring programs (checker, validator, interactor). Solutions cannot see this directory.
 - `data/`: Manually created test case input files.
-- `document/`: Source files for generating problem statements (e.g., Typst files).
+- `document/`: Source files for generating problem statements (for example, Typst files).
 - `generator/`: Source code for test data generators.
 - `solution-include/`: Header files that solutions must include, such as a grader header. Register the directory in `solutionIncludes` in `problem.nix`.
 - `solution/`: Source code for all solutions (correct, incorrect, suboptimal).
@@ -80,13 +80,13 @@ A typical problem directory looks like this:
 
 === Sharing Problem Definitions
 
-Keep definitions used by both the checker and validator in the matching `authoring-include/problem.*.hpp`, and add `./authoring-include` to `authoringIncludes` in `problem.nix`. This shared header should be the single source of truth for input models, parsing rules, constraint constants, and other reusable problem structures. Interactive problems should use the same approach for definitions shared by the interactor and validator. A grader header that solutions must include goes to `solution-include/` and is registered in `solutionIncludes` instead, keeping solutions restricted to exactly the interface they need.
+Keep definitions used by both the checker and validator in the matching `authoring-include/problem.*.hpp`. Add `./authoring-include` to `authoringIncludes` in `problem.nix`. This shared header must be the single source of truth for input models, parsing rules, constraint constants, and other reusable problem structures. Interactive problems must use the same approach for definitions shared by the interactor and validator. A grader header that solutions must include goes to `solution-include/` instead. Register it in `solutionIncludes`. This keeps solutions restricted to exactly the interface they need.
 
-Keep `checker.*.cpp`, `validator.*.cpp`, and `interactor.*.cpp` as thin entry points that include the shared header and register the relevant component. Do not duplicate input structures, bounds, or parsing logic between these programs: duplicated definitions can drift and cause the checker or interactor to interpret input differently from the validator.
+Keep `checker.*.cpp`, `validator.*.cpp`, and `interactor.*.cpp` as thin entry points that include the shared header and register the relevant component. Do not duplicate input structures, bounds, or parsing logic between these programs. Duplicated definitions can drift. They can cause the checker or interactor to interpret input differently from the validator.
 
 == Testing Core Components
 
-Your `validator` and `checker` are critical pieces of software that can contain bugs. Hull provides a built-in mechanism to write tests for them directly within `problem.nix`, ensuring they behave as expected.
+Your `validator` and `checker` are critical pieces of software that can contain bugs. Hull provides a built-in mechanism to write tests for them directly within `problem.nix`. This makes sure that they behave as expected.
 
 === Testing the Validator and Checker
 
@@ -128,13 +128,13 @@ You can add a `tests` attribute to your `validator` and `checker` definitions. E
 }
 ```
 
-When you run `hull build`, these tests are executed automatically. If any prediction fails, the build will stop, alerting you to a potential issue with your validator or checker.
+When you run `hull build`, these tests are executed automatically. If any prediction fails, the build stops. This alerts you to a potential issue with your validator or checker.
 
 Keep component tests short and focused on plausible defects, such as a missing bound, trailing token, malformed construction, floating-point tolerance boundary, or protocol violation. Do not enumerate the input domain or add tests that only assert constants or implementation shape.
 
 === Predicting Solution Behavior
 
-`subtaskPredictions` checks expected solution behavior.
+`subtaskPredictions` evaluates expected solution behavior.
 
 For a brute-force solution that is expected to be too slow for larger subtasks, you can write a prediction that accepts either "accepted" (for small cases) or "time_limit_exceeded".
 
@@ -163,11 +163,11 @@ The complete testcase status vocabulary is `accepted`, `wrong_answer`, `partiall
 
 == Code Style
 
-Maintaining a consistent code style is essential for collaboration and long-term maintenance. The Hull template provides configuration files for common formatting and linting tools.
+A consistent code style is essential for collaboration and long-term maintenance. The Hull template provides configuration files for common formatting and linting tools.
 
 === Nix Formatting
 
-The project flake includes a formatter for Nix code using `nixfmt-tree`. You can format all Nix files in your project by running:
+The project flake includes a formatter for Nix code. The formatter uses `nixfmt-tree`. You can format all Nix files in your project by running:
 
 ```bash
 nix fmt
@@ -178,31 +178,31 @@ nix fmt
 The template provides configuration files for a consistent C/C++ development experience.
 
 - *.clang-format*: Defines the code style for `clang-format`.
-- *.clangd*: Configures the `clangd` language server, enabling features like auto-completion and diagnostics. It automatically sets the correct C++ standard based on file extensions (e.g., `.23.cpp` for C++ 23).
+- *.clangd*: Configures the `clangd` language server. It enables features such as auto-completion and diagnostics. It automatically sets the correct C++ standard based on file extensions (for example, `.23.cpp` for C++ 23).
 
 == Reproducible Test Data
 
-Make generator output depend only on its complete command-line argument sequence. Avoid wall-clock seeds, `rand`, implementation-dependent iteration order, and other runtime state. Running the same generator with the same arguments should produce byte-for-byte identical output.
+Make generator output depend only on its complete command-line argument sequence. Avoid wall-clock seeds, `rand`, implementation-dependent iteration order, and other runtime state. Running the same generator with the same arguments must produce byte-for-byte identical output.
 
-Give independently variable input dimensions separate generator modes, such as size, value distribution, parity, density, or structural shape. Combine relevant modes systematically and add directed boundary cases; random sampling alone is not coverage.
+Give independently variable input dimensions separate generator modes, such as size, value distribution, parity, density, or structural shape. Combine relevant modes systematically. Add directed boundary cases. Random sampling alone is not coverage.
 
-Use generated inputs by default. Fixed input files remain appropriate for small samples or exceptional constructions that are clearer as literal data. Both `sample` and `sampleLarge` are sample groups: `sample` cases are embedded in generated statements, while `sampleLarge` cases are distributed without being expanded inline.
+Use generated inputs by default. Fixed input files remain suitable for small samples or exceptional constructions that are clearer as literal data. Both `sample` and `sampleLarge` are sample groups. `sample` cases are embedded in generated statements. `sampleLarge` cases are distributed without being expanded inline.
 
 == Subtasks And Test Coverage
 
-Define subtask membership through precise affirmative traits emitted by the validator. Trait hints are checked author assertions, not a replacement for validator-derived traits. Keep statement constraints, validator conditions, generator arguments, testcase traits, and solution assumptions consistent.
+Define subtask membership through precise affirmative traits emitted by the validator. Trait hints are checked author assertions. They are not a replacement for validator-derived traits. Keep statement constraints, validator conditions, generator arguments, testcase traits, and solution assumptions consistent.
 
-A single-subtask ICPC-style problem often needs roughly 20 to 100 testcases. A problem with many partial-scoring subtasks may need hundreds or thousands. These are guidelines rather than quotas; use the smallest set that strongly covers algorithm branches, boundaries, structural families, and plausible unintended approaches.
+A single-subtask ICPC-style problem often needs roughly 20 to 100 testcases. A problem with many partial-scoring subtasks can need hundreds or thousands. These are guidelines rather than quotas. Use the smallest set that strongly covers algorithm branches, boundaries, structural families, and plausible unintended approaches.
 
-Problem scores conventionally total `1.0`. Allocate partial scores primarily by difficulty, with modest additional weight when a subtask gives useful insight toward the intended solution. For a problem without partial scoring, prefer one subtask containing every testcase.
+Problem scores conventionally total `1.0`. Allocate partial scores primarily by difficulty. Add modest additional weight when a subtask gives useful insight toward the intended solution. For a problem without partial scoring, prefer one subtask containing every testcase.
 
 == Participant Visibility
 
-Keep solutions, generators, validators, checkers, and interactors private unless participants require a specific distributed interface. Statements and required grader headers or libraries are exceptions. Check the generated option reference before setting visibility because component kinds use different option types.
+Keep solutions, generators, validators, checkers, and interactors private unless participants require a specific distributed interface. Statements and required grader headers or libraries are exceptions. Read the generated option reference before setting visibility. Component kinds use different option types.
 
 === Editor Configuration
 
-The `.editorconfig` file helps maintain consistent coding styles (like indentation and line endings) across various editors and IDEs.
+The `.editorconfig` file helps maintain consistent coding styles (such as indentation and line endings) across various editors and IDEs.
 
 == Version Control
 

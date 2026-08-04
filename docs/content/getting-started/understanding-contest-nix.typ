@@ -44,14 +44,14 @@ Minimal example:
 
 == Core Options
 
-Let's break down the essential options available in `contest.nix`.
+This section breaks down the essential options available in `contest.nix`.
 
 === Basic Metadata
 
 These options define the fundamental properties of your contest.
 
-- `name`: A unique, machine-readable identifier for the contest (e.g., `day1`, `finalRound`). It should be a simple string without spaces or special characters and is used for internal references.
-- `displayName`: An attribute set containing human-readable titles for the contest in different languages. The keys are language codes (e.g., `en`, `zh`).
+- `name`: A unique, machine-readable identifier for the contest (for example, `day1`, `finalRound`). It must be a simple string without spaces or special characters. It is used for internal references.
+- `displayName`: An attribute set containing human-readable titles for the contest in different languages. The keys are language codes (for example, `en`, `zh`).
 
 === Defining Problems
 
@@ -70,28 +70,28 @@ This is the most important part of the file, where you specify which problems ar
 
 === Defining Targets
 
-Similar to `problem.nix`, the `targets` attribute set defines different packaging formats for the contest. A contest target specifies how to structure the final output directory, combining the outputs of all included problems.
+Similar to `problem.nix`, the `targets` attribute set defines different packaging formats for the contest. A contest target specifies how to structure the final output directory. It combines the outputs of all included problems.
 
-- `targets`: An attribute set where each attribute defines a packaging target. The `default` target is special, as it's the one built by the `hull build-contest` command without additional arguments and is evaluated after runtime analysis for each problem. Hull provides built-in contest targets like `common`, `lemon` and `cnoiParticipant`.
+- `targets`: An attribute set where each attribute defines a packaging target. The `default` target is special. It is the one built by the `hull build-contest` command without additional arguments. It is evaluated after runtime analysis for each problem. Hull provides built-in contest targets such as `common`, `lemon` and `cnoiParticipant`.
 
 == Building the Contest
 
 Once your `contest.nix` is configured, you can build the entire package using the `hull build-contest` command.
 
-*Prerequisite:* This command must be run from within the Nix development shell (`nix develop`).
+*Prerequisite:* You must run this command from within the Nix development shell (`nix develop`).
 
 ```bash
 hull build-contest
 ```
 
-By default, this command looks for a `default` contest defined in your `flake.nix` (which usually points to `./contest.nix`) and builds its `default` target. If you have multiple contests or targets, you can specify them with flags:
+By default, this command looks for a `default` contest defined in your `flake.nix` (which usually points to `./contest.nix`). Then it builds the `default` target of that contest. If you have multiple contests or targets, you can specify them with flags:
 
 ```bash
 # Build the 'day1' contest using its 'lemon' target
 hull build-contest --contest day1 --target lemon
 ```
 
-Upon successful completion, Hull creates a `result` symbolic link in your project directory. The structure of this output depends on the target used. For the `hull.contestTarget.common` target shown in the example, the output would look like this:
+Upon successful completion, Hull creates a `result` symbolic link in your project directory. The structure of this output depends on the target used. For the `hull.contestTarget.common` target shown in the example, the output looks like this:
 
 ```
 result/
@@ -127,6 +127,6 @@ When you run `hull build-contest`, the following happens:
 4. It builds the selected problem target for every problem.
 5. It evaluates the contest target and combines the packaged problem outputs into the final contest directory.
 
-Use `-j` / `--jobs` to control how many problems Hull analyzes in parallel. Arguments after `--` are forwarded to the final `nix build`, so debugging flags like `--show-trace` remain available.
+Use `-j` / `--jobs` to control how many problems Hull analyzes in parallel. Arguments after `--` are forwarded to the final `nix build`. Debugging flags such as `--show-trace` remain available.
 
 Contest packaging is composed from problem targets.

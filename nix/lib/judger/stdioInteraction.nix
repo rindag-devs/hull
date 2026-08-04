@@ -23,7 +23,6 @@
 # Runs the solution and interactor in one deterministic session with bounded in-process pipes.
 # A connected protocol deadlock produces time_limit_exceeded without a wall-clock timeout option.
 problem:
-{ }:
 let
   # Languages available to solutions.
   solutionLanguages = problem.solutionLanguages;

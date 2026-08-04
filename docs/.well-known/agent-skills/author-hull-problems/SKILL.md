@@ -1,6 +1,6 @@
 ---
 name: author-hull-problems
-description: Create, complete, adapt, and verify competitive programming problems for Hull from an idea, a partial draft, an existing problem, or an existing problem workspace. Use when an agent must turn incomplete problem-authoring input into a buildable Hull problem, including formal Typst statements and editorials, intended and brute-force solutions, CPLib validators/checkers/generators/interactors, tests, traits, subtasks, targets, generated data, and calibrated resource limits.
+description: Create, complete, adapt, and verify competitive programming problems for Hull from an idea, a partial draft, an existing problem, or an existing workspace. Use when an agent must turn incomplete problem-authoring input into a buildable Hull problem. Covers formal Typst statements and editorials, intended and brute-force solutions, CPLib validators, checkers, generators, and interactors. Also covers tests, traits, subtasks, targets, generated data, and calibrated resource limits.
 ---
 
 # Author Hull Problems
@@ -18,7 +18,7 @@ Read each reference before working on the corresponding phase:
 - Read [hull-configuration.md](references/hull-configuration.md) before initializing a workspace or editing `flake.nix`, `problem.nix`, targets, visibility, languages, or documents.
 - Read [verification.md](references/verification.md) before testing components, calibrating predictions, building, reviewing, or delivering the problem.
 
-## Defaults
+## Defaults And Conventions
 
 Apply these defaults unless the user gives a different requirement:
 
@@ -33,37 +33,55 @@ Apply these defaults unless the user gives a different requirement:
 | Authoring programs | C++ 23. |
 | Participant visibility | Private, except files participants must receive to solve the problem. |
 
-A *program* is either a *solution* or an *authoring* program. Solutions are contestant programs: the intended correct implementation, brute forces, intermediate complexity variants, and deliberately wrong programs. Authoring programs are all other programs: validators, checkers, generators, interactors, graders, and shared headers. Solutions and authoring programs have separate include directories (`solution-include/` and `authoring-include/`) and separate language configurations (`solutionLanguages` and `authoringLanguages`) in `problem.nix`, so a restriction on one role never leaks into the other.
+Do not require the user to provide every field. When enough semantics exist to do so correctly, generate the missing items:
 
-Do not require the user to provide every field. Generate a missing name, full statement, editorial, constraints, solution, standard program, brute-force programs, subtasks, traits, target configuration, tests, or data when enough semantics exist to do so correctly.
+- Name.
+- Full statement and editorial.
+- Constraints.
+- Solution, standard program, and brute-force programs.
+- Subtasks and traits.
+- Target configuration.
+- Tests or data.
+
+### Program Terminology
+
+A **program** is either a **solution** or an **authoring** program. Solutions are contestant programs: the intended correct implementation, brute forces, intermediate complexity variants, and deliberately wrong programs. Authoring programs are all other programs: validators, checkers, generators, interactors, graders, and shared headers.
+
+### Role Isolation
+
+Solutions and authoring programs have separate include directories (`solution-include/` and `authoring-include/`). They also have separate language configurations (`solutionLanguages` and `authoringLanguages`) in `problem.nix`. A restriction on one role never leaks into the other.
+
+### Document Prose
+
+Write document prose in ASD-STE100 Simplified Technical English.
 
 ## Coordinate Other Skills And Agents
 
-- Use a structured asking skill only for decisions that can change problem semantics, legal answers, scoring intent, or an interaction protocol. Batch related decisions and provide a recommended choice.
+- Use a structured asking skill only for decisions that change problem semantics, legal answers, scoring intent, or an interaction protocol. Batch related decisions and provide a recommended choice.
 - Use brainstorming before inventing or materially changing a problem idea.
-- If no solution is supplied, delegate independent solution analysis to a highest-reasoning subagent, then verify the proof and complexity yourself.
-- Parallelize independent solution search, adversarial review, and data-pattern analysis when doing so does not create concurrent writes to one workspace.
-- Keep every writing task under one writer at a time. Subagents may return analysis but must not modify the shared problem workspace unless explicitly assigned exclusive files.
+- If no solution is supplied, delegate independent solution analysis to a highest-reasoning subagent. Then verify the proof and complexity yourself.
+- Parallelize independent solution search, adversarial review, and data-pattern analysis when this parallel work does not create concurrent writes to one workspace.
+- Keep every writing task under one writer at a time. Subagents can return analysis. They must not modify the shared problem workspace unless you assign them exclusive files.
 
 ## Execute The Workflow
 
-Move forward when a phase is coherent. Return to an earlier phase whenever evidence invalidates its assumptions.
+Move forward when a phase is coherent. When evidence invalidates the assumptions of an earlier phase, return to that phase.
 
 ### 1. Classify The Starting Point
 
-Identify whether the input is idea-only, a partial problem, an existing problem to reproduce or adapt, or an existing Hull workspace. Inventory supplied facts without demanding absent optional information.
+Classify the input. It can be idea-only, a partial problem, an existing problem to reproduce or adapt, or an existing Hull workspace. Inventory supplied facts without demanding absent optional information.
 
 ### 2. Resolve The Minimum Contract
 
-Determine the display language, machine identifier, title, task, legal inputs and outputs, constraints, scoring style, limits, and requested targets. Apply defaults for omitted ordinary choices.
+Determine the display language, machine identifier, title, and task. Determine the legal inputs and outputs, constraints, scoring style, limits, and requested targets. Apply defaults for omitted ordinary choices.
 
-For idea-only input, first make the core task precise and ensure it has an intended algorithmic distinction. For partial input, preserve settled semantics and fill gaps. For an existing task, preserve its mathematical contract unless the user requests a semantic change.
+For idea-only input, make the core task precise first. Make sure that it has an intended algorithmic distinction. For partial input, preserve settled semantics. Fill the gaps. For an existing task, preserve its mathematical contract. Change it only if the user requests a semantic change.
 
 ### 3. Inspect Or Initialize The Workspace
 
 Apply [hull-configuration.md](references/hull-configuration.md) to inspect or initialize the selected working directory.
 
-Read the workspace's own conventions and dependencies. Follow the documentation-discovery procedure in [hull-configuration.md](references/hull-configuration.md). Use existing tools first. A missing one-off tool may be obtained with `nix shell`; create or modify project dependencies directly, but ask before permanent system or user-profile installation.
+Read the workspace's own conventions and dependencies. Follow the documentation-discovery procedure in [hull-configuration.md](references/hull-configuration.md). Use existing tools first. A missing one-off tool can be obtained with `nix shell`. Create or modify project dependencies directly. Ask before you install anything permanently in the system or user profile.
 
 ### 4. Establish The Problem Contract
 
@@ -71,13 +89,22 @@ Apply [problem-design-and-statement.md](references/problem-design-and-statement.
 
 ### 5. Implement Solutions
 
-When the user provides an algorithm but no standard program, implement it. When the user provides a standard program but no prose solution, derive and verify its algorithm, proof, and complexity. When neither is supplied, design both.
+When the user provides an algorithm but no standard program, implement it. When the user provides a standard program but no prose solution, derive its algorithm, proof, and complexity. Then verify them. When neither is supplied, design both.
 
 Apply [programs-and-cplib.md](references/programs-and-cplib.md) to implement and explain the required correct and suboptimal solution family.
 
 ### 6. Implement Components And Configuration
 
-Implement the validator, generator, required judging components, concise component tests, documents, groups, traits, subtasks, limits, and requested targets. Apply [programs-and-cplib.md](references/programs-and-cplib.md) to component behavior and [hull-configuration.md](references/hull-configuration.md) to registration and packaging.
+Implement these items:
+
+- Validator.
+- Generator.
+- Required judging components.
+- Concise component tests.
+- Documents, groups, traits, and subtasks.
+- Limits and requested targets.
+
+Apply [programs-and-cplib.md](references/programs-and-cplib.md) to component behavior. Apply [hull-configuration.md](references/hull-configuration.md) to registration and packaging.
 
 For a custom judger or direct `hull.runWasm.script` request, read the online Custom Judgers page linked from [hull-configuration.md](references/hull-configuration.md). Do not reconstruct or duplicate the run-wasm schema from memory.
 
@@ -89,7 +116,7 @@ Apply [data-subtasks-and-limits.md](references/data-subtasks-and-limits.md) to d
 
 ### 8. Calibrate In A Feedback Loop
 
-Run the solution, data, and performance checks in [verification.md](references/verification.md), then apply the calibration rules in [data-subtasks-and-limits.md](references/data-subtasks-and-limits.md). When evidence invalidates an earlier assumption, return to the earliest affected phase and repeat all downstream checks.
+Run the solution, data, and performance checks in [verification.md](references/verification.md). Then apply the calibration rules in [data-subtasks-and-limits.md](references/data-subtasks-and-limits.md). When evidence invalidates an earlier assumption, return to the earliest affected phase. Then repeat all downstream checks.
 
 ### 9. Write The Editorial
 
@@ -97,8 +124,8 @@ After the algorithms, subtasks, and measured complexities are stable, apply [edi
 
 ### 10. Build And Verify
 
-Apply [verification.md](references/verification.md) and resolve every unexpected result before delivery.
+Apply [verification.md](references/verification.md). Resolve every unexpected result before delivery.
 
 ### 11. Deliver
 
-Provide the completion evidence listed in [verification.md](references/verification.md). State any unresolved risk explicitly and do not claim completion while a required check remains unverified.
+Provide the completion evidence listed in [verification.md](references/verification.md). State any unresolved risk explicitly. Do not claim completion if a required check remains unverified.

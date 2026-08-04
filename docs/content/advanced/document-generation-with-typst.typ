@@ -11,7 +11,7 @@ Hull uses #link("https://typst.app/")[Typst] to generate PDFs from problem or co
 
 == How it Works
 
-1. *Declaration in `problem.nix`*: You define documents within the `documents` attribute set. Each entry maps an output filename to a document definition. The `path` attribute of this definition is assigned a document-generating function, such as the built-in `hull.xcpcStatement` helper.
+1. *Declaration in `problem.nix`*: You define documents within the `documents` attribute set. Each entry maps an output filename to a document definition. Assign the `path` attribute of this definition to a document-generating function, such as the built-in `hull.xcpcStatement` helper.
 
   ```nix
   # In problem.nix
@@ -54,7 +54,7 @@ document/
     └── en.typ
 ```
 
-The `en.typ` file does not contain any layout logic. It simply defines a set of variables that the `hull.xcpcStatement` template will use to populate the document.
+The `en.typ` file does not contain any layout logic. It defines a set of variables that the `hull.xcpcStatement` template uses to populate the document.
 
 ```typst
 // In document/statement/en.typ
@@ -78,7 +78,7 @@ Add more languages by adding more statement files. Use a custom document functio
 
 == The `hull-generated.json` Data Structure
 
-The `hull-generated.json` file is the bridge between your Nix configuration and your Typst template. Understanding its structure allows you to fully leverage the available data. Below is a simplified overview of its contents.
+The `hull-generated.json` file is the bridge between your Nix configuration and your Typst template. When you understand its structure, you can use all the available data. Below is a simplified overview of its contents.
 
 ```json
 {
@@ -127,10 +127,10 @@ Templates can render subtasks, samples, and generated metadata directly.
 
 Every embedded sample includes the validator's full reader trace at `samples.#.input-validation.reader-trace-tree`. The standard `hull.xcpcStatement` template recognizes two CPLib tags attached to nodes in this trace:
 
-- `hull/case` is an integer identifying a logical test case. The template gives consecutive cases alternating background colors and labels their first lines, which makes multi-test samples easier to follow.
+- `hull/case` is an integer identifying a logical test case. The template gives consecutive cases alternating background colors. It labels their first lines. This makes multi-test samples easier to follow.
 - `hull/graph` describes a graph or tree. Its `name` is a string and `nodes` is a list of strings. Each edge has string endpoints `u` and `v`, a Boolean `directed` value, and an optional string `w` label. The template renders the graph below the sample.
 
-Attach the tags while reading the corresponding structure in the validator. Full traces are produced for statement samples, so guard additional tag construction by the trace level when it is expensive.
+Attach the tags while reading the corresponding structure in the validator. Full traces are produced for statement samples. Guard additional tag construction by the trace level when it is expensive.
 
 ```cpp
 if (in.get_trace_level() >= cplib::trace::Level::FULL) {
@@ -156,10 +156,10 @@ if (in.get_trace_level() >= cplib::trace::Level::FULL) {
 }
 ```
 
-Attach `hull/case` to the reader node that spans one complete test case. Attach `hull/graph` to the node that spans the represented graph; multiple named graphs are rendered in name order. Omit `w` for unweighted edges.
+Attach `hull/case` to the reader node that spans one complete test case. Attach `hull/graph` to the node that spans the represented graph. Multiple named graphs are rendered in name order. Omit `w` for unweighted edges.
 
 == Generating Contest Booklets
 
-The same principles apply to generating documents for an entire contest. The `cnoiParticipant` target, for example, uses the `hull.document.mkContestTypstDocument` function.
+The same principles apply when you generate documents for an entire contest. The `cnoiParticipant` target, for example, uses the `hull.document.mkContestTypstDocument` function.
 
 It aggregates all problems into one JSON input for Typst.

@@ -13,7 +13,7 @@
       "type": "archive",
       "description": "Create, complete, adapt, and verify competitive programming problems for Hull from an idea, a partial draft, an existing problem, or an existing problem workspace. Use when an agent must turn incomplete problem-authoring input into a buildable Hull problem, including formal Typst statements, intended and brute-force solutions, CPLib validators/checkers/generators/interactors, tests, traits, subtasks, targets, generated data, and calibrated resource limits.",
       "url": "/.well-known/agent-skills/author-hull-problems.tar.gz",
-      "digest": "sha256:cdb5c39abcc5fa38f2210e97a8edb1c7a4b530330ce8219dd9869ba3a42adca9"
+      "digest": "sha256:eec9f10bd9b6ef7f23fdcabf628dacb7db2c3fceba3da0ce463a34c1df614958"
     }
   ]
 }

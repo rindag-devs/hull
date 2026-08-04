@@ -25,6 +25,7 @@ Hull is a Nix-based framework for competitive programming problem authoring, run
 
 ## Documentation And Comments
 
+- All natural-language documentation in English must follow ASD-STE100 Simplified Technical English. This applies to documentation, skills, the README, and all other prose.
 - Documentation and comments must be concise and durable.
 - Avoid time-sensitive words such as `current`, `currently`, `latest`, `new`, `recent`, `now`, and `today`.
 - Avoid filler comments that restate the code.

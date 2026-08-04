@@ -23,8 +23,8 @@ Enable Flakes in the Nix configuration file.
 
 The location of this file depends on your system:
 
-- On NixOS: `/etc/nixos/configuration.nix`
-- On Linux (multi-user install) or macOS: `~/.config/nix/nix.conf` (you may need to create the file and directory).
+- On NixOS: `/etc/nixos/configuration.nix`.
+- On Linux (multi-user install) or macOS: `~/.config/nix/nix.conf` (create the file and directory if they do not exist).
 
 Add the following lines to your configuration file:
 
@@ -46,9 +46,9 @@ nix flake --version
 
 == Creating a New Problem
 
-Using an AI agent is the recommended way to create a Hull problem. Point an agent that supports Agent Skills to the #link("https://hull.aberter0x3f.top/.well-known/agent-skills/index.json")[Hull skill index] and ask it to use `author-hull-problems`. The #link("https://hull.aberter0x3f.top/.well-known/agent-skills/author-hull-problems.tar.gz")[skill archive] is also available directly.
+Using an AI agent is the recommended way to create a Hull problem. Point an agent that supports Agent Skills to the #link("https://hull.aberter0x3f.top/.well-known/agent-skills/index.json")[Hull skill index]. Ask it to use `author-hull-problems`. The #link("https://hull.aberter0x3f.top/.well-known/agent-skills/author-hull-problems.tar.gz")[skill archive] is also available directly.
 
-You may give the agent only an idea, a partial problem, an existing problem, or an existing Hull workspace. Ask it to complete omitted details, initialize the basic template when needed, and implement and verify the problem in your workspace.
+You can give the agent only an idea, a partial problem, an existing problem, or an existing Hull workspace. Ask it to complete omitted details. Ask it to initialize the basic template when needed. Ask it to implement and verify the problem in your workspace.
 
 To create a problem manually, use the Hull template.
 
@@ -71,6 +71,6 @@ Inside this shell:
 
 - The `hull` command-line interface (CLI) is available in your `PATH`.
 - Compilers such as `wasm32-wasi-wasip1-clang++` produce WASI Preview 1 source WASM modules for Hull's Wasmtime-backed runner.
-- Environment variables are set up for seamless integration with libraries like `cplib`.
+- Environment variables are configured for integration with libraries such as `cplib`.
 
 Run Hull commands inside this shell.

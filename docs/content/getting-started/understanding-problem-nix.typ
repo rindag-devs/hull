@@ -25,11 +25,11 @@ These options define the fundamental properties of your problem.
 }
 ```
 
-- `name`: A unique, machine-readable identifier for the problem. It should be a simple string (e.g., `camelCase`) without spaces or special characters. This name is used for directory structures and internal references.
-- `displayName`: An attribute set containing human-readable titles for the problem in different languages. The keys are language codes (e.g., `en`, `zh`).
-- `tickLimit`: The default execution time limit for solutions, measured in "ticks". A common starting point is `1000 * 10000000` ticks, which roughly corresponds to 1 second of execution time in the WASM runtime.
+- `name`: A unique, machine-readable identifier for the problem. It must be a simple string (for example, `camelCase`) without spaces or special characters. This name is used for directory structures and internal references.
+- `displayName`: An attribute set containing human-readable titles for the problem in different languages. The keys are language codes (for example, `en`, `zh`).
+- `tickLimit`: The default execution time limit for solutions, measured in "ticks". A common starting point is `1000 * 10000000` ticks. This roughly corresponds to 1 second of execution time in the WASM runtime.
 - `memoryLimit`: The default memory limit for solutions, measured in bytes.
-- `fileSizeLimit`: The byte ceiling applied independently to each contestant-controlled regular file or pipe. It defaults to 1 GiB. A regular file is limited by its logical length, including initial contents; a pipe is limited by cumulative successful writes. Exceeding a governed file produces `file_error`.
+- `fileSizeLimit`: The byte ceiling applied independently to each contestant-controlled regular file or pipe. It defaults to 1 GiB. A regular file is limited by its logical length, including initial contents. A pipe is limited by cumulative successful writes. Exceeding a governed file produces `file_error`.
 
 == Programs, Solutions, And Authoring
 
@@ -38,7 +38,7 @@ Hull calls every compiled component a *program*. A program is either a *solution
 - A *solution* is a contestant program: the intended correct implementation, a brute force, an intermediate complexity variant, or a deliberately wrong program.
 - An *authoring* program is any program that supports problem authoring and judging: validators, checkers, generators, interactors, graders, and shared headers.
 
-Solutions and authoring programs have separate include directories and separate language configurations in `problem.nix`, so restricting one role never leaks into the other:
+Solutions and authoring programs have separate include directories and separate language configurations in `problem.nix`. A restriction on one role never leaks into the other:
 
 - `solutionIncludes` / `solutionLanguages` apply to solutions. Add a grader header that solutions must include to `solution-include/`.
 - `authoringIncludes` / `authoringLanguages` apply to authoring programs. Add shared definitions such as `problem.23.hpp` to `authoring-include/`.
@@ -56,7 +56,7 @@ Solutions and authoring programs have separate include directories and separate 
 }
 ```
 
-You provide the source code for the core programs, and Hull handles the compilation and execution within its deterministic environment:
+You provide the source code for the core programs. Hull handles the compilation and execution within its deterministic environment:
 
 ```nix
 {
@@ -69,7 +69,7 @@ You provide the source code for the core programs, and Hull handles the compilat
 ```
 
 - `checker`: The authoring program responsible for comparing a solution's output against the standard answer to determine correctness. It can award partial scores.
-- `validator`: The authoring program that reads a test case input file and verifies that it conforms to the problem's specified format and constraints. This is a critical step to ensure all test data is valid.
+- `validator`: The authoring program that reads a test case input file and verifies that it conforms to the problem's specified format and constraints. This is a critical step to make sure that all test data is valid.
 - `generators`: An attribute set of input generator authoring programs.
 
 == C and C++ Compilation
@@ -93,7 +93,7 @@ You provide the source code for the core programs, and Hull handles the compilat
 }
 ```
 
-A problem that restricts solutions (for example `standardIncludes = false`, which adds `-nostdinc`) sets it only on `solutionLanguages`; authoring programs keep the unrestricted language definition under `authoringLanguages`.
+A problem that restricts solutions sets it only on `solutionLanguages`. For example, `standardIncludes = false` adds `-nostdinc`. Authoring programs keep the unrestricted language definition under `authoringLanguages`.
 
 Each factory option has `default = context: value;` and `validate = valueExpression: shellCode;` fields. Overrides are merged by field. The context contains `language` (`"c"` or `"cpp"`) and the suffix-derived `standard`.
 
@@ -147,20 +147,20 @@ The `testCases` attribute set is where you define every test case for your probl
 }
 ```
 
-Each attribute in `testCases` defines a test case. The name of the attribute (e.g., `manual-1`) becomes the unique name of the test case.
+Each attribute in `testCases` defines a test case. The name of the attribute (for example, `manual-1`) becomes the unique name of the test case.
 
 - `inputFile`: Use this to specify a path to a manually created input file.
 - `generator`: Use this to specify the name of a generator (from the `generators` set) to create the input file.
   - `arguments`: A list of command-line arguments to pass to the generator. This allows you to create many different test cases from a single generator program.
-- `groups`: A list of strings to categorize the test case. The group `"sample"` is special and indicates that the test case should be treated as a sample for problem statements.
+- `groups`: A list of strings to categorize the test case. The group `"sample"` is special. It indicates that the test case must be treated as a sample for problem statements.
 
 == Subtasks & Scoring
 
-Hull uses a system of "traits" to define subtasks. A trait is a specific property that a test case might have (e.g., "$N <= 100$").
+Hull uses a system of "traits" to define subtasks. A trait is a specific property that a test case can have (for example, "$N <= 100$").
 
-1. First, you declare all possible traits for the problem.
+1. Declare all possible traits for the problem.
 2. The `validator` is responsible for detecting which traits are present in a given input file.
-3. Then, you define subtasks based on combinations of these traits.
+3. Define subtasks based on combinations of these traits.
 
 ```nix
 {
@@ -197,7 +197,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
 
 - `traits`: An attribute set where you declare every trait your problem uses. Each trait can have a `descriptions` for different languages.
 - `subtasks`: A list of subtask definitions. Hull automatically assigns test cases to a subtask if they satisfy its `traits` requirements.
-  - `traits`: An attribute set specifying the required traits for this subtask.
+  - `traits`: An attribute set that specifies the required traits for this subtask.
   - `fullScore`: The score awarded for passing all test cases in this subtask. The total score of the problem is the sum of all subtask scores.
 
 == Solutions
@@ -230,7 +230,7 @@ Hull uses a system of "traits" to define subtasks. A trait is a specific propert
 ```
 
 - `mainCorrectSolution`: Exactly one solution must set this to `true`. Hull uses it to generate official outputs.
-- `subtaskPredictions`: An attribute set keyed by zero-based subtask indices as strings. Each value is a Nix function that checks the analyzed result.
+- `subtaskPredictions`: An attribute set keyed by zero-based subtask indices as strings. Each value is a Nix function that evaluates the analyzed result.
 
 == Documents & Targets
 

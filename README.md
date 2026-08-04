@@ -17,13 +17,15 @@ Visit the [documentation home page][docs] to learn more.
 
 ## Features
 
-- **Reproducible problem pipelines.** Nix definitions connect programs, generated data, validation, official outputs, solution predictions, documents, and packages in one buildable problem model.
+Hull treats a problem as one reproducible pipeline rather than a collection of scripts.
+
+- **Reproducible problem pipelines.** Nix definitions connect programs, generated data, validation, official outputs, solution predictions, documents, and packages in one buildable problem model. A build checks the relationships between them. It does not merely compile files.
 - **Deterministic WASIp1 execution.** Hull runs authoritative source WASM with explicit tick, memory, filesystem, standard-stream, and per-resource file-size contracts, including deterministic multi-program interaction.
-- **First-class [Typst integration](https://hull.aberter0x3f.top/advanced/document-generation-with-typst/).** Build multilingual statements, technical overviews, and contest booklets from analyzed problem data, with automatic samples, subtasks, and validator-backed visualizations.
-- **Programmable [judging workflows](https://hull.aberter0x3f.top/advanced/custom-judgers/).** Use built-in batch, interactive, and answer-only models, or define a custom judger for multi-stage evaluation, custom protocols, and specialized scoring.
-- **Extensible [problem and contest targets](https://hull.aberter0x3f.top/advanced/problem-and-contest-targets/).** Package for supported judge systems and participant environments, or write a custom target for a project-specific output format.
-- **End-to-end parallel execution.** Problem builds, contest builds, judging, and stress testing use available CPU parallelism by default. Artifact builds and packaging retain Nix's own parallel scheduling, allowing high-core-count servers to process large solution and testcase sets with high throughput.
-- **[AI-agent-friendly authoring](https://hull.aberter0x3f.top/getting-started/installation-and-setup/#creating-a-new-problem).** Published Agent Skills, `llms.txt`, Typst source mirrors, and generated option references give AI agents structured entry points for creating and maintaining complete Hull problems.
+- **Data-driven [Typst documents](https://hull.aberter0x3f.top/advanced/document-generation-with-typst/).** Generate multilingual statements, technical overviews, and contest booklets from analyzed problem data. Templates can inject samples and subtasks. They can render validator-backed visualizations.
+- **Programmable [judging](https://hull.aberter0x3f.top/advanced/custom-judgers/).** Start with batch, standard-input/standard-output interaction, or answer-only judging. Define a custom judger when a problem needs multiple evaluation stages, a specialized protocol, or custom scoring.
+- **Targets are an [extension point](https://hull.aberter0x3f.top/advanced/problem-and-contest-targets/).** Package a problem or contest for supported judge systems and participant environments. Define a target for a project-specific directory, archive, or deployment format when needed.
+- **End-to-end parallel execution.** Hull uses available CPU parallelism by default across problem builds, contest builds, judging, and stress testing. Artifact builds and final packaging retain Nix's own parallel scheduling. This lets high-core-count servers process large solution and testcase sets with high throughput.
+- **Designed for [AI agents](https://hull.aberter0x3f.top/getting-started/installation-and-setup/#creating-a-new-problem).** Hull publishes Agent Skills, `llms.txt`, Typst source mirrors, and generated Nix option references. An agent can use these machine-readable entry points to discover exact configuration. It can also follow a complete problem-authoring workflow.
 
 ## License
 
