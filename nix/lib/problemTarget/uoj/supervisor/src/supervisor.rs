@@ -152,7 +152,8 @@ impl Supervisor {
       .arg("/work/hull-uoj-result")
       .arg("/data")
       .env("XDG_CACHE_HOME", &cache)
-      .env("HOME", &self.args.work);
+      .env("HOME", &self.args.work)
+      .env("TMPDIR", &self.args.work);
     let mut group = ProcessGroup::spawn(&mut command)?;
     let mut completed: Option<Snapshot> = None;
     let outcome = group.poll(&self.signals, || {
@@ -265,6 +266,26 @@ mod tests {
     }
   }
 
+  fn cleanup_failure_script(
+    work: &std::path::Path,
+    result: &std::path::Path,
+    expected_tmpdir: Option<&std::path::Path>,
+  ) -> String {
+    // Create a directory where cleanup expects a file. This forces cleanup to fail after the signal.
+    let check_tmpdir = expected_tmpdir
+      .map(|path| format!("test \"$TMPDIR\" = '{}'\n", path.display()))
+      .unwrap_or_default();
+    format!(
+      "{check_tmpdir}fifo='{}/signal'\n\
+       mkfifo \"$fifo\"\n\
+       trap 'rm -f \"$fifo\"; exit 0' TERM\n\
+       mkdir '{}/result.txt'\n\
+       read <\"$fifo\"",
+      work.display(),
+      result.display()
+    )
+  }
+
   fn signal_when(
     path: PathBuf,
     thread: libc::pthread_t,
@@ -278,6 +299,7 @@ mod tests {
             path.display()
           ));
         }
+        // Poll the readiness file without blocking the test thread forever.
         std::thread::sleep(Duration::from_millis(10));
       }
       let result = unsafe { libc::pthread_kill(thread, libc::SIGTERM) };
@@ -436,7 +458,7 @@ mod tests {
     fs::write(bundle.join("nix-store.tar.zst"), "payload").unwrap();
     script(
       &args.data.join("zstd"),
-      &format!("mkdir '{}'/result.txt; sleep 1", args.result.display()),
+      &cleanup_failure_script(&args.work, &args.result, None),
     );
     script(&args.data.join("busybox"), "cat >/dev/null");
 
@@ -482,7 +504,7 @@ mod tests {
     fs::write(args.work.join("submission.conf"), "answer_language C++20\n").unwrap();
     script(
       &chroot,
-      &format!("mkdir '{}'/result.txt; sleep 1", args.result.display()),
+      &cleanup_failure_script(&args.work, &args.result, Some(&args.work)),
     );
 
     let signals = SignalMonitor::new().unwrap();

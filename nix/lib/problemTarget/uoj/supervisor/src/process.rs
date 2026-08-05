@@ -332,9 +332,10 @@ mod tests {
   #[test]
   fn kills_ignorer() {
     let mut command = Command::new("sh");
+    // Keep the child alive after it ignores TERM. The supervisor must then send KILL.
     command
       .arg("-c")
-      .arg("trap '' TERM; printf ready; while :; do sleep 1; done")
+      .arg("trap '' TERM; printf ready; exec tail -f /dev/null")
       .stdout(Stdio::piped());
     let mut group = ProcessGroup::spawn(&mut command).unwrap();
     let mut stdout = group.take_stdout(0).unwrap();
@@ -355,9 +356,10 @@ mod tests {
   fn reaps_grandchild() {
     enable_subreaper().unwrap();
     let mut command = Command::new("sh");
+    // Keep both processes alive. The supervisor must terminate and reap the adopted grandchild.
     command
       .arg("-c")
-      .arg("(trap '' TERM; while :; do sleep 1; done) & printf ready; while :; do sleep 1; done")
+      .arg("(trap '' TERM; exec tail -f /dev/null) & printf ready; wait")
       .stdout(Stdio::piped());
     let mut group = ProcessGroup::spawn(&mut command).unwrap();
     let mut stdout = group.take_stdout(0).unwrap();

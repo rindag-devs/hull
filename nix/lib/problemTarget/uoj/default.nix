@@ -250,6 +250,7 @@ assert lib.assertMsg (
         uoj_work_path="$4"
         uoj_result_path="$5"
         uoj_data_path="$6"
+        export TMPDIR="$uoj_work_path"
         exec ${lib.getExe targetHullPkgs.default} integration-judge uoj \
           --bundle-root "$bundle_root" \
           --metadata-path "problem.json" \

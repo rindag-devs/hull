@@ -318,10 +318,12 @@ test_uoj() {
   require_executable "$root/package/judger"
   require_executable "$root/package/busybox"
   require_executable "$root/package/zstd"
-  mkdir "$root/main" "$root/work" "$root/result"
+  mkdir "$root/main" "$root/work" "$root/result" "$root/external-tmp"
   cp "$root/package/hull-bundle/solutions/std.20.cpp" "$root/work/answer.code"
   printf '%s\n' 'answer_language C++20' >"$root/work/submission.conf"
-  "$root/package/judger" "$root/main" "$root/work" "$root/result" "$root/package"
+  TMPDIR="$root/external-tmp" \
+    "$root/package/judger" "$root/main" "$root/work" "$root/result" "$root/package"
+  test -z "$(find "$root/external-tmp" -mindepth 1 -print -quit)"
   grep -Fx 'score 100' "$root/result/result.txt" >/dev/null
   grep -E '^time [0-9]+$' "$root/result/result.txt" >/dev/null
   grep -E '^memory [0-9]+$' "$root/result/result.txt" >/dev/null
