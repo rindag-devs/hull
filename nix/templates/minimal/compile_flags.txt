@@ -1,1 +1,2 @@
 -Iauthoring-include
+-Isolution-include
