@@ -159,7 +159,7 @@ fn extract(package: &Path, staging: &Path, signals: &SignalMonitor) -> Result<()
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::os::unix::fs::PermissionsExt;
+  use crate::fixtures::script;
   use std::sync::atomic::{AtomicU64, Ordering};
 
   static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -172,13 +172,6 @@ mod tests {
     ));
     fs::create_dir_all(&path).unwrap();
     path
-  }
-
-  fn script(path: &Path, body: &str) {
-    fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
-    let mut permissions = fs::metadata(path).unwrap().permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions).unwrap();
   }
 
   #[test]

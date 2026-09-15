@@ -16,6 +16,8 @@
 mod archive;
 mod config;
 mod files;
+#[cfg(test)]
+mod fixtures;
 mod process;
 mod result;
 mod supervisor;
