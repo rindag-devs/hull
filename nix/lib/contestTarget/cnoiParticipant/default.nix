@@ -16,16 +16,15 @@
 {
   lib,
   pkgs,
+  buildPkgs,
   hull,
-  hullPkgs,
-  targetHullPkgsForSystem,
-  targetPkgsForSystem,
-  targetHullForSystem,
 }:
 
 {
-  # System used to build bundled self-eval tools.
-  # Defaults to cross-machine compatible Linux x86_64 for judge deployment.
+  # System that runs the bundled self-eval tools.
+  # The value is a system double, an elaborated platform, or null.
+  # Null selects the build machine.
+  # The default is x86_64-linux, because the CNOI participant judge platform is x86_64 Linux.
   targetSystem ? "x86_64-linux",
 
   # Display languages for documents.
@@ -83,6 +82,9 @@
   zipCompressionLevel ? 9,
 }:
 
+let
+  target = hull.forTarget targetSystem;
+in
 assert lib.assertMsg (
   builtins.isInt xzCompressionLevel && xzCompressionLevel >= 0 && xzCompressionLevel <= 9
 ) "cnoiParticipant xzCompressionLevel must be an integer from 0 to 9";
@@ -93,6 +95,8 @@ assert lib.assertMsg (
 assert lib.assertMsg (
   builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
 ) "cnoiParticipant zipCompressionLevel must be an integer from 0 to 9";
+assert lib.assertMsg target.pkgs.stdenv.hostPlatform.isLinux
+  "The CNOI participant target needs a Linux target machine. Set targetSystem to a Linux system.";
 {
   _type = "hullContestTarget";
   __functor =
@@ -102,18 +106,8 @@ assert lib.assertMsg (
       ...
     }@contest:
     let
-      targetHullPkgs = targetHullPkgsForSystem targetSystem;
-      targetPkgs = targetPkgsForSystem targetSystem;
-      targetHull = targetHullForSystem targetSystem;
-      nixUserChroot = targetHullPkgs.nix-user-chroot;
-      retargetRunner =
-        runner:
-        if runner ? retarget then
-          runner.retarget {
-            inherit targetPkgs targetHullPkgs targetHull;
-          }
-        else
-          runner;
+      nixUserChroot = target.hullPkgs.nix-user-chroot;
+      retargetRunner = runner: if runner ? retarget then runner.retarget { inherit target; } else runner;
 
       mkSampleCommand =
         { samples, ... }@problem:
@@ -292,18 +286,18 @@ assert lib.assertMsg (
         ) problems}
       '';
 
-      selfEvalRunner = targetPkgs.writeShellScriptBin "selfeval-run" ''
+      selfEvalRunner = target.pkgs.writeShellScriptBin "selfeval-run" ''
         bundle_root="$1"
         package_root="$2"
         shift
         shift
-        exec ${lib.getExe targetHullPkgs.default} integration-judge cnoi --bundle-root "$bundle_root" --package-root "$package_root" "$@"
+        exec ${lib.getExe target.hullPkgs.default} integration-judge cnoi --bundle-root "$bundle_root" --package-root "$package_root" "$@"
       '';
 
       selfEvalTargets = [
         selfEvalRunner
-        targetHullPkgs.default
-        targetHullPkgs.wasm32-wasi-wasip1.clang
+        target.hullPkgs.default
+        target.hullPkgs.wasm32-wasi-wasip1.clang
         selfEvalData
         nixUserChroot
       ]
@@ -492,11 +486,11 @@ assert lib.assertMsg (
         cp -r --no-preserve=ownership ${outputDir}/. "$tmp_archive_dir/"
         chmod -R u+rwX,go+rX "$tmp_archive_dir"
         rm -rf "$out"
-        tar -C "$tmp_archive_dir" -cf - . | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
+        tar -C "$tmp_archive_dir" -cf - . | ${lib.getExe buildPkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
       ''
     else if archiveMode == "zip" then
       pkgs.runCommandLocal "hull-contestTargetOutput-${contest.name}-cnoiParticipant.zip"
-        { nativeBuildInputs = [ pkgs._7zz ]; }
+        { nativeBuildInputs = [ buildPkgs._7zz ]; }
         ''
           tmp_archive_dir=$(mktemp -d)
           trap 'rm -rf "$tmp_archive_dir"' EXIT

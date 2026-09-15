@@ -14,11 +14,8 @@
 */
 
 {
-  pkgs,
-  hullPkgs,
-  targetHullPkgsForSystem,
-  targetPkgsForSystem,
-  targetHullForSystem,
+  context,
+  forTarget,
   typixLib,
   cplib,
   cplibInitializers,
@@ -26,24 +23,40 @@
 }:
 
 let
+  inherit (context)
+    pkgs
+    buildPkgs
+    targetNativePkgs
+    hullPkgs
+    buildHullPkgs
+    buildSystem
+    targetSystem
+    ;
+
+  lib = pkgs.lib;
+
   callSubLib =
     p:
     import p {
       inherit
         hull
+        lib
         pkgs
+        buildPkgs
+        targetNativePkgs
         hullPkgs
-        targetHullPkgsForSystem
-        targetPkgsForSystem
-        targetHullForSystem
+        buildHullPkgs
+        buildSystem
+        forTarget
         typixLib
         cplib
         cplibInitializers
         x86_64-linux-gnu217-cross
         ;
-      inherit (pkgs) lib;
     };
 
+  # Every submodule reads the same library value, which carries its platform
+  # context. `forTarget` returns another library of this shape.
   hull = {
     check = callSubLib ./check.nix;
     compile = callSubLib ./compile.nix;
@@ -65,6 +78,18 @@ let
 
     contestModule = ./contestModule;
     problemModule = ./problemModule;
+  }
+  // {
+    inherit
+      pkgs
+      buildPkgs
+      targetNativePkgs
+      hullPkgs
+      buildHullPkgs
+      buildSystem
+      targetSystem
+      forTarget
+      ;
   };
 in
 hull

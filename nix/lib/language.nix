@@ -226,7 +226,7 @@ let
 
   sourceConfigScript =
     {
-      sourceConfigHullPkgs,
+      hullPkgs,
       language,
       srcExpr,
       options,
@@ -257,7 +257,7 @@ let
     ''
       ${initializers}
       hull_source_config_tsv=$(mktemp)
-      if ! ${sourceConfigHullPkgs.default}/bin/hull source-config ${lib.escapeShellArg language} < ${srcExpr} > "$hull_source_config_tsv"; then
+      if ! ${hullPkgs.default}/bin/hull source-config ${lib.escapeShellArg language} < ${srcExpr} > "$hull_source_config_tsv"; then
         rm -f "$hull_source_config_tsv"
         exit 1
       fi
@@ -285,7 +285,6 @@ let
       isCpp,
       language,
       options,
-      sourceConfigHullPkgs,
     }:
     {
       srcExpr,
@@ -308,7 +307,7 @@ let
         inherit
           language
           options
-          sourceConfigHullPkgs
+          hullPkgs
           srcExpr
           ;
       }}
@@ -343,9 +342,8 @@ let
 
   compileCFamily =
     {
-      pkgs,
+      buildPkgs,
       hullPkgs,
-      buildHullPkgs,
       isCpp,
       language,
       options,
@@ -361,7 +359,7 @@ let
       namePrefix = if outputObject then "obj" else "wasm";
       extName = if outputObject then "o" else "wasm";
     in
-    pkgs.runCommandLocal "hull-${namePrefix}-${name}.${extName}" { } ''
+    buildPkgs.runCommandLocal "hull-${namePrefix}-${name}.${extName}" { } ''
       cp ${src} src.code
       ${
         (mkCFamilyCompileScript {
@@ -371,7 +369,6 @@ let
             language
             options
             ;
-          sourceConfigHullPkgs = buildHullPkgs;
         })
           {
             inherit
@@ -395,7 +392,7 @@ let
     {
       compiler =
         {
-          pkgs,
+          buildPkgs,
           hullPkgs,
           buildHullPkgs,
           ...
@@ -403,13 +400,12 @@ let
         let
           compilerDrv = compileCFamily {
             inherit
-              pkgs
-              hullPkgs
-              buildHullPkgs
+              buildPkgs
               isCpp
               language
               options
               ;
+            hullPkgs = buildHullPkgs;
           };
           compilerScript = mkCFamilyCompileScript {
             inherit
@@ -418,7 +414,6 @@ let
               language
               options
               ;
-            sourceConfigHullPkgs = hullPkgs;
           };
         in
         {

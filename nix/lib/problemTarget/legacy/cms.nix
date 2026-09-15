@@ -17,7 +17,6 @@
   lib,
   hull,
   pkgs,
-  cplib,
   cplibInitializers,
 }:
 
@@ -64,9 +63,9 @@ let
       # A map of name to file path. These files will be placed in `att/`.
       attachments ? { },
 
-      # Specify the target system for the package.
-      # `null` means using the local system.
-      # e.g.: "aarch64-multiplatform" for ARM64 Linux.
+      # System that runs the compiled checker.
+      # The value is a system double, an elaborated platform, or null.
+      # The default is null, and null selects the build machine.
       targetSystem ? null,
     }:
 
@@ -220,7 +219,7 @@ let
             programName = "cmsChecker";
             src = patchedChecker;
             compileCommand = checkerCompileCommand problem.authoringIncludes;
-            stdenv = (if targetSystem == null then pkgs else pkgs.pkgsCross.${targetSystem}).pkgsStatic.stdenv;
+            stdenv = (hull.forTarget targetSystem).pkgs.pkgsStatic.stdenv;
           };
 
           # Generate content for task.yaml.

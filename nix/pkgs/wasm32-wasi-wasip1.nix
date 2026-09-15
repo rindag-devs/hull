@@ -14,34 +14,24 @@
 */
 
 {
-  lib,
   pkgs,
-  buildPkgs,
-  hull,
-  ...
 }:
 
-{
-  cnoiParticipant = import ./cnoiParticipant {
-    inherit
-      lib
-      pkgs
-      buildPkgs
-      hull
-      ;
+# The WebAssembly data is platform independent. One build serves every target.
+rec {
+  compiler-rt = pkgs.callPackage ./compiler-rt.nix { };
+
+  libc = pkgs.callPackage ./libc {
+    inherit compiler-rt;
   };
 
-  common = import ./common.nix {
-    inherit lib pkgs;
+  libstdcxx = pkgs.callPackage ./libstdcxx {
+    inherit compiler-rt libc;
   };
 
-  lemon = import ./lemon.nix {
-    inherit lib pkgs;
-  };
-
-  legacy = {
-    lemon = import ./legacy/lemon.nix {
-      inherit lib pkgs;
-    };
-  };
+  sysroot = pkgs.runCommandLocal "wasm32-wasi-wasip1-sysroot" { } ''
+    mkdir -p $out
+    cp -R -L --no-preserve=ownership,mode ${libc}/. $out/
+    cp -R -L --no-preserve=ownership,mode ${libstdcxx}/. $out/
+  '';
 }

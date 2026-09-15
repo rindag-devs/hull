@@ -20,6 +20,7 @@
   cplib,
   cplibInitializers,
   x86_64-linux-gnu217-cross,
+  buildSystem,
 }:
 
 let
@@ -310,7 +311,7 @@ let
           needChecker = modeConfig.needChecker;
           needInteractor = modeConfig.needInteractor;
 
-          crossClang = x86_64-linux-gnu217-cross.packages.${pkgs.stdenv.hostPlatform.system}.clang;
+          crossClang = x86_64-linux-gnu217-cross.packages.${buildSystem}.clang;
 
           wrapJudgerProgram =
             programName: src:

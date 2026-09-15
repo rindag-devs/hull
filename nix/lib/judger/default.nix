@@ -17,17 +17,12 @@
   lib,
   hull,
   pkgs,
-  hullPkgs,
   ...
 }:
 
 let
   writeShellApplicationWithContext =
-    {
-      targetPkgs,
-      targetHullPkgs,
-      targetHull,
-    }:
+    { target }:
     args@{
       text,
       runtimeInputs ? [ ],
@@ -39,12 +34,12 @@ let
         value:
         if builtins.isFunction value then
           value {
-            inherit targetPkgs targetHullPkgs targetHull;
+            inherit target;
           }
         else
           value;
     in
-    targetPkgs.writeShellApplication (
+    target.pkgs.writeShellApplication (
       (builtins.removeAttrs args [
         "text"
         "runtimeInputs"
@@ -54,7 +49,7 @@ let
         text = evalArg text;
         runtimeInputs = evalArg runtimeInputs;
         passthru = passthru // {
-          retarget = context: writeShellApplicationWithContext context args;
+          retarget = { target }: writeShellApplicationWithContext { inherit target; } args;
         };
       }
     );
@@ -160,31 +155,18 @@ let
     '';
 in
 {
-  writeShellApplication = writeShellApplicationWithContext {
-    targetPkgs = pkgs;
-    targetHullPkgs = hullPkgs;
-    targetHull = hull;
-  };
+  writeShellApplication = writeShellApplicationWithContext { target = hull; };
 
   batch = import ./batch.nix {
     inherit
       lib
       hull
-      pkgs
-      hullPkgs
       ;
   };
 
-  stdioInteraction = import ./stdioInteraction.nix {
-    inherit
-      lib
-      hull
-      pkgs
-      hullPkgs
-      ;
-  };
+  stdioInteraction = import ./stdioInteraction.nix { inherit hull; };
 
-  answerOnly = import ./answerOnly.nix { inherit lib hull pkgs; };
+  answerOnly = import ./answerOnly.nix { inherit hull; };
 
   runGenerateOutputs =
     problem: testCase: solution:

@@ -15,8 +15,6 @@
 
 {
   hull,
-  pkgs,
-  lib,
 }:
 
 # Judger for "answer only" type problems, where the source is the answer file.
@@ -27,10 +25,10 @@ problem: {
     name = "hull-judger-answerOnly-prepareSolution-${problem.name}";
     inheritPath = false;
     runtimeInputs =
-      { targetPkgs, ... }:
+      { target, ... }:
       [
-        targetPkgs.coreutils
-        targetPkgs.jq
+        target.pkgs.coreutils
+        target.pkgs.jq
       ];
     text = ''
       cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
@@ -43,7 +41,7 @@ problem: {
   generateOutputs = hull.judger.writeShellApplication {
     name = "hull-judger-answerOnly-generateOutputs-${problem.name}";
     inheritPath = false;
-    runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
+    runtimeInputs = { target, ... }: [ target.pkgs.coreutils ];
     text = ''
       mkdir -p "$HULL_OUTPUTS_DIR"
       install -Tm644 "$HULL_SOLUTION_SRC" "$HULL_OUTPUTS_DIR/output"
@@ -54,20 +52,20 @@ problem: {
     name = "hull-judger-answerOnly-judge-${problem.name}";
     inheritPath = false;
     runtimeInputs =
-      { targetPkgs, ... }:
+      { target, ... }:
       [
-        targetPkgs.coreutils
-        targetPkgs.jq
+        target.pkgs.coreutils
+        target.pkgs.jq
       ];
     text =
-      { targetHull, ... }:
+      { target, ... }:
       ''
         answer_path="$HULL_OFFICIAL_OUTPUTS_DIR/output"
-        ${targetHull.check.script {
+        ${target.check.script {
           checkerWasm = problem.checker.wasm;
-          input = targetHull.runWasm.dynamicString "HULL_INPUT_PATH";
-          output = targetHull.runWasm.dynamicString "HULL_SOLUTION_SRC";
-          answer = targetHull.runWasm.dynamicString "answer_path";
+          input = target.runWasm.dynamicString "HULL_INPUT_PATH";
+          output = target.runWasm.dynamicString "HULL_SOLUTION_SRC";
+          answer = target.runWasm.dynamicString "answer_path";
           fileSizeLimits = {
             input = "tool";
             output = problem.fileSizeLimit;

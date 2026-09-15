@@ -109,13 +109,13 @@ Basic skeleton:
         name = "hull-judger-${config.name}-prepareSolution";
         inheritPath = false;
         runtimeInputs =
-          { targetPkgs, ... }:
+          { target, ... }:
           [
-            targetPkgs.coreutils
-            targetPkgs.jq
+            target.pkgs.coreutils
+            target.pkgs.jq
           ];
-        text = { targetHull, ... }: ''
-          ${targetHull.compile.executableMatchScript {
+        text = { target, ... }: ''
+          ${target.compile.executableMatchScript {
             languages = config.solutionLanguages;
             srcExpr = ''"$HULL_SOLUTION_SRC"'';
             outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
@@ -133,9 +133,9 @@ Basic skeleton:
       generateOutputs = hull.judger.writeShellApplication {
         name = "hull-judger-${config.name}-generateOutputs";
         inheritPath = false;
-        runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
-        text = { targetHull, ... }: ''
-          ${targetHull.runWasm.script {
+        runtimeInputs = { target, ... }: [ target.pkgs.coreutils ];
+        text = { target, ... }: ''
+          ${target.runWasm.script {
             request = solutionRequest true;
           }}
 
@@ -148,13 +148,13 @@ Basic skeleton:
         name = "hull-judger-${config.name}-judge";
         inheritPath = false;
         runtimeInputs =
-          { targetPkgs, ... }:
+          { target, ... }:
           [
-            targetPkgs.coreutils
-            targetPkgs.jq
+            target.pkgs.coreutils
+            target.pkgs.jq
           ];
-        text = { targetHull, ... }: ''
-          ${targetHull.runWasm.script {
+        text = { target, ... }: ''
+          ${target.runWasm.script {
             request = solutionRequest false;
           }}
 
@@ -181,6 +181,8 @@ Basic skeleton:
     };
 }
 ```
+
+`hull.judger.writeShellApplication` evaluates the `text` and `runtimeInputs` functions with one argument, `target`. `target` is the Hull library for the target machine.
 
 `hull.runWasm.script` accepts one strict session request. Request objects and enum strings use `snake_case`. Unknown fields are rejected. Every program must declare its complete descriptor and filesystem view. Input and output payloads stay in host files rather than JSON. Source WASM at `wasm_path` is authoritative. Callers do not supply native compiled artifacts.
 

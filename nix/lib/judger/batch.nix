@@ -16,8 +16,6 @@
 {
   lib,
   hull,
-  pkgs,
-  hullPkgs,
 }:
 
 # Stdio-only judger for traditional batch problems and linked custom graders.
@@ -111,16 +109,16 @@ in
     name = "hull-judger-batch-prepareSolution-${problem.name}";
     inheritPath = false;
     runtimeInputs =
-      { targetPkgs, ... }:
+      { target, ... }:
       [
-        targetPkgs.coreutils
-        targetPkgs.jq
+        target.pkgs.coreutils
+        target.pkgs.jq
       ];
     text =
-      { targetHull, ... }:
+      { target, ... }:
       ''
         cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
-        ${targetHull.compile.executableMatchScript {
+        ${target.compile.executableMatchScript {
           languages = solutionLanguages;
           srcExpr = ''"$HULL_SOLUTION_SRC"'';
           outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
@@ -137,11 +135,11 @@ in
   generateOutputs = hull.judger.writeShellApplication {
     name = "hull-judger-batch-generateOutputs-${problem.name}";
     inheritPath = false;
-    runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
+    runtimeInputs = { target, ... }: [ target.pkgs.coreutils ];
     text =
-      { targetHull, ... }:
+      { target, ... }:
       ''
-        ${targetHull.runWasm.script {
+        ${target.runWasm.script {
           request = contestantRequest true;
         }}
         mkdir -p "$HULL_OUTPUTS_DIR"
@@ -153,15 +151,15 @@ in
     name = "hull-judger-batch-judge-${problem.name}";
     inheritPath = false;
     runtimeInputs =
-      { targetPkgs, ... }:
+      { target, ... }:
       [
-        targetPkgs.coreutils
-        targetPkgs.jq
+        target.pkgs.coreutils
+        target.pkgs.jq
       ];
     text =
-      { targetPkgs, targetHull, ... }:
+      { target, ... }:
       ''
-        ${targetHull.runWasm.script {
+        ${target.runWasm.script {
           request = contestantRequest false;
         }}
         run_status=$(jq -r '.results[] | select(.program == "solution") | .status' report.json)
@@ -176,11 +174,11 @@ in
         final_score=0.0
 
         if [ "$run_status" = "accepted" ]; then
-          ${targetHull.check.script {
+          ${target.check.script {
             checkerWasm = problem.checker.wasm;
-            input = targetHull.runWasm.dynamicString "HULL_INPUT_PATH";
-            output = targetHull.runWasm.dynamicString "run_stdout";
-            answer = targetHull.runWasm.dynamicString "answer_path";
+            input = target.runWasm.dynamicString "HULL_INPUT_PATH";
+            output = target.runWasm.dynamicString "run_stdout";
+            answer = target.runWasm.dynamicString "answer_path";
             fileSizeLimits = {
               input = "tool";
               output = problem.fileSizeLimit;
@@ -192,7 +190,7 @@ in
           final_message=$(jq -r .message check.json)
         fi
 
-        ${lib.getExe targetPkgs.jq} -nc \
+        ${lib.getExe target.pkgs.jq} -nc \
           --arg status "$final_status" \
           --argjson score "$final_score" \
           --arg message "$final_message" \

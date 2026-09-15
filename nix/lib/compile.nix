@@ -16,14 +16,13 @@
 {
   hull,
   pkgs,
+  buildPkgs,
   hullPkgs,
-  targetHullPkgsForSystem,
+  buildHullPkgs,
   ...
 }:
 
 let
-  buildHullPkgs = targetHullPkgsForSystem pkgs.stdenv.buildPlatform.system;
-
   getLangInfo =
     src: languages:
     let
@@ -40,6 +39,7 @@ let
       inherit
         hull
         pkgs
+        buildPkgs
         hullPkgs
         buildHullPkgs
         ;

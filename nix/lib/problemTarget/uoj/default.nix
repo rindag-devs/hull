@@ -16,16 +16,15 @@
 {
   lib,
   pkgs,
+  buildPkgs,
   hull,
-  hullPkgs,
-  targetHullPkgsForSystem,
-  targetPkgsForSystem,
-  targetHullForSystem,
 }:
 
 {
-  # System used to build the bundled runtime tools.
-  # Defaults to cross-machine compatible Linux x86_64 for UOJ deployment.
+  # System that runs the bundled runtime tools.
+  # The value is a system double, an elaborated platform, or null.
+  # Null selects the build machine.
+  # The default is x86_64-linux, because the UOJ judge platform is x86_64 Linux.
   targetSystem ? "x86_64-linux",
 
   # Whether to emit a single zip archive or an unpacked directory tree.
@@ -68,12 +67,17 @@
   extraDownloadFiles ? { },
 }:
 
+let
+  target = hull.forTarget targetSystem;
+in
 assert lib.assertMsg (
   builtins.isInt zstdCompressionLevel && zstdCompressionLevel >= 1 && zstdCompressionLevel <= 22
 ) "uoj zstdCompressionLevel must be an integer from 1 to 22";
 assert lib.assertMsg (
   builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
 ) "uoj zipCompressionLevel must be an integer from 0 to 9";
+assert lib.assertMsg target.pkgs.stdenv.hostPlatform.isLinux
+  "The UOJ problem target needs a Linux target machine. Set targetSystem to a Linux system.";
 {
   _type = "hullProblemTarget";
   __functor =
@@ -89,16 +93,7 @@ assert lib.assertMsg (
       ...
     }@problem:
     let
-      targetHullPkgs = targetHullPkgsForSystem targetSystem;
-      targetPkgs = targetPkgsForSystem targetSystem;
-      targetHull = targetHullForSystem targetSystem;
-      staticPkgs =
-        {
-          "x86_64-linux" = pkgs.pkgsCross.musl64;
-          "aarch64-linux" = pkgs.pkgsCross.aarch64-multiplatform-musl;
-        }
-        .${targetSystem} or (throw "UOJ supports only x86_64-linux and aarch64-linux");
-      uojSupervisor = staticPkgs.rustPlatform.buildRustPackage {
+      uojSupervisor = target.pkgs.pkgsStatic.rustPlatform.buildRustPackage {
         pname = "hull-uoj-supervisor";
         version = "0.1.0";
         src = lib.sourceByRegex ./supervisor [
@@ -115,15 +110,8 @@ assert lib.assertMsg (
           mainProgram = "hull-uoj-supervisor";
         };
       };
-      nixUserChroot = targetHullPkgs.nix-user-chroot;
-      retargetRunner =
-        runner:
-        if runner ? retarget then
-          runner.retarget {
-            inherit targetPkgs targetHullPkgs targetHull;
-          }
-        else
-          runner;
+      nixUserChroot = target.hullPkgs.nix-user-chroot;
+      retargetRunner = runner: if runner ? retarget then runner.retarget { inherit target; } else runner;
       targetJudger = {
         prepareSolution = retargetRunner problem.judger.prepareSolution;
         generateOutputs = retargetRunner problem.judger.generateOutputs;
@@ -243,7 +231,7 @@ assert lib.assertMsg (
 
       nixUserChrootStorePath = builtins.unsafeDiscardStringContext (toString nixUserChroot);
       nixUserChrootRelative = "/nix/store/${baseNameOf nixUserChrootStorePath}/bin/nix-user-chroot";
-      judgeRunner = targetPkgs.writeShellScriptBin "hull-uoj-integration-judge-runner-${problem.name}" ''
+      judgeRunner = target.pkgs.writeShellScriptBin "hull-uoj-integration-judge-runner-${problem.name}" ''
         bundle_root="$1"
         submission_file="$2"
         submission_language="$3"
@@ -251,7 +239,7 @@ assert lib.assertMsg (
         uoj_result_path="$5"
         uoj_data_path="$6"
         export TMPDIR="$uoj_work_path"
-        exec ${lib.getExe targetHullPkgs.default} integration-judge uoj \
+        exec ${lib.getExe target.hullPkgs.default} integration-judge uoj \
           --bundle-root "$bundle_root" \
           --metadata-path "problem.json" \
           --submission-file "$submission_file" \
@@ -268,8 +256,8 @@ assert lib.assertMsg (
 
       targetClosureRoots = [
         judgeRunner
-        targetHullPkgs.default
-        targetHullPkgs.wasm32-wasi-wasip1.clang
+        target.hullPkgs.default
+        target.hullPkgs.wasm32-wasi-wasip1.clang
         nixUserChroot
         problem.checker.wasm
         problem.validator.wasm
@@ -343,7 +331,7 @@ assert lib.assertMsg (
     pkgs.runCommandLocal
       ("hull-problemTargetOutput-${problem.name}-uoj" + lib.optionalString zipped ".zip")
       {
-        nativeBuildInputs = [ pkgs._7zz ];
+        nativeBuildInputs = [ buildPkgs._7zz ];
       }
       ''
         set -o pipefail
@@ -389,12 +377,12 @@ assert lib.assertMsg (
         cp -R -P --no-preserve=ownership ${judgeBundleData}/. "$tmpdir/hull-bundle/"
         chmod -R u+rwX "$tmpdir/hull-bundle"
         tar -C "$tmpdir/hull-bundle/nix" -cf - store \
-          | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$tmpdir/hull-bundle/nix-store.tar.zst"
+          | ${lib.getExe buildPkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$tmpdir/hull-bundle/nix-store.tar.zst"
         rm -rf "$tmpdir/hull-bundle/nix/store"
         rmdir "$tmpdir/hull-bundle/nix"
         cp ${lib.getExe uojSupervisor} "$tmpdir/judger"
-        cp ${lib.getExe staticPkgs.pkgsStatic.busybox} "$tmpdir/busybox"
-        cp ${lib.getExe staticPkgs.pkgsStatic.zstd} "$tmpdir/zstd"
+        cp ${lib.getExe target.targetNativePkgs.pkgsStatic.busybox} "$tmpdir/busybox"
+        cp ${lib.getExe target.targetNativePkgs.pkgsStatic.zstd} "$tmpdir/zstd"
         cp ${pkgs.writeText "hull-uoj-supervisor.conf" ''
           nix_user_chroot_store_suffix=${lib.removePrefix "/nix/store" nixUserChrootRelative}
           runner=${judgeRunnerRelative}

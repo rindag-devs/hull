@@ -14,10 +14,7 @@
 */
 
 {
-  lib,
   hull,
-  pkgs,
-  hullPkgs,
 }:
 
 # Runs the solution and interactor in one deterministic session with bounded in-process pipes.
@@ -143,16 +140,16 @@ in
     name = "hull-judger-stdioInteraction-prepareSolution-${problem.name}";
     inheritPath = false;
     runtimeInputs =
-      { targetPkgs, ... }:
+      { target, ... }:
       [
-        targetPkgs.coreutils
-        targetPkgs.jq
+        target.pkgs.coreutils
+        target.pkgs.jq
       ];
     text =
-      { targetHull, ... }:
+      { target, ... }:
       ''
         cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
-        ${targetHull.compile.executableMatchScript {
+        ${target.compile.executableMatchScript {
           languages = solutionLanguages;
           srcExpr = ''"$HULL_SOLUTION_SRC"'';
           outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
@@ -170,15 +167,15 @@ in
     name = "hull-judger-stdioInteraction-judge-${problem.name}";
     inheritPath = false;
     runtimeInputs =
-      { targetPkgs, ... }:
+      { target, ... }:
       [
-        targetPkgs.coreutils
-        targetPkgs.jq
+        target.pkgs.coreutils
+        target.pkgs.jq
       ];
     text =
-      { targetHull, ... }:
+      { target, ... }:
       ''
-        ${targetHull.runWasm.script { inherit request; }}
+        ${target.runWasm.script { inherit request; }}
 
         solution_status=$(jq -r '.results[] | select(.program == "solution") | .status' session-report.json)
         tick=$(jq '.results[] | select(.program == "solution") | .tick' session-report.json)
@@ -218,7 +215,7 @@ in
   generateOutputs = hull.judger.writeShellApplication {
     name = "hull-judger-stdioInteraction-generateOutputs-${problem.name}";
     inheritPath = false;
-    runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
+    runtimeInputs = { target, ... }: [ target.pkgs.coreutils ];
     text = ''mkdir -p "$HULL_OUTPUTS_DIR"'';
   };
 }

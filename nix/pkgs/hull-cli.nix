@@ -15,45 +15,36 @@
 
 {
   pkgs,
-  wasmSysroot,
   craneLib,
   src,
-  # The WebAssembly clang wrapper of this toolset. The wrapper ships in a
-  # bundle, so its package set is the set of the toolset.
-  wasmClang,
   # The WebAssembly clang wrapper of the build machine. The tests of the CLI
   # run there.
   buildWasmClang,
   # The monitor renders the progress of `nix build`. Only a command of the
-  # build machine starts `nix build`. A null value omits the wrapper of the CLI.
+  # build machine starts `nix build`. A null value omits the wrapper.
   nixOutputMonitor,
 }:
 
-let
-  wasm32-wasi-wasip1 = wasmSysroot // {
-    clang = wasmClang;
+craneLib.buildPackage {
+  inherit src;
+
+  # The tests of the CLI run on the build machine. They compile WebAssembly
+  # programs with the wasm clang of that machine.
+  nativeBuildInputs = [
+    pkgs.makeBinaryWrapper
+    buildWasmClang
+  ];
+
+  # The wrapper puts the monitor on the PATH of the user. The monitor renders
+  # the progress of `nix build`, and only a build-machine command starts
+  # `nix build`.
+  postInstall = pkgs.lib.optionalString (nixOutputMonitor != null) ''
+    wrapProgram $out/bin/hull \
+      --prefix PATH : ${pkgs.lib.makeBinPath [ nixOutputMonitor ]}
+  '';
+
+  meta = {
+    license = pkgs.lib.licenses.lgpl3Plus;
+    mainProgram = "hull";
   };
-
-  linuxOnlyPkgs = rec {
-    nix-user-chroot = pkgs.callPackage ./nix-user-chroot { };
-
-    talloc-static = pkgs.callPackage ./talloc-static { };
-
-    proot-static = pkgs.callPackage ./proot-static {
-      inherit talloc-static;
-    };
-  };
-in
-{
-  default = pkgs.callPackage ./hull-cli.nix {
-    inherit
-      craneLib
-      src
-      buildWasmClang
-      nixOutputMonitor
-      ;
-  };
-
-  inherit wasm32-wasi-wasip1;
 }
-// pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux linuxOnlyPkgs

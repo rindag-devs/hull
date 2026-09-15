@@ -155,16 +155,16 @@
         name = "hull-judger-newYearGreeting-prepareSolution-${config.name}";
         inheritPath = false;
         runtimeInputs =
-          { targetPkgs, ... }:
+          { target, ... }:
           [
-            targetPkgs.coreutils
-            targetPkgs.jq
+            target.pkgs.coreutils
+            target.pkgs.jq
           ];
         text =
-          { targetHull, ... }:
+          { target, ... }:
           ''
             cp "$HULL_SOLUTION_SRC" "$HULL_PREPARED_SOLUTION_SRC_PATH"
-            ${targetHull.compile.executableMatchScript {
+            ${target.compile.executableMatchScript {
               languages = config.solutionLanguages;
               srcExpr = ''"$HULL_SOLUTION_SRC"'';
               outExpr = ''"$HULL_PREPARED_SOLUTION_EXECUTABLE_PATH"'';
@@ -183,15 +183,15 @@
       generateOutputs = hull.judger.writeShellApplication {
         name = "hull-judger-newYearGreeting-generateOutputs-${config.name}";
         inheritPath = false;
-        runtimeInputs = { targetPkgs, ... }: [ targetPkgs.coreutils ];
+        runtimeInputs = { target, ... }: [ target.pkgs.coreutils ];
         text =
-          { targetHull, ... }:
+          { target, ... }:
           ''
             testCaseNameHash=$(printf '%s' "$HULL_TESTCASE_NAME" | sha256sum | cut -d' ' -f1)
             testCaseNameHashArgument="--salt=$testCaseNameHash"
 
             # Phase 1: Run solution to get encoded output
-            ${targetHull.runWasm.script {
+            ${target.runWasm.script {
               request = solutionRequest "HULL_INPUT_PATH" "phase1-report.json" "stdout" true;
             }}
             cp stdout run_stdout1.txt
@@ -200,14 +200,14 @@
             firstOutPath="$PWD/firstOut.txt"
 
             # Transform: Generate input for phase 2
-            ${targetHull.runWasm.script {
+            ${target.runWasm.script {
               request = transformRequest "HULL_INPUT_PATH" "firstOutPath" "transform-report.json" "stdout";
             }}
             cp stdout secondIn.txt
             secondInPath="$PWD/secondIn.txt"
 
             # Phase 2: Run solution to get decoded output
-            ${targetHull.runWasm.script {
+            ${target.runWasm.script {
               request = solutionRequest "secondInPath" "phase2-report.json" "stdout" true;
             }}
             cp stdout run_stdout2.txt
@@ -227,19 +227,19 @@
         name = "hull-judger-newYearGreeting-judge-${config.name}";
         inheritPath = false;
         runtimeInputs =
-          { targetPkgs, ... }:
+          { target, ... }:
           [
-            targetPkgs.coreutils
-            targetPkgs.jq
+            target.pkgs.coreutils
+            target.pkgs.jq
           ];
         text =
-          { targetHull, ... }:
+          { target, ... }:
           ''
             testCaseNameHash=$(printf '%s' "$HULL_TESTCASE_NAME" | sha256sum | cut -d' ' -f1)
             testCaseNameHashArgument="--salt=$testCaseNameHash"
 
             # Phase 1: Run
-            ${targetHull.runWasm.script {
+            ${target.runWasm.script {
               request = solutionRequest "HULL_INPUT_PATH" "report.json" "stdout" false;
             }}
             cp report.json run_report1.json
@@ -264,11 +264,11 @@
             install -Dm644 firstOut.txt "$HULL_OUTPUTS_DIR/first"
 
             # Phase 1: Check
-            ${targetHull.check.script {
+            ${target.check.script {
               checkerWasm = config.checker.wasm;
-              input = targetHull.runWasm.dynamicString "HULL_INPUT_PATH";
-              output = targetHull.runWasm.dynamicString "firstOutPath";
-              answer = targetHull.runWasm.dynamicString "firstAnswerPath";
+              input = target.runWasm.dynamicString "HULL_INPUT_PATH";
+              output = target.runWasm.dynamicString "firstOutPath";
+              answer = target.runWasm.dynamicString "firstAnswerPath";
               fileSizeLimits = {
                 input = "tool";
                 output = config.fileSizeLimit;
@@ -289,16 +289,16 @@
             fi
 
             # Transform
-            ${targetHull.runWasm.script {
+            ${target.runWasm.script {
               request = transformRequest "HULL_INPUT_PATH" "firstOutPath" "transform-report.json" "stdout";
             }}
             cp stdout secondIn.txt
             secondInPath="$PWD/secondIn.txt"
 
             # Validate
-            ${targetHull.validate.script {
+            ${target.validate.script {
               validatorWasm = config.validator.wasm;
-              input = targetHull.runWasm.dynamicString "secondInPath";
+              input = target.runWasm.dynamicString "secondInPath";
             }}
             cp validation.json validation_report.json
             validation_report_path=$PWD/validation_report.json
@@ -309,7 +309,7 @@
             fi
 
             # Phase 2: Run
-            ${targetHull.runWasm.script {
+            ${target.runWasm.script {
               request = solutionRequest "secondInPath" "report.json" "stdout" false;
             }}
             cp report.json run_report2.json
@@ -334,11 +334,11 @@
             install -Dm644 secondOut.txt "$HULL_OUTPUTS_DIR/second"
 
             # Phase 2: Check
-            ${targetHull.check.script {
+            ${target.check.script {
               checkerWasm = config.checker.wasm;
-              input = targetHull.runWasm.dynamicString "secondInPath";
-              output = targetHull.runWasm.dynamicString "secondOutPath";
-              answer = targetHull.runWasm.dynamicString "secondAnswerPath";
+              input = target.runWasm.dynamicString "secondInPath";
+              output = target.runWasm.dynamicString "secondOutPath";
+              answer = target.runWasm.dynamicString "secondAnswerPath";
               fileSizeLimits = {
                 input = "tool";
                 output = config.fileSizeLimit;

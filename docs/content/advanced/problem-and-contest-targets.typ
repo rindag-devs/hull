@@ -78,12 +78,15 @@ Platform targets preserve Hull's judging flow inside the target package instead 
 
 Prefer these platform targets for ordinary use. Use legacy targets only when a platform-native evaluation model is specifically required.
 
+Every platform target accepts `targetSystem`. The value is a nixpkgs system double such as `"aarch64-linux"`, an elaborated platform attribute set, or `null`. A `null` value selects the build machine. The build machine runs Nix. The target machine runs the produced package and must run Linux.
+
 ==== `hydro`
 
 `hull.problemTarget.hydro { ... }` packages one problem as a Hydro bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, a static `proot`, custom judger runners, and problem data.
-- It carries static BusyBox and Zstandard executables for `targetSystem`. Supported targets are `x86_64-linux` and `aarch64-linux`.
+- It carries static BusyBox and Zstandard executables for `targetSystem`.
+- `targetSystem` defaults to `null`, which selects the build machine.
 - `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
 - It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Hydro.
 - The Hydro platform must provide `/bin/bash` for the first script invocation. Bundle extraction does not depend on host `tar` or `zstd`.
@@ -94,6 +97,7 @@ Prefer these platform targets for ordinary use. Use legacy targets only when a p
 `hull.problemTarget.lemon { ... }` packages one problem as a Lemon bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, custom judger runners, and problem data.
+- `targetSystem` defaults to `null`, which selects the build machine.
 - It keeps Hull's custom scheduling inside the bundle and exposes one outer testcase to Lemon.
 
 ==== `uoj`
@@ -101,7 +105,8 @@ Prefer these platform targets for ordinary use. Use legacy targets only when a p
 `hull.problemTarget.uoj { ... }` packages one problem as a UOJ bundle that runs Hull's judging flow.
 
 - It includes a bundled Hull runtime, custom judger runners, problem data, and static BusyBox and Zstandard executables.
-- `targetSystem` selects `x86_64-linux` or `aarch64-linux` and defaults to `x86_64-linux`. The UOJ host must run binaries for the selected architecture.
+- The UOJ host must run binaries for the selected architecture.
+- `targetSystem` defaults to `"x86_64-linux"`, because the UOJ judge platform only supports x86_64 Linux officially.
 - `zstdCompressionLevel` is an integer from 1 through 22 and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
 - The UOJ host must run Linux with unprivileged user namespaces enabled for `nix-user-chroot`.
 - Set the problem `extra_config` to `{"dont_use_formatter": true}` before syncing data so UOJ's formatter does not modify packaged binary files.
@@ -110,6 +115,8 @@ Prefer these platform targets for ordinary use. Use legacy targets only when a p
 === Legacy Judge-Format Target Families
 
 Legacy targets use the corresponding platform's native judging flow. They are intended for packages that must follow a platform-native evaluation model rather than Hull's judging flow.
+
+Every legacy branch accepts `targetSystem`. The value is a nixpkgs system double such as `"aarch64-linux"`, or an elaborated platform attribute set. The default is `null`, which selects the build machine. The `luogu` branch defaults to `"x86_64-linux"`, because it produces a static x86_64 Musl executable.
 
 These targets use a platform family followed by a judging branch:
 
@@ -360,8 +367,7 @@ Use it only when a contest package must rely on Lemon's native evaluation model.
 - `zstdCompressionLevel` applies to `tar.zst`, accepts integers from 1 through 22, and defaults to 19. Levels 20 through 22 use Zstandard's ultra mode.
 - `zipCompressionLevel` controls `zip` compression, accepts integers from 0 through 9, and defaults to 9.
 - Archive outputs require the consuming host to provide an extractor for the selected outer format. They do not carry archive bootstrap tools.
-- It accepts `targetSystem`.
-- The default `targetSystem` is `x86_64-linux`.
+- `targetSystem` defaults to `"x86_64-linux"`, because the judge platform only supports x86_64 Linux.
 
 == Writing a User-Defined Target
 

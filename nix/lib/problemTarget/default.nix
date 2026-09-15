@@ -15,15 +15,13 @@
 
 {
   pkgs,
+  buildPkgs,
   hull,
-  hullPkgs,
-  targetHullPkgsForSystem,
-  targetPkgsForSystem,
-  targetHullForSystem,
   lib,
   cplib,
   cplibInitializers,
   x86_64-linux-gnu217-cross,
+  buildSystem,
   ...
 }:
 
@@ -33,9 +31,7 @@
       lib
       hull
       pkgs
-      targetHullPkgsForSystem
-      targetPkgsForSystem
-      targetHullForSystem
+      buildPkgs
       ;
   };
 
@@ -52,10 +48,6 @@
       lib
       hull
       pkgs
-      hullPkgs
-      targetHullPkgsForSystem
-      targetPkgsForSystem
-      targetHullForSystem
       ;
   };
 
@@ -64,10 +56,7 @@
       lib
       hull
       pkgs
-      hullPkgs
-      targetHullPkgsForSystem
-      targetPkgsForSystem
-      targetHullForSystem
+      buildPkgs
       ;
   };
 
@@ -77,7 +66,6 @@
         lib
         hull
         pkgs
-        cplib
         cplibInitializers
         ;
     };
@@ -87,7 +75,6 @@
         lib
         hull
         pkgs
-        cplib
         cplibInitializers
         ;
     };
@@ -107,7 +94,6 @@
         lib
         hull
         pkgs
-        cplib
         cplibInitializers
         ;
     };
@@ -117,7 +103,6 @@
         lib
         hull
         pkgs
-        cplib
         cplibInitializers
         ;
     };
@@ -130,6 +115,7 @@
         cplib
         cplibInitializers
         x86_64-linux-gnu217-cross
+        buildSystem
         ;
     };
   };

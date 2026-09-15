@@ -17,15 +17,13 @@
   lib,
   pkgs,
   hull,
-  hullPkgs,
-  targetHullPkgsForSystem,
-  targetPkgsForSystem,
-  targetHullForSystem,
 }:
 
 {
-  # Target system used to retarget bundled Hull runtime artifacts.
-  targetSystem ? builtins.currentSystem,
+  # System that runs the bundled runtime artifacts.
+  # The value is a system double, an elaborated platform, or null.
+  # The default is null, and null selects the build machine.
+  targetSystem ? null,
   # Score multiplier applied when mapping Hull scores to Lemon integer scores.
   scoreScale ? 100.0,
   # Conversion factor from Hull ticks to Lemon displayed milliseconds.
@@ -43,6 +41,11 @@
   },
 }:
 
+let
+  target = hull.forTarget targetSystem;
+in
+assert lib.assertMsg target.pkgs.stdenv.hostPlatform.isLinux
+  "The Lemon problem target needs a Linux target machine. Set targetSystem to a Linux system.";
 {
   _type = "hullProblemTarget";
   __functor =
@@ -55,19 +58,9 @@
       ...
     }@problem:
     let
-      targetHullPkgs = targetHullPkgsForSystem targetSystem;
-      targetPkgs = targetPkgsForSystem targetSystem;
-      targetHull = targetHullForSystem targetSystem;
-      targetGnutar = targetPkgs.gnutar;
-      nixUserChroot = targetHullPkgs.nix-user-chroot;
-      retargetRunner =
-        runner:
-        if runner ? retarget then
-          runner.retarget {
-            inherit targetPkgs targetHullPkgs targetHull;
-          }
-        else
-          runner;
+      targetGnutar = target.targetNativePkgs.gnutar;
+      nixUserChroot = target.hullPkgs.nix-user-chroot;
+      retargetRunner = runner: if runner ? retarget then runner.retarget { inherit target; } else runner;
       targetJudger = {
         prepareSolution = retargetRunner problem.judger.prepareSolution;
         generateOutputs = retargetRunner problem.judger.generateOutputs;
@@ -188,15 +181,15 @@
         '') (builtins.attrValues problem.solutions)}
       '';
 
-      judgeRunner = targetPkgs.writeShellScriptBin "hull-lemon-integration-judge-runner-${problem.name}" ''
-        exec ${lib.getExe targetHullPkgs.default} integration-judge lemon "$@"
+      judgeRunner = target.pkgs.writeShellScriptBin "hull-lemon-integration-judge-runner-${problem.name}" ''
+        exec ${lib.getExe target.hullPkgs.default} integration-judge lemon "$@"
       '';
 
       targetClosure = pkgs.closureInfo {
         rootPaths = [
           judgeRunner
-          targetHullPkgs.default
-          targetHullPkgs.wasm32-wasi-wasip1.clang
+          target.hullPkgs.default
+          target.hullPkgs.wasm32-wasi-wasip1.clang
           nixUserChroot
           problem.checker.wasm
           problem.validator.wasm
@@ -261,9 +254,8 @@
       targetGnutarRelative = builtins.unsafeDiscardStringContext (lib.getExe targetGnutar);
       bundleJudgeRunnerRelative = "/nix/store/${baseNameOf (builtins.unsafeDiscardStringContext (toString judgeRunner))}/bin/hull-lemon-integration-judge-runner-${problem.name}";
 
-      staticStdenv =
-        (if targetSystem == builtins.currentSystem then pkgs else targetPkgs).pkgsStatic.stdenv;
-      staticPkgs = (if targetSystem == builtins.currentSystem then pkgs else targetPkgs).pkgsStatic;
+      staticStdenv = target.pkgs.pkgsStatic.stdenv;
+      staticPkgs = target.pkgs.pkgsStatic;
 
       watcherSource = pkgs.replaceVarsWith {
         src = ./watcher.c;

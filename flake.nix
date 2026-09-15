@@ -58,6 +58,19 @@
       x86_64-linux-gnu217-cross,
     }:
     let
+      hullNix = import ./nix {
+        inherit
+          self
+          nixpkgs
+          fenix
+          crane
+          typix
+          cplib
+          cplibInitializers
+          x86_64-linux-gnu217-cross
+          ;
+      };
+
       supportedSystems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -65,106 +78,32 @@
         "aarch64-darwin"
       ];
       forEachSystem = nixpkgs.lib.genAttrs supportedSystems;
-      mkPerSystem =
+
+      mkSystem =
         system:
         let
+          context = hullNix.mkContext { buildSystem = system; };
+          hull = hullNix.mkLib context;
           pkgs = nixpkgs.legacyPackages.${system};
-          rustPkgs = fenix.packages.${system};
 
-          targetSystemToPkgsCrossName = {
-            "x86_64-linux" = "gnu64";
-            "aarch64-linux" = "aarch64-multiplatform";
-            "x86_64-darwin" = "x86_64-darwin";
-            "aarch64-darwin" = "aarch64-darwin";
+          hullPkgs = context.hullPkgs // {
+            docs = import ./docs/package.nix {
+              inherit
+                pkgs
+                system
+                tola
+                ;
+              optionsDocs = hull.docs.options;
+            };
+            optionsDocs = hull.docs.options;
           };
-
-          rustToolchainFor =
-            _p:
-            rustPkgs.combine (
-              with rustPkgs.stable;
-              [
-                rust-analyzer
-                clippy
-                rustc
-                cargo
-                rustfmt
-                rust-src
-              ]
-            );
-
-          rustToolchain = rustToolchainFor pkgs;
-          craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchainFor;
-          cleanHullCargoSource =
-            cargoLib:
-            pkgs.lib.cleanSourceWith {
-              src = pkgs.lib.cleanSource self;
-              filter =
-                path: type:
-                cargoLib.filterCargoSources path type
-                || pkgs.lib.hasSuffix ".witx" (toString path)
-                || pkgs.lib.hasSuffix ".c" (toString path);
-              name = "hull-cargo-source";
-            };
-
-          mkTargetHullPkgs =
-            targetSystem:
-            let
-              targetCrossPkgsName =
-                targetSystemToPkgsCrossName.${targetSystem}
-                  or (throw "Unsupported cross target system `${targetSystem}`");
-              targetCrossPkgs = pkgs.pkgsCross.${targetCrossPkgsName};
-              targetNativePkgs = nixpkgs.legacyPackages.${targetSystem};
-              targetPkgs =
-                if targetSystem == system then
-                  pkgs
-                else
-                  pkgs.pkgsCross.${targetSystemToPkgsCrossName.${targetSystem}};
-              targetHullPkgsBase = import ./nix/pkgs { pkgs = targetPkgs; };
-              rustTarget = targetCrossPkgs.stdenv.hostPlatform.rust.rustcTarget;
-              rustTargetEnv = pkgs.lib.toUpper (pkgs.lib.replaceStrings [ "-" "." ] [ "_" "_" ] rustTarget);
-              baseWasmPkgs = (import ./nix/pkgs { inherit pkgs; }).wasm32-wasi-wasip1;
-              targetRustToolchainFor =
-                _p:
-                rustPkgs.combine [
-                  rustPkgs.stable.cargo
-                  rustPkgs.stable.rustc
-                  rustPkgs.targets.${rustTarget}.stable.rust-std
-                ];
-              targetCraneLib = (crane.mkLib targetCrossPkgs).overrideToolchain targetRustToolchainFor;
-            in
-            targetHullPkgsBase
-            // {
-              nix-user-chroot = targetCrossPkgs.callPackage ./nix/pkgs/nix-user-chroot {
-                pkgs = targetCrossPkgs;
-              };
-
-              wasm32-wasi-wasip1 = baseWasmPkgs // {
-                clang = targetPkgs.callPackage ./nix/pkgs/clang.nix {
-                  llvmPackages = targetNativePkgs.llvmPackages;
-                  compiler-rt = baseWasmPkgs.compiler-rt;
-                  sysroot = baseWasmPkgs.sysroot;
-                };
-              };
-
-              default = targetCraneLib.buildPackage {
-                src = cleanHullCargoSource targetCraneLib;
-                cargoExtraArgs = "--target ${rustTarget}";
-                doCheck = false;
-                strictDeps = true;
-                CARGO_BUILD_TARGET = rustTarget;
-                "CARGO_TARGET_${rustTargetEnv}_LINKER" = "${targetCrossPkgs.stdenv.cc.targetPrefix}cc";
-                "CC_${rustTargetEnv}" = "${targetCrossPkgs.stdenv.cc.targetPrefix}cc";
-                meta = {
-                  license = targetCrossPkgs.lib.licenses.lgpl3Plus;
-                  mainProgram = "hull";
-                };
-              };
-            };
         in
-        rec {
+        {
+          inherit context hull hullPkgs;
+
           devShells.default = pkgs.mkShell {
             packages = [
-              rustToolchain
+              context.rustToolchain
               pkgs.cargo-deny
               pkgs.cargo-edit
               pkgs.cargo-watch
@@ -180,86 +119,14 @@
               pkgs.shfmt
               pkgs.typstyle
               pkgs.zstd
-              hullPkgs.wasm32-wasi-wasip1.clang
+              context.hullPkgs.wasm32-wasi-wasip1.clang
             ];
 
             env = {
-              RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+              RUST_SRC_PATH = "${context.rustToolchain}/lib/rustlib/src/rust/library";
               CPLUS_INCLUDE_PATH = toString cplib;
             };
           };
-
-          typixLib = typix.lib.${system};
-
-          hull = import ./nix/lib {
-            inherit
-              pkgs
-              hullPkgs
-              targetHullPkgsForSystem
-              targetPkgsForSystem
-              targetHullForSystem
-              typixLib
-              cplib
-              cplibInitializers
-              x86_64-linux-gnu217-cross
-              ;
-          };
-
-          hullPkgs = import ./nix/pkgs { inherit pkgs; } // {
-            docs = import ./docs/package.nix {
-              inherit
-                pkgs
-                system
-                tola
-                ;
-              optionsDocs = hull.docs.options;
-            };
-            optionsDocs = hull.docs.options;
-            default = craneLib.buildPackage {
-              src = cleanHullCargoSource craneLib;
-              nativeBuildInputs = [
-                pkgs.makeBinaryWrapper
-                hullPkgs.wasm32-wasi-wasip1.clang
-              ];
-              postInstall = ''
-                wrapProgram $out/bin/hull \
-                  --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nix-output-monitor ]}
-              '';
-              meta = {
-                license = pkgs.lib.licenses.lgpl3Plus;
-                mainProgram = "hull";
-              };
-            };
-          };
-
-          targetHullPkgsForSystem =
-            targetSystem: if targetSystem == system then hullPkgs else mkTargetHullPkgs targetSystem;
-
-          targetPkgsForSystem =
-            targetSystem:
-            if targetSystem == system then
-              pkgs
-            else
-              pkgs.pkgsCross.${targetSystemToPkgsCrossName.${targetSystem}};
-
-          targetHullForSystem =
-            targetSystem:
-            if targetSystem == system then
-              hull
-            else
-              import ./nix/lib {
-                pkgs = targetPkgsForSystem targetSystem;
-                hullPkgs = targetHullPkgsForSystem targetSystem;
-                inherit
-                  targetHullPkgsForSystem
-                  targetPkgsForSystem
-                  targetHullForSystem
-                  typixLib
-                  cplib
-                  cplibInitializers
-                  x86_64-linux-gnu217-cross
-                  ;
-              };
 
           hullProblems = {
             test = {
@@ -277,34 +144,25 @@
             test.allProblems = hull.evalContest ./nix/test/contest/allProblems.nix { };
           };
         };
-
-      libForSystem = system: (mkPerSystem system).hull;
-      packagesForSystem =
-        system:
-        nixpkgs.lib.filterAttrs (_: value: nixpkgs.lib.isDerivation value) ((mkPerSystem system).hullPkgs);
-      targetHullPkgsForSystem =
-        buildSystem: targetSystem: (mkPerSystem buildSystem).targetHullPkgsForSystem targetSystem;
-      targetPkgsForSystem =
-        buildSystem: targetSystem: (mkPerSystem buildSystem).targetPkgsForSystem targetSystem;
-      targetHullForSystem =
-        buildSystem: targetSystem: (mkPerSystem buildSystem).targetHullForSystem targetSystem;
     in
     {
-      perSystem = forEachSystem mkPerSystem;
+      devShells = forEachSystem (system: (mkSystem system).devShells);
 
-      devShells = forEachSystem (system: (mkPerSystem system).devShells);
-      inherit
-        libForSystem
-        targetHullPkgsForSystem
-        targetPkgsForSystem
-        targetHullForSystem
-        ;
-      lib = forEachSystem libForSystem;
-      packages = forEachSystem packagesForSystem;
-      legacyPackages = forEachSystem (system: (mkPerSystem system).hullPkgs);
+      lib = forEachSystem (system: (mkSystem system).hull);
+
+      packages = forEachSystem (
+        system:
+        nixpkgs.lib.filterAttrs (_: value: nixpkgs.lib.isDerivation value) (mkSystem system).hullPkgs
+      );
+
+      legacyPackages = forEachSystem (system: (mkSystem system).hullPkgs);
+
       formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
-      hullProblems = forEachSystem (system: (mkPerSystem system).hullProblems);
-      hullContests = forEachSystem (system: (mkPerSystem system).hullContests);
+
+      hullProblems = forEachSystem (system: (mkSystem system).hullProblems);
+
+      hullContests = forEachSystem (system: (mkSystem system).hullContests);
+
       templates = (import ./nix/templates) // {
         default = self.templates.basic;
       };

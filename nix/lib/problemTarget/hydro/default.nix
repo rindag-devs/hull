@@ -16,15 +16,15 @@
 {
   lib,
   pkgs,
+  buildPkgs,
   hull,
-  targetHullPkgsForSystem,
-  targetPkgsForSystem,
-  targetHullForSystem,
 }:
 
 {
-  # System used to build the bundled runtime tools.
-  targetSystem ? builtins.currentSystem,
+  # System that runs the bundled runtime tools.
+  # The value is a system double, an elaborated platform, or null.
+  # The default is null, and null selects the build machine.
+  targetSystem ? null,
 
   # Score multiplier written into Hydro's single testcase config.
   scoreScale ? 100.0,
@@ -107,12 +107,17 @@
   allowedLanguages ? null,
 }:
 
+let
+  target = hull.forTarget targetSystem;
+in
 assert lib.assertMsg (
   builtins.isInt zstdCompressionLevel && zstdCompressionLevel >= 1 && zstdCompressionLevel <= 22
 ) "hydro zstdCompressionLevel must be an integer from 1 to 22";
 assert lib.assertMsg (
   builtins.isInt zipCompressionLevel && zipCompressionLevel >= 0 && zipCompressionLevel <= 9
 ) "hydro zipCompressionLevel must be an integer from 0 to 9";
+assert lib.assertMsg target.pkgs.stdenv.hostPlatform.isLinux
+  "The Hydro problem target needs a Linux target machine. Set targetSystem to a Linux system.";
 {
   _type = "hullProblemTarget";
   __functor =
@@ -126,26 +131,10 @@ assert lib.assertMsg (
       ...
     }@problem:
     let
-      targetHullPkgs = targetHullPkgsForSystem targetSystem;
-      targetPkgs = targetPkgsForSystem targetSystem;
-      targetHull = targetHullForSystem targetSystem;
-      staticPkgs =
-        {
-          "x86_64-linux" = pkgs.pkgsCross.musl64;
-          "aarch64-linux" = pkgs.pkgsCross.aarch64-multiplatform-musl;
-        }
-        .${targetSystem} or (throw "Hydro supports only x86_64-linux and aarch64-linux");
-      proot = targetHullPkgs.proot-static;
-      busybox = staticPkgs.pkgsStatic.busybox;
-      zstd = staticPkgs.pkgsStatic.zstd;
-      retargetRunner =
-        runner:
-        if runner ? retarget then
-          runner.retarget {
-            inherit targetPkgs targetHullPkgs targetHull;
-          }
-        else
-          runner;
+      proot = target.hullPkgs.proot-static;
+      busybox = target.targetNativePkgs.pkgsStatic.busybox;
+      zstd = target.targetNativePkgs.pkgsStatic.zstd;
+      retargetRunner = runner: if runner ? retarget then runner.retarget { inherit target; } else runner;
       targetJudger = {
         prepareSolution = retargetRunner problem.judger.prepareSolution;
         generateOutputs = retargetRunner problem.judger.generateOutputs;
@@ -276,14 +265,14 @@ assert lib.assertMsg (
           cp ${solution.src} "$tmpdir/bundle/solutions/${baseNameOf (toString solution.src)}"
         '') (builtins.attrValues problem.solutions)}
 
-        ${lib.getExe pkgs.gnutar} -C "$tmpdir" -cf - bundle \
-          | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
+        ${lib.getExe buildPkgs.gnutar} -C "$tmpdir" -cf - bundle \
+          | ${lib.getExe buildPkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
       '';
 
       targetClosure = pkgs.closureInfo {
         rootPaths = [
-          targetHullPkgs.default
-          targetHullPkgs.wasm32-wasi-wasip1.clang
+          target.hullPkgs.default
+          target.hullPkgs.wasm32-wasi-wasip1.clang
           problem.checker.wasm
           problem.validator.wasm
           targetJudger.prepareSolution
@@ -332,8 +321,8 @@ assert lib.assertMsg (
           fi
         done < <(find "$store_dir" -type l -print0)
 
-        ${lib.getExe pkgs.gnutar} -C "$tmpdir" -cf - nix \
-          | ${lib.getExe pkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
+        ${lib.getExe buildPkgs.gnutar} -C "$tmpdir" -cf - nix \
+          | ${lib.getExe buildPkgs.zstd} ${lib.escapeShellArgs zstdCompressionArgs} -o "$out"
       '';
 
       problemYamlContent = {
@@ -462,7 +451,7 @@ assert lib.assertMsg (
             -b "$extract_root/runtime-root/nix:/nix" \
             -b "$extract_root:/bundle-host" \
             -b "$extract_root/bundle:/bundle" \
-            "${lib.getExe targetHullPkgs.default}" integration-judge hydro \
+            "${lib.getExe target.hullPkgs.default}" integration-judge hydro \
             --bundle-root /bundle \
             --metadata-path problem.json \
             --submission-file "/bundle-host/$submission_name" \
@@ -495,7 +484,7 @@ assert lib.assertMsg (
     pkgs.runCommandLocal
       ("hull-problemTargetOutput-${problem.name}-hydro" + (lib.optionalString zipped ".zip"))
       {
-        nativeBuildInputs = [ pkgs._7zz ];
+        nativeBuildInputs = [ buildPkgs._7zz ];
       }
       ''
         tmpdir=$(mktemp -d)

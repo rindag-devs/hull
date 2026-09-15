@@ -17,7 +17,6 @@
   lib,
   hull,
   pkgs,
-  cplib,
   cplibInitializers,
 }:
 
@@ -73,6 +72,12 @@ let
           includeDirCmd = lib.concatMapStringsSep " " (p: "-I${p}") includes;
         in
         "$CXX -x c++ program.code -o program -std=c++23 -O3 ${includeDirCmd}",
+
+      # System that runs the embedded checker, validator, and wrapper programs.
+      # The value is a system double, an elaborated platform, or null.
+      # Null selects the build machine.
+      # The default is x86_64-linux, because Luogu runs static x86_64 Musl executables.
+      targetSystem ? "x86_64-linux",
     }:
 
     {
@@ -197,7 +202,7 @@ let
               problemName = problem.name;
               programName = mode;
               src = patchedSrc;
-              stdenv = pkgs.pkgsCross.musl64.pkgsStatic.stdenv;
+              stdenv = (hull.forTarget targetSystem).pkgs.pkgsStatic.stdenv;
               compileCommand = authoringCompileCommand problem.authoringIncludes;
             };
 
