@@ -146,7 +146,7 @@ impl JudgeCliReport {
     ));
 
     let mut subtask_table = Table::new();
-    subtask_table.load_preset(UTF8_FULL_CONDENSED);
+    subtask_table.load_style(UTF8_FULL_CONDENSED);
     subtask_table.set_header(vec!["#", "Status", "Score", "Full Score"]);
 
     for (index, subtask) in self.subtask_results.iter().enumerate() {
@@ -166,7 +166,7 @@ impl JudgeCliReport {
     output.push_str("\n\n");
 
     let mut test_case_table = Table::new();
-    test_case_table.load_preset(UTF8_FULL_CONDENSED);
+    test_case_table.load_style(UTF8_FULL_CONDENSED);
     test_case_table.set_header(vec!["Name", "Status", "Score", "Tick", "Memory"]);
 
     let mut sorted_test_cases: Vec<_> = self.test_case_results.iter().collect();

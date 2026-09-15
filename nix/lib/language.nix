@@ -373,15 +373,15 @@ let
             ;
           sourceConfigHullPkgs = buildHullPkgs;
         })
-        {
-          inherit
-            includes
-            extraObjects
-            outputObject
-            ;
-          srcExpr = "src.code";
-          outExpr = "foo.wasm";
-        }
+          {
+            inherit
+              includes
+              extraObjects
+              outputObject
+              ;
+            srcExpr = "src.code";
+            outExpr = "foo.wasm";
+          }
       }
       cp foo.wasm $out
     '';

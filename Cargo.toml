@@ -5,9 +5,9 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
-cap-std = "3"
+cap-std = "4"
 clap = { version = "4", features = ["derive"] }
-comfy-table = "7"
+comfy-table = "8"
 futures = "0.3"
 rand = "0.10"
 ratatui = { version = "0.30", features = ["scrolling-regions"] }
@@ -20,12 +20,12 @@ sha2 = "0.11"
 tempfile = "3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tree-sitter = "0.26"
+tree-sitter = "0.27"
 tree-sitter-c = "0.24"
 tree-sitter-cpp = "0.23"
-wiggle = { version = "47", default-features = false, features = ["wasmtime", "wasmtime_async", "witx"] }
+wiggle = { version = "48", default-features = false, features = ["wasmtime", "wasmtime_async", "witx"] }
 
 [dependencies.wasmtime]
-version = "47"
+version = "48"
 default-features = false
 features = ["anyhow", "async", "component-model", "cranelift", "runtime", "std", "wat"]

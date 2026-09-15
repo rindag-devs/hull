@@ -192,7 +192,7 @@ pub fn run(opts: &PatchOpts) -> Result<()> {
   // Collect all nodes to be processed
   let mut nodes: Vec<_> = Vec::new();
   while let Some(m) = captures.next() {
-    nodes.push(m.0.captures.iter().map(|x| x.node).next().unwrap());
+    nodes.push(m.0.captures().iter().map(|x| x.node).next().unwrap());
   }
 
   // Perform replacements in reverse to maintain valid byte offsets
