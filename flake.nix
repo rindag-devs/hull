@@ -29,6 +29,7 @@
     };
     tola = {
       url = "github:tola-rs/tola-ssg/v0.7.1";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     cplib = {
       url = "github:rindag-devs/cplib/single-header-snapshot";
