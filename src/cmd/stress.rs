@@ -206,7 +206,17 @@ pub fn run(opts: &StressOpts) -> Result<()> {
         println!(
           "\nTo add this test case to your problem, copy the following into your `problem.nix`:\n"
         );
-        println!("  testCases.hack-{} = {{", case.failing_solution_name);
+        // The generated test case name follows the camelCase test case naming convention.
+        let mut solution_name_chars = case.failing_solution_name.chars();
+        let hacked_case_name = match solution_name_chars.next() {
+          Some(first) => format!(
+            "hack{}{}",
+            first.to_uppercase(),
+            solution_name_chars.as_str()
+          ),
+          None => "hack".to_string(),
+        };
+        println!("  testCases.{hacked_case_name} = {{");
         println!("    generator = \"{}\";", opts.generator);
         println!("    arguments = [");
         for arg in case.args {

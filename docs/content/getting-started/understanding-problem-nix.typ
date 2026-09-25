@@ -133,13 +133,13 @@ The `testCases` attribute set is where you define every test case for your probl
 {
   testCases = {
     # Manually provided test case
-    manual-1 = {
+    manual1 = {
       inputFile = ./data/1.in;
       groups = [ "sample" ];
     };
 
     # Generated test case
-    random-small = {
+    randomSmall = {
       generator = "rand";
       arguments = [ "--n-max=100" ];
     };
@@ -147,7 +147,7 @@ The `testCases` attribute set is where you define every test case for your probl
 }
 ```
 
-Each attribute in `testCases` defines a test case. The name of the attribute (for example, `manual-1`) becomes the unique name of the test case.
+Each attribute in `testCases` defines a test case. The name of the attribute (for example, `manual1`) becomes the unique name of the test case.
 
 - `inputFile`: Use this to specify a path to a manually created input file.
 - `generator`: Use this to specify the name of a generator (from the `generators` set) to create the input file.
