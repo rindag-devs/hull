@@ -165,9 +165,15 @@ The complete testcase status vocabulary is `accepted`, `wrong_answer`, `partiall
 
 A consistent code style is essential for collaboration and long-term maintenance. The Hull template provides configuration files for common formatting and linting tools.
 
-=== Nix Formatting
+=== Formatting
 
-The project flake includes a formatter for Nix code. The formatter uses `nixfmt-tree`. You can format all Nix files in your project by running:
+The project flake configures `treefmt` with `treefmt-nix`. The formatter list covers the file types of a problem:
+
+- *.nix*: `nixfmt`
+- *.cpp* and *.hpp*: `clang-format`
+- *.typ*: `typstyle`
+
+Format the whole project by running:
 
 ```bash
 nix fmt

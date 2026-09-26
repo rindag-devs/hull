@@ -3,6 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     cplib = {
       url = "github:rindag-devs/cplib/single-header-snapshot";
       flake = false;
@@ -18,6 +22,7 @@
     {
       self,
       nixpkgs,
+      treefmt-nix,
       hull,
       cplib,
     }:
@@ -50,11 +55,21 @@
           };
 
           hullProblems.default = hullLib.evalProblem ./problem.nix { };
+
+          treefmt = treefmt-nix.lib.evalModule pkgs {
+            projectRootFile = "flake.nix";
+
+            programs = {
+              clang-format.enable = true;
+              nixfmt.enable = true;
+              typstyle.enable = true;
+            };
+          };
         }
       );
 
       devShells = forEachSystem (system: self.perSystem.${system}.devShells);
-      formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
+      formatter = forEachSystem (system: self.perSystem.${system}.treefmt.config.build.wrapper);
       hullProblems = forEachSystem (system: self.perSystem.${system}.hullProblems);
     };
 }

@@ -23,6 +23,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     typix = {
       url = "github:loqusion/typix/0.3.2";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -51,6 +55,7 @@
       nixpkgs,
       fenix,
       crane,
+      treefmt-nix,
       typix,
       tola,
       cplib,
@@ -86,6 +91,47 @@
           hull = hullNix.mkLib context;
           pkgs = nixpkgs.legacyPackages.${system};
 
+          treefmt = treefmt-nix.lib.evalModule pkgs {
+            projectRootFile = "flake.nix";
+
+            programs = {
+              clang-format.enable = true;
+              nixfmt.enable = true;
+              rustfmt = {
+                enable = true;
+                edition = "2024";
+              };
+              shfmt = {
+                enable = true;
+                simplify = true;
+              };
+              typstyle.enable = true;
+            };
+
+            # Biome reads the repository biome.json. The treefmt-nix biome module
+            # passes a Nix-generated configuration file with --config-path and
+            # defaults to the `biome check` subcommand instead.
+            settings.formatter.biome = {
+              command = pkgs.biome;
+              options = [
+                "format"
+                "--write"
+                "--no-errors-on-unmatched"
+              ];
+              includes = [
+                "*.js"
+                "*.ts"
+                "*.mjs"
+                "*.mts"
+                "*.cjs"
+                "*.cts"
+                "*.jsx"
+                "*.tsx"
+                "*.css"
+              ];
+            };
+          };
+
           hullPkgs = context.hullPkgs // {
             docs = import ./docs/package.nix {
               inherit
@@ -99,7 +145,12 @@
           };
         in
         {
-          inherit context hull hullPkgs;
+          inherit
+            context
+            hull
+            hullPkgs
+            treefmt
+            ;
 
           devShells.default = pkgs.mkShell {
             packages = [
@@ -120,6 +171,7 @@
               pkgs.typstyle
               pkgs.zstd
               context.hullPkgs.wasm32-wasi-wasip1.clang
+              treefmt.config.build.wrapper
             ];
 
             env = {
@@ -157,7 +209,7 @@
 
       legacyPackages = forEachSystem (system: (mkSystem system).hullPkgs);
 
-      formatter = forEachSystem (system: nixpkgs.legacyPackages.${system}.nixfmt-tree);
+      formatter = forEachSystem (system: (mkSystem system).treefmt.config.build.wrapper);
 
       hullProblems = forEachSystem (system: (mkSystem system).hullProblems);
 

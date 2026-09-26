@@ -43,7 +43,7 @@ for ((index = 0; index < skill_count; index++)); do
     exit 1
     ;;
   esac
-  if [[ "$url" == *..* ]]; then
+  if [[ $url == *..* ]]; then
     printf 'skill %s URL must not contain ..: %s\n' "$name" "$url" >&2
     exit 1
   fi
@@ -51,12 +51,12 @@ for ((index = 0; index < skill_count; index++)); do
   artifact_path="$repository_root/docs$url"
   case "$type" in
   archive)
-    if [[ "$artifact_path" != *.tar.gz ]]; then
+    if [[ $artifact_path != *.tar.gz ]]; then
       printf 'archive skill %s must use a .tar.gz URL\n' "$name" >&2
       exit 1
     fi
     source_path=${artifact_path%.tar.gz}
-    if [[ ! -d "$source_path" ]]; then
+    if [[ ! -d $source_path ]]; then
       printf 'archive source directory not found for skill %s: %s\n' "$name" "$source_path" >&2
       exit 1
     fi
@@ -86,7 +86,7 @@ for ((index = 0; index < skill_count; index++)); do
     staged_archives+=("$staged_archive")
     ;;
   skill-md)
-    if [[ ! -f "$artifact_path" ]]; then
+    if [[ ! -f $artifact_path ]]; then
       printf 'skill file not found for %s: %s\n' "$name" "$artifact_path" >&2
       exit 1
     fi
