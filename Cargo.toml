@@ -23,9 +23,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tree-sitter = "0.27"
 tree-sitter-c = "0.24"
 tree-sitter-cpp = "0.23"
-wiggle = { version = "48", default-features = false, features = ["wasmtime", "wasmtime_async", "witx"] }
+wiggle = { version = "50", default-features = false, features = ["wasmtime", "wasmtime_async", "witx"] }
 
 [dependencies.wasmtime]
-version = "48"
+version = "50"
 default-features = false
 features = ["anyhow", "async", "component-model", "cranelift", "runtime", "std", "wat"]
