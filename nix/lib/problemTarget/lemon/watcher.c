@@ -359,7 +359,7 @@ int main(int argc, char **argv) {
   int extract_root_ready = 0;
   FILE *error_fp;
 
-  if (argc != 12) {
+  if (argc != 13) {
     fprintf(stderr, "invalid HullBundle watcher argument count: %d\n", argc - 1);
     return 1;
   }

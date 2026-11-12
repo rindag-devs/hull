@@ -263,7 +263,7 @@ test_lemon() {
     : >error.txt
     "$root/package/data/_hull/lemon-custom-watcher" \
       HullBundle aPlusB.hullbundle '' "$root/result/report.txt" error.txt \
-      1 100 128 1000 0 fallback.txt
+      1 100 128 1000 0 fallback.txt 0
   )
   grep -Fx '100' "$root/result/report.txt" >/dev/null
   grep -Fx 'accepted' "$root/result/report.txt" >/dev/null
@@ -281,7 +281,7 @@ test_lemon() {
     : >"$root/result/file-error-report.txt"
     "$root/package/data/_hull/lemon-custom-watcher" \
       HullBundle aPlusB.hullbundle '' "$root/result/file-error-report.txt" error.txt \
-      1 100 128 1000 0 fallback.txt
+      1 100 128 1000 0 fallback.txt 0
     test ! -e "$root/result/file-error-report.txt"
     test ! -e fallback.txt
     grep -Fi 'file' error.txt >/dev/null
