@@ -21,37 +21,43 @@
 let
   static = pkgs.pkgsStatic;
 in
-static.stdenv.mkDerivation {
+static.stdenv.mkDerivation (finalAttrs: {
   pname = "proot-static";
-  version = "5.4.0";
+  version = "5.5.0";
 
   src = pkgs.fetchFromGitHub {
     owner = "proot-me";
     repo = "proot";
-    rev = "v5.4.0";
-    hash = "sha256-Z9Y7ccWp5KEVuo9xfHcgo58XqYVdFo7ck1jH7cnT2KA=";
+    rev = "v${finalAttrs.version}";
+    hash = "sha256-cCsCr6jpvAIYWlxIC2H6nhI5FFI3ApetD/yAaJbDO28=";
   };
 
-  buildInputs = [
-    static.ncurses
-    talloc-static
-  ];
+  nativeBuildInputs = [ pkgs.pkg-config ];
+  buildInputs = [ talloc-static ];
 
-  patches = [ ./GNUmakefile.patch ];
+  dontConfigure = true;
+  enableParallelBuilding = true;
+  env.NIX_LDFLAGS = "-static";
 
   postPatch = ''
-    grep -q '<libgen.h>' src/cli/cli.c || sed -i '/#include <string.h>/a #include <libgen.h>' src/cli/cli.c
+    substituteInPlace src/GNUmakefile \
+      --replace-fail '/bin/echo' 'echo'
   '';
 
-  buildPhase = ''
-    runHook preBuild
-    make -C src \
-      CC="$CC" \
-      LD="$CC" \
-      CFLAGS="-D_GNU_SOURCE -O3 -static" \
-      LDFLAGS="-static -L${talloc-static}/lib -ltalloc"
-    runHook postBuild
-  '';
+  makeFlags = [
+    "-C"
+    "src"
+    "CC=${static.stdenv.cc.targetPrefix}cc"
+    "LD=${static.stdenv.cc.targetPrefix}cc"
+    "LD_CMD=${static.stdenv.cc.targetPrefix}ld"
+    "STRIP=${static.stdenv.cc.targetPrefix}strip"
+    "OBJCOPY=${static.stdenv.cc.targetPrefix}objcopy"
+    "OBJDUMP=${static.stdenv.cc.targetPrefix}objdump"
+    "WITHOUT_PYTHON=1"
+    "GIT_VERSION=v${finalAttrs.version}"
+    "GIT_COMMIT="
+    "LDFLAGS=-ltalloc"
+  ];
 
   installPhase = ''
     runHook preInstall
@@ -61,4 +67,4 @@ static.stdenv.mkDerivation {
   '';
 
   meta.platforms = pkgs.lib.platforms.linux;
-}
+})

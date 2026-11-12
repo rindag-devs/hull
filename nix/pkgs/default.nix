@@ -37,9 +37,9 @@ let
   linuxOnlyPkgs = rec {
     nix-user-chroot = pkgs.callPackage ./nix-user-chroot { };
 
-    talloc-static = pkgs.callPackage ./talloc-static { };
+    talloc-static = pkgs.callPackage ./talloc-static.nix { };
 
-    proot-static = pkgs.callPackage ./proot-static {
+    proot-static = pkgs.callPackage ./proot-static.nix {
       inherit talloc-static;
     };
   };
