@@ -47,6 +47,7 @@ static.stdenv.mkDerivation (finalAttrs: {
   makeFlags = [
     "-C"
     "src"
+    "PKG_CONFIG=${pkgs.stdenv.cc.targetPrefix}pkg-config"
     "CC=${static.stdenv.cc.targetPrefix}cc"
     "LD=${static.stdenv.cc.targetPrefix}cc"
     "LD_CMD=${static.stdenv.cc.targetPrefix}ld"
