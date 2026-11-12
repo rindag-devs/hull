@@ -24,13 +24,13 @@
 
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "wasm32-wasi-wasip1-compiler-libc";
-  version = "32";
+  version = "34";
 
   src = fetchFromGitHub {
     owner = "WebAssembly";
     repo = "wasi-libc";
     rev = "wasi-sdk-${finalAttrs.version}";
-    hash = "sha256-7SL/205NkcbJvGsNYX3tjOjwM418y7z0QCUe4WDu4ls=";
+    hash = "sha256-eEXLBbh5lNvvf8M846BaBliV9qYc+nvNeAgbWYFs3MA=";
   };
 
   nativeBuildInputs = [
